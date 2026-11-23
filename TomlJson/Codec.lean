@@ -9,38 +9,83 @@ public import Std.Data.TreeMap
 `ToValue α` writes a Lean value as a `Value`, `FromValue α` reads one back, and `encode` and
 `decode` go through canonical text. Every instance here keeps, and `decode` enforces, the law
 
-    decode s = .ok a  ↔  encode a = s        (for valid `a`, within the reader's limits)
+    decode s = .ok a  ↔  encode a = s
 
-so reading undoes writing, each value has one text, and no other text is read. Reading is strict:
-no integer where a float belongs, no unknown key, no `null` where the type has none.
+for valid `a`, so reading undoes writing, each value has one text, and no other text is read.
+Reading is strict: no integer where a float belongs, no unknown key, no `null` where the type has
+none.
 
 `none` is an absent key as a structure field (or a named constructor argument), and `null`
 anywhere else. `Option α` can be written as a value only when `α` never writes `null`
 (`NotNull α`): otherwise `none` and `some none` would have one text.
 -/
 
-public section
+@[expose] public section
 
 namespace TomlJson
 
 universe u
 
-/-- How a value of type `α` is written as a `Value`. -/
-class ToValue (α : Type u) where
-  /-- The value `a` is written as. -/
-  toValue : α → Value
+namespace Value
 
-/-- How a value of type `α` is read from a `Value`. -/
-class FromValue (α : Type u) where
-  /-- The value of type `α` a `Value` is, or why there is none. -/
-  fromValue? : Value → Except String α
+mutual
+
+/-- Structural equality, with floats compared bit for bit and table members in order. -/
+def beq : Value → Value → Bool
+  | .null, .null => true
+  | .string a, .string b => a == b
+  | .integer a, .integer b => a == b
+  | .float a, .float b => a.toBits == b.toBits
+  | .boolean a, .boolean b => a == b
+  | .array ⟨as⟩, .array ⟨bs⟩ => beqItems as bs
+  | .table ⟨as⟩, .table ⟨bs⟩ => beqMembers as bs
+  | _, _ => false
+
+/-- Item-wise equality of two lists of values. -/
+def beqItems : List Value → List Value → Bool
+  | [], [] => true
+  | a :: as, b :: bs => beq a b && beqItems as bs
+  | _, _ => false
+
+/-- Member-wise equality of two lists of members. -/
+def beqMembers : List (String × Value) → List (String × Value) → Bool
+  | [], [] => true
+  | (k, a) :: as, (l, b) :: bs => k == l && beq a b && beqMembers as bs
+  | _, _ => false
+
+end
+
+instance : BEq Value := ⟨beq⟩
+
+/-- A table of members whose keys are distinct (as a map's are), put in key order. -/
+def tableOfDistinct (members : Array (String × Value)) : Value :=
+  .table (members.qsort (·.1 < ·.1))
+
+/-- The member of a table under `key`, or `none`. -/
+def get? (v : Value) (key : String) : Option Value :=
+  match v with
+  | .table members => (members.find? (·.1 == key)).map (·.2)
+  | _ => none
+
+/-- The type of a value, for messages. -/
+def typeName : Value → String
+  | .null => "null"
+  | .string _ => "string"
+  | .integer _ => "integer"
+  | .float _ => "float"
+  | .boolean _ => "boolean"
+  | .array _ => "array"
+  | .table _ => "table"
+
+instance : Coe String Value := ⟨.string⟩
+instance : Coe Bool Value := ⟨.boolean⟩
+instance {n : Nat} : OfNat Value n := ⟨.integer n⟩
+
+end Value
 
 /-- `α` is never written as `null`, so `Option α` can write `none` as `null`. Derived instances
 come with it. -/
 class NotNull (α : Type u) : Prop
-
-export ToValue (toValue)
-export FromValue (fromValue?)
 
 /-- Prefix the error of `x`, if any, with where it happened. -/
 def withContext {α : Type u} (context : String) (x : Except String α) : Except String α :=
@@ -230,11 +275,19 @@ def encodeLines {α : Type u} [ToValue α] (as : Array α) : String :=
   as.foldl (fun out a => (Value.renderTo out (toValue a)).push '\n') ""
 
 /-- The values of canonical JSON Lines text: each line as `decode` reads it, each ended by a line
-feed. -/
+feed. An error names the first line that is not. -/
 def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String (Array α) := do
-  if s.isEmpty then return #[]
-  if !s.endsWith "\n" then throw "JSON Lines text ends with a line feed"
-  ((s.splitOn "\n").dropLast.toArray).mapIdxM fun i line =>
-    withContext s!"line {i + 1}" (decode line)
+  let parts := s.splitOn "\n"
+  let mut out : Array α := #[]
+  let mut number : Nat := 0
+  for line in parts, k in [0:parts.length] do
+    let last := k + 1 == parts.length
+    if last && line.isEmpty then break
+    number := number + 1
+    match decode line with
+    | .ok a => out := out.push a
+    | .error e => throw s!"line {number}, {e}"
+    if last then throw s!"line {number}: no line feed at its end"
+  return out
 
 end TomlJson

@@ -1,4 +1,6 @@
-import TomlJson
+module
+
+import TomlJson.Codec
 
 /-! # `tomljson check`: is this canonical JSON Lines?
 
@@ -7,7 +9,7 @@ tomljson check < records.jsonl
 ```
 
 Exits 0 when every line is a canonical text (see `SPEC.md`), each ended by a line feed, and 1 at
-the first line that is not, with the byte where it departs from canonical form.
+the first line that is not, with the character where it departs from canonical form.
 -/
 
 open TomlJson
@@ -39,11 +41,14 @@ def readStdin : IO (Except String String) := do
         line := line + 1
     return .error "not UTF-8"
 
-/-- Run the subcommand. -/
+public section
+
+/-- Run the subcommand: read every line as a `Value` through `decode`, which goes through every
+function the challenge states something about. -/
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["check"] =>
-    match (← readStdin) >>= Value.parseLines with
+    match (← readStdin) >>= (decodeLines (α := Value) ·) with
     | .ok values =>
       IO.eprintln s!"tomljson: {values.size} canonical lines"
       return 0
@@ -53,3 +58,5 @@ def main (args : List String) : IO UInt32 := do
   | _ =>
     IO.eprint usage
     return 2
+
+end

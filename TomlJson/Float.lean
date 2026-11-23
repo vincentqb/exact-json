@@ -14,7 +14,7 @@ Reading decimal text uses `Float.ofScientific`, which rounds correctly (to neare
 after bounding the decimal exponent so that absurd exponents (`1e999999999`) cost nothing.
 -/
 
-public section
+@[expose] public section
 
 namespace TomlJson
 
@@ -32,7 +32,7 @@ structure Decimal where
 namespace Decimal
 
 /-- `n` zeros. -/
-private def zeros (n : Nat) : List Char := List.replicate n '0'
+def zeros (n : Nat) : List Char := List.replicate n '0'
 
 /-- The canonical text of a decimal read as a float: at least one digit after the point, no other
 superfluous character. Fixed notation when the scientific exponent is in `[-4, 16)` (as Python's
@@ -59,7 +59,7 @@ end Decimal
 namespace FloatText
 
 /-- `a ^ k` for an integer `k`, split as numerator and denominator: `(a ^ max k 0, a ^ max (-k) 0)`. -/
-private def powSplit (a : Nat) (k : Int) : Nat × Nat :=
+def powSplit (a : Nat) (k : Int) : Nat × Nat :=
   if 0 ≤ k then (a ^ k.toNat, 1) else (1, a ^ (-k).toNat)
 
 /-- The sign, significand and binary exponent of a finite float: `x = (-1)^s × m × 2^e`. -/
@@ -72,30 +72,32 @@ def decompose (x : Float) : Bool × Nat × Int :=
   else (negative, fraction + 2 ^ 52, (biased : Int) - 1075)
 
 /-- Whether `10 ^ k ≤ m × 2 ^ e`, exactly. -/
-private def tenPowLe (k : Int) (m : Nat) (e : Int) : Bool :=
+def tenPowLe (k : Int) (m : Nat) (e : Int) : Bool :=
   let (tn, td) := powSplit 10 k
   let (bn, bd) := powSplit 2 e
   tn * bd ≤ m * bn * td
 
 /-- `⌊log₁₀ (m × 2 ^ e)⌋` for `m > 0`, by an estimate corrected with exact comparisons. -/
-private def decimalExponent (m : Nat) (e : Int) : Int := Id.run do
+def decimalExponent (m : Nat) (e : Int) : Int := Id.run do
   -- log₁₀ 2 ≈ 78913 / 2^18; the estimate is off by at most one either way.
   let log2 : Int := (Nat.log2 m : Int) + e
   let mut k : Int := (log2 * 78913) / 262144
-  while !tenPowLe k m e do k := k - 1
-  while tenPowLe (k + 1) m e do k := k + 1
+  for _ in [0:4] do
+    if !tenPowLe k m e then k := k - 1
+  for _ in [0:4] do
+    if tenPowLe (k + 1) m e then k := k + 1
   return k
 
 /-- The interval of reals that round to `m × 2 ^ e` (the float with significand `m`, binary
 exponent `e`, and the boundary flag `lowerCloser` when the next float down is closer), scaled by
 `2 ^ (2 - e)`: `(low, x, high)`, every one an integer. -/
-private def roundingInterval (m : Nat) (lowerCloser : Bool) : Nat × Nat × Nat :=
+def roundingInterval (m : Nat) (lowerCloser : Bool) : Nat × Nat × Nat :=
   (if lowerCloser then 4 * m - 1 else 4 * m - 2, 4 * m, 4 * m + 2)
 
 /-- The `p`-digit decimal significand nearest `m × 2^e` that still reads back as it, if any:
 `d` with `d × 10 ^ k` in the rounding interval, for `k = E - p + 1` where `E` is the decimal
 exponent. -/
-private def candidate (m : Nat) (e : Int) (lowerCloser inclusive : Bool) (k : Int) :
+def candidate (m : Nat) (e : Int) (lowerCloser inclusive : Bool) (k : Int) :
     Option Nat :=
   let (low, x, high) := roundingInterval m lowerCloser
   -- The scaled values are multiples of `2 ^ (e - 2)`; divide by `10 ^ k` as `· × a / b`.
@@ -136,22 +138,26 @@ def shortest (x : Float) : Option Decimal :=
       let lowerCloser := m = 2 ^ 52 && e > -1074
       let big := decimalExponent m e
       let cand (p : Nat) := candidate m e lowerCloser inclusive (big - p + 1)
-      -- `p ↦ (at p).isSome` is monotone and true at 17: search for its least `p`.
+      -- `p ↦ (cand p).isSome` is monotone and true at 17: search for its least `p`, halving
+      -- `[1, 17]` five times.
       let p := Id.run do
         let mut lo := 1
         let mut hi := 17
-        while lo < hi do
-          let mid := (lo + hi) / 2
-          if (cand mid).isSome then hi := mid else lo := mid + 1
+        for _ in [0:5] do
+          if lo < hi then
+            let mid := (lo + hi) / 2
+            if (cand mid).isSome then hi := mid else lo := mid + 1
         return lo
       match cand p with
       | none => none  -- unreachable: 17 digits always suffice
       | some d => Id.run do
+        -- at most 18 trailing zeros (17 digits, rounded up to a power of ten)
         let mut digits := d
         let mut exponent := big - p + 1
-        while digits % 10 == 0 do
-          digits := digits / 10
-          exponent := exponent + 1
+        for _ in [0:20] do
+          if digits != 0 && digits % 10 == 0 then
+            digits := digits / 10
+            exponent := exponent + 1
         return some { negative, digits, exponent }
 
 /-- The float nearest `(-1)^negative × m × 10^q`, rounding ties to even, or `none` when that is

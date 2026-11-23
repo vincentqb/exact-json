@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Class
+public import TomlJson.Codec
 public meta import Lean.Elab.Deriving.Basic
 public meta import Lean.Elab.Deriving.Util
 

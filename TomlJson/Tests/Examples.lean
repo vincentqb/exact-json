@@ -32,27 +32,27 @@ def errorOf {α : Type} (e : Except String α) : String :=
   "1.5e-7", "1.0e16", "5.0e-324", "1.7976931348623157e308", "\"\"", "\"a\\tb\"", "[]", "{}",
   "[1,2.5,\"x\",null,[],{}]", "{\"a\":{\"b\":[null]},\"b\":1}"].all (check · == "ok")
 -- integers have no point, floats always one, with the shortest digits that read back
-#guard check "1e5" == "at byte 0: not the canonical text of this float: write 100000.0"
-#guard check "1.50" == "at byte 0: not the canonical text of this float: write 1.5"
-#guard check "1.0e+16" == "at byte 0: not the canonical text of this float: write 1.0e16"
-#guard check "0.00001" == "at byte 0: not the canonical text of this float: write 1.0e-5"
-#guard check "1e16" == "at byte 0: not the canonical text of this float: write 1.0e16"
+#guard check "1e5" == "at character 0: not the canonical text of this float: write 100000.0"
+#guard check "1.50" == "at character 0: not the canonical text of this float: write 1.5"
+#guard check "1.0e+16" == "at character 0: not the canonical text of this float: write 1.0e16"
+#guard check "0.00001" == "at character 0: not the canonical text of this float: write 1.0e-5"
+#guard check "1e16" == "at character 0: not the canonical text of this float: write 1.0e16"
 #guard check "0.1000000000000000055511151231257827" ==
-  "at byte 0: not the canonical text of this float: write 0.1"
-#guard check "9007199254740993.0" == "at byte 0: not the canonical text of this float: write 9007199254740992.0"
-#guard check "-0" == "at byte 0: not the canonical text of this integer: write 0"
-#guard check "01" == "at byte 0: not the canonical text of this integer: write 1"
-#guard check "-01" == "at byte 0: not the canonical text of this integer: write -1"
-#guard check "00.5" == "at byte 0: not the canonical text of this float: write 0.5"
-#guard check "1e400" == "at byte 0: a float beyond the range of binary64"
+  "at character 0: not the canonical text of this float: write 0.1"
+#guard check "9007199254740993.0" == "at character 0: not the canonical text of this float: write 9007199254740992.0"
+#guard check "-0" == "at character 0: not the canonical text of this integer: write 0"
+#guard check "01" == "at character 0: not the canonical text of this integer: write 1"
+#guard check "-01" == "at character 0: not the canonical text of this integer: write -1"
+#guard check "00.5" == "at character 0: not the canonical text of this float: write 0.5"
+#guard check "1e400" == "at character 0: a float beyond the range of binary64"
 -- an exponent's leading zeros, however many, do not change the float it denotes
 #guard check ("1e" ++ String.ofList (List.replicate 5000 '0') ++ "1") ==
-  "at byte 0: not the canonical text of this float: write 10.0"
+  "at character 0: not the canonical text of this float: write 10.0"
 -- no whitespace anywhere
-#guard check " 1" == "at byte 0: canonical text has no whitespace"
-#guard check "[1, 2]" == "at byte 3: canonical text has no whitespace"
-#guard check "{\"a\": 1}" == "at byte 5: canonical text has no whitespace"
-#guard check "1\n" == "at byte 1: text after the value (canonical text has no whitespace)"
+#guard check " 1" == "at character 0: canonical text has no whitespace"
+#guard check "[1, 2]" == "at character 3: canonical text has no whitespace"
+#guard check "{\"a\": 1}" == "at character 5: canonical text has no whitespace"
+#guard check "1\n" == "at character 1: text after the value (canonical text has no whitespace)"
 
 /-! ## Strings: JSON's minimal escaping -/
 
@@ -60,23 +60,23 @@ def errorOf {α : Type} (e : Except String α) : String :=
   "\"tab\\t nl\\n cr\\r bs\\b ff\\f q\\\" bsl\\\\ nul\\u0000 us\\u001f\""
 -- DEL, C1 controls, U+2028 and everything else as themselves
 #guard Value.render (.string "\x7f\u0085\u2028/é😀") == "\"\x7f\u0085\u2028/é😀\""
-#guard check "\"\\/\"" == "at byte 1: write /, not \\/"
-#guard check "\"\\u0041\"" == "at byte 1: write A, not \\u0041"
-#guard check "\"\\u0100\"" == "at byte 1: write Ā, not \\u0100"
-#guard check "\"\\u000a\"" == "at byte 1: write \\n, not \\u000a"
-#guard check "\"\\u0022\"" == "at byte 1: write \\\", not \\u0022"
-#guard check "\"\\u001F\"" == "at byte 1: write \\u001f, not \\u001F"
-#guard check "\"\\ud83d\\ude00\"" == "at byte 1: write 😀, not the surrogate pair \\ud83d\\ude00"
-#guard check "\"\\udc00\"" == "at byte 1: \\udc00 is a lone surrogate, not a character"
-#guard check "\"a\tb\"" == "at byte 2: control character in string (it must be escaped)"
+#guard check "\"\\/\"" == "at character 1: write /, not \\/"
+#guard check "\"\\u0041\"" == "at character 1: write A, not \\u0041"
+#guard check "\"\\u0100\"" == "at character 1: write Ā, not \\u0100"
+#guard check "\"\\u000a\"" == "at character 1: write \\n, not \\u000a"
+#guard check "\"\\u0022\"" == "at character 1: write \\\", not \\u0022"
+#guard check "\"\\u001F\"" == "at character 1: write \\u001f, not \\u001F"
+#guard check "\"\\ud83d\\ude00\"" == "at character 1: write 😀, not the surrogate pair \\ud83d\\ude00"
+#guard check "\"\\udc00\"" == "at character 1: \\udc00 is a lone surrogate, not a character"
+#guard check "\"a\tb\"" == "at character 2: control character in string (it must be escaped)"
 
 /-! ## Arrays and tables -/
 
 -- keys in code point order (U+FFFF before U+10000: not UTF-16 order)
 #guard check ("{\"B\":1,\"a\":2,\"" ++ String.singleton (Char.ofNat 0xFFFF) ++ "\":3,\"" ++
   String.singleton (Char.ofNat 0x10000) ++ "\":4}") == "ok"
-#guard check "{\"b\":1,\"a\":2}" == "at byte 7: keys must increase: \"a\" comes before \"b\""
-#guard check "{\"a\":1,\"a\":2}" == "at byte 7: duplicate key \"a\""
+#guard check "{\"b\":1,\"a\":2}" == "at character 7: keys must increase: \"a\" comes before \"b\""
+#guard check "{\"a\":1,\"a\":2}" == "at character 7: duplicate key \"a\""
 #guard check "{\"a\":null}" == "ok"
 
 /-! ## Not JSON -/
@@ -98,9 +98,9 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard gives ((Value.parseLines "").map (·.size)) 0
 #guard errorOf (Value.parseLines "{\"a\":1}\n[2]") == "line 2: no line feed at its end"
 -- the first line that is not canonical is the one reported
-#guard errorOf (Value.parseLines "1\n[\n3") == "line 2, at byte 1: expected a value, found the end of the text"
-#guard errorOf (Value.parseLines "1\n\n2\n") == "line 2, at byte 0: expected a value, found the end of the text"
-#guard errorOf (Value.parseLines "1\r\n") == "line 1, at byte 1: text after the value (canonical text has no whitespace)"
+#guard errorOf (Value.parseLines "1\n[\n3") == "line 2, at character 1: expected a value, found the end of the text"
+#guard errorOf (Value.parseLines "1\n\n2\n") == "line 2, at character 0: expected a value, found the end of the text"
+#guard errorOf (Value.parseLines "1\r\n") == "line 1, at character 1: text after the value (canonical text has no whitespace)"
 
 /-! ## The `tomljson%` literal -/
 

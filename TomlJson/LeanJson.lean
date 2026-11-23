@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Class
+public import TomlJson.Codec
 public import Lean.Data.Json.FromToJson
 
 /-! # Between `Value` and `Lean.Json`

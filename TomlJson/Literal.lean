@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Class
+public import TomlJson.Codec
 public meta import Lean.Syntax
 
 /-! # `tomljson%`: values written as JSON in Lean source

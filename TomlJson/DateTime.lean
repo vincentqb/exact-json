@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Class
+public import TomlJson.Codec
 public import Std.Time.DateTime.Timestamp
 import Std.Time.Zoned
 

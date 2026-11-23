@@ -11,12 +11,12 @@ strings with JSON's minimal escaping. It changes nothing: a valid value gets its
 an invalid one (see `Value.isValid`) a text that `Value.parse` rejects.
 -/
 
-public section
+@[expose] public section
 
 namespace TomlJson
 
 /-- The lowercase hexadecimal digit of `n < 16`. -/
-private def hexDigit (n : Nat) : Char :=
+def hexDigit (n : Nat) : Char :=
   if n < 10 then Char.ofNat (48 + n) else Char.ofNat (87 + n)
 
 /-- `out` followed by `c` as a JSON string holds it: `"` and `\` escaped; U+0008, U+0009, U+000A,
@@ -47,21 +47,31 @@ def floatText (x : Float) : String :=
 
 namespace Value
 
+mutual
+
 /-- `out` followed by the text of `v`. -/
-partial def renderTo (out : String) : Value → String
+def renderTo (out : String) : Value → String
   | .null => out ++ "null"
   | .string s => pushString out s
   | .integer n => out ++ toString n
   | .float x => out ++ floatText x
   | .boolean b => out ++ if b then "true" else "false"
-  | .array items =>
-    let (out, _) := items.foldl (init := (out.push '[', true)) fun (out, first) item =>
-      (renderTo (if first then out else out.push ',') item, false)
-    out.push ']'
-  | .table members =>
-    let (out, _) := members.foldl (init := (out.push '{', true)) fun (out, first) (key, item) =>
-      (renderTo (pushString (if first then out else out.push ',') key |>.push ':') item, false)
-    out.push '}'
+  | .array ⟨items⟩ => (renderItems (out.push '[') items).push ']'
+  | .table ⟨members⟩ => (renderMembers (out.push '{') members).push '}'
+
+/-- `out` followed by the texts of `items`, separated by commas. -/
+def renderItems (out : String) : List Value → String
+  | [] => out
+  | [v] => renderTo out v
+  | v :: rest => renderItems ((renderTo out v).push ',') rest
+
+/-- `out` followed by `"key":value` for each member, separated by commas. -/
+def renderMembers (out : String) : List (String × Value) → String
+  | [] => out
+  | [(k, v)] => renderTo ((pushString out k).push ':') v
+  | (k, v) :: rest => renderMembers ((renderTo ((pushString out k).push ':') v).push ',') rest
+
+end
 
 /-- The text of `v`: one line of JSON, without its line feed; canonical when `v` is valid. -/
 def render (v : Value) : String := renderTo "" v

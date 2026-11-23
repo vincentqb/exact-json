@@ -8,7 +8,7 @@ instances (derived or the library's):
 decode s = .ok a   ↔   encode a = s
 ```
 
-for every valid `a` (section 2) within the reader's limits (section 5), with `a` compared by what
+for every valid `a` (section 2), with `a` compared by what
 it means: floats up to a NaN's payload, maps (`Std.TreeMap`, `Std.HashMap`) by their entries
 rather than their internal layout. So:
 
@@ -147,7 +147,7 @@ rather than `null`, and a named argument `x?` is written under `x` as a field is
 
 ## 5. Reading
 
-Reading takes canonical text and nothing else. These are errors, each at its byte offset, naming
+Reading takes canonical text and nothing else. These are errors, each at its character offset, naming
 the canonical spelling where there is one: whitespace; any number spelling but the canonical one
 (`1e5` for `100000.0`, `1.50`, `-0` for `0`, `01` for `1`); any escape but the canonical ones
 (`\/`, `\u0041` for `A`, `\u000a` for `\n`, upper-case hex, surrogate pairs); raw U+0000–U+001F in
@@ -158,9 +158,9 @@ Typed reading is strict as well: no integer where a float belongs, no key a type
 missing key for a field that is not an `Option`, no `null` where the type has none, no date-time
 in any form but its canonical one.
 
-Limits, which bound the reader's work: at most 4300 digits in a number (CPython's limit for `int`
-text) and nesting at most 1000 deep (a constructor with named arguments nests two levels). The law
-holds for values within them.
+The reader has no limits of its own: it is total (structural recursion only), and reads numbers
+of any length and nesting of any depth. A reader process still has a finite stack, so nesting tens
+of thousands deep can exhaust it; an integer of n digits takes time quadratic in n.
 
 ## 6. Why not `Lean.Json`
 
@@ -170,11 +170,28 @@ integral floats apart from integers is its fixed point; it also maps `1.0e16` to
 through `Float.toString`, six fixed decimals, so `toJson 1e-7` is `0` and `toJson 0.1234567` is
 `0.123457`. `Json.pretty` lists keys in the reverse of `compress`'s order.
 
-## 7. Checking
+## 7. The challenge
 
-The law is checked, not proved: by compile-time examples of every rule and of every rejection; by
-randomized tests over valid values, their non-canonical spellings (all rejected), invalid values
-(never read as another value), typed records and schema evolution (`Tests/`); by every power of
-two and of ten, their neighbours and random doubles against CPython's `repr`
+The laws are stated as theorems in [`Challenge.lean`](Challenge.lean), the statement of a
+[Lean Software Challenge](https://github.com/vincentqb/lean-software-challenge): each headline
+states one law about the functions it names (`Value.render`, `Value.parse`, `encode`, `decode`),
+each has a kill (a proof that a wrong implementation fails it) and, when it assumes something of
+those functions, a witness that the assumption can hold. `TomlJson/Solution.lean` proves them
+about the code that runs, which is plain total Lean (no `partial`, `@[extern]` or
+`@[implemented_by]`), and `lake comparator` replays the proofs through the kernel.
+
+| headline | law | status |
+|----------|-----|--------|
+| `parse_render_text` | `parse s = .ok v → v.render = s` | proved |
+| `parse_valid` | `parse s = .ok v → v.Valid` | proved |
+| `render_parse` | `v.Valid → parse v.render = .ok v` | not yet proved |
+| `render_no_control` | every character of `v.render` is at U+0020 or above | proved |
+| `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
+| `decode_encode` | `decode (encode a) = .ok a`, for instances that read back what they write | not yet proved |
+
+The two not yet proved are tested instead: by compile-time examples of every rule and rejection;
+by randomized tests over valid values, their non-canonical spellings (all rejected), invalid values
+(never read as another value), typed records and schema evolution (`TomlJson/Tests/`); by every
+power of two and of ten, their neighbours and random doubles against CPython's `repr`
 (`python/crosscheck.py --floats`); and by byte-for-byte agreement with the Python writer on random
 data (`python/crosscheck.py`).
