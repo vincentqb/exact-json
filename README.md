@@ -1,10 +1,16 @@
 # lean-toml-json
 
-Canonical JSON for TOML-typed data, with a Lean implementation. A value has exactly one text: one
-line of ordinary JSON that any JSON reader reads as usual, and that Lean reads and writes back to
-the same bytes (`text = render (parse text)`). Integers never have a point, floats always do,
-date-times are RFC 3339 strings, and there is no `null`. The format is specified in
-[`SPEC.md`](SPEC.md).
+Canonical, strictly typed JSON for Lean. A value is written as one line of ordinary JSON, which any
+JSON reader parses, and Lean reads it back under one law:
+
+```
+decode s = .ok a   ↔   encode a = s
+```
+
+Reading undoes writing, each value has exactly one text, and no other text is read: no
+whitespace, no other number spelling, no integer for a float, no unknown key. Integers never have
+a point and floats always do, `none` is an absent key as a field and `null` elsewhere, date-times
+are RFC 3339 strings. The format is specified in [`SPEC.md`](SPEC.md).
 
 ```lean
 import TomlJson
@@ -15,90 +21,42 @@ structure Bench where
   iters : Nat
   time? : Option Float     -- an optional key: absent when `none`
   day : LocalDate          -- the string "2024-02-29"
-  deriving ToValue, FromValue
+  deriving ToValue, FromValue, Repr
 
-#eval encode ({ name := "fast", iters := 100, time? := some 2.0, day := ⟨2024, 2, 29⟩ } : Bench)
+#eval IO.println (encode ({ name := "fast", iters := 100, time? := some 2.0, day := ⟨2024, 2, 29⟩ } : Bench))
 -- {"day":"2024-02-29","iters":100,"name":"fast","time":2.0}
 
-#eval (tomljson% {"name": "fast", "iters": 100, "time": 2.0, "sizes": [1, 2],
-                  "day": $(LocalDate.mk 2024 2 29)}).render
--- {"day":"2024-02-29","iters":100,"name":"fast","sizes":[1,2],"time":2.0}
+#eval (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench)
+-- Except.error "missing key \"day\""
 ```
 
-## What Lean does today (Lean 4.36)
+## `none` and `null`
 
-**Lean's TOML is Lake's** (`Lake.Toml`, shipped with every toolchain). `Lake.Toml.loadToml` reads
-a document into a `Lake.Toml.Table` of `Lake.Toml.Value`s:
+| Lean                             | JSON                                          |
+|----------------------------------|-----------------------------------------------|
+| field `x : Option α`             | key absent for `none`, `"x":…` for `some a`   |
+| field `x : Option (Option α)`    | absent, `"x":null`, or `"x":…`                |
+| `Array (Option α)`, top level, … | `null` for `none`: `[1,null,3]`               |
 
-| constructor | holds                                  | notes                                    |
-|-------------|----------------------------------------|------------------------------------------|
-| `string`    | `String`                               |                                          |
-| `integer`   | `Int`                                  | no 64-bit check; hex, octal, binary, `_` |
-| `float`     | `Float`                                | `inf`, `nan`, `-0.0` kept; exactly rounded |
-| `boolean`   | `Bool`                                 |                                          |
-| `dateTime`  | `Lake.Toml.DateTime`                   | below                                    |
-| `array`     | `Array Value`                          | mixed types allowed                      |
-| `table`     | insertion-ordered dict, `Name` keys    | dotted keys nest: `a.b = 1` is `{a = {b = 1}}` |
-
-**Dates** are `Lake.Toml.DateTime`, TOML's four kinds: `offsetDateTime (date) (time) (offset? :
-Option (Bool × Time))` (`none` is `Z`, `some (negative, hh:mm)` an offset), `localDateTime`,
-`localDate` and `localTime`. A `Lake.Date` is year, month, day (`Nat`s, validated, leap years
-included); a `Lake.Toml.Time` is hour, minute, second (60 allowed) and a decimal fraction as
-mantissa and exponent. The reader takes `T`, `t` or a space and `Z` or `z`. They are not
-connected to `Std.Time` (`PlainDate`, `PlainTime`, …), Lean's date library.
-
-Lake's TOML *printer* (`Lake.Toml.ppTable`) loses data: floats go through `Float.toString`, six
-fixed decimals (`1e-7` is written `0.000000`), and a fraction of a second with a leading zero is
-written wrong (`00:00:00.05` comes back as `00:00:00.500`, because the parser stores `.05` as
-mantissa 5 with exponent 1 and the printer pads to the exponent). Its reader rejects a one-digit
-integer at the very end of the input (`a = 6` with no final line feed; `a = 66` is fine).
-
-**Lean's JSON** (`Lean.Json`) keeps a number as a decimal `JsonNumber`, so it *can* tell `1.0`
-(exponent 1) from `1` (exponent 0), but its printer cannot: `Json.compress` prints both as `1`.
-`Json.parse "1.0e16"` is the integer `10000000000000000`, `-0.0` prints as `0`, and `1e-11` as
-`0.0000000001e-1`. `ToJson Float` goes through `Float.toString` too, so `toJson 1e-7` is `0` and
-`toJson 0.1234567` is `0.123457`. `Json.pretty` lists keys in the reverse of `compress`'s order.
-So no format that keeps `1.0` apart from `1` is a fixed point of `Json.compress ∘ Json.parse`;
-this library brings its own printer and reader.
-
-## The format, by type
-
-| TOML             | canonical JSON                         | Lean                        | Python (`json.loads`) |
-|------------------|----------------------------------------|-----------------------------|-----------------------|
-| String           | `"a\tb"` (minimal escapes, UTF-8)      | `String`                    | `str`                 |
-| Integer          | `-17`, `12345678901234567890`          | `Int`, `Nat`, `UInt64`, …   | `int`                 |
-| Float            | `1.0`, `0.1`, `1.0e16`, `-0.0`         | `Float`                     | `float`               |
-| Float `nan`/`inf`| `"NaN"`, `"Infinity"`, `"-Infinity"`   | `Float`                     | `str` (`float(s)` reads it) |
-| Boolean          | `true`                                 | `Bool`                      | `bool`                |
-| Offset Date-Time | `"1979-05-27T07:32:00.5-07:00"`        | `OffsetDateTime`            | `str` (`datetime.fromisoformat`) |
-| Local Date-Time  | `"1979-05-27T07:32:00"`                | `LocalDateTime`             | `str`                 |
-| Local Date       | `"1979-05-27"`                         | `LocalDate`                 | `str`                 |
-| Local Time       | `"07:32:00"`                           | `LocalTime`                 | `str`                 |
-| Array            | `[1,"x",2.5]`                          | `Array α`, `List α`, `α × β`| `list`                |
-| Table            | `{"a":1,"b":[]}` (keys sorted)         | structures, `Std.HashMap String α`, … | `dict`      |
-| (absent key)     | key omitted                            | `Option α` field            | key missing           |
-
-Floats use the shortest digits that read back (Python's `repr`, in fact, between `1e-4` and
-`1e16`), always with a point: a number token is a float exactly when it contains `.`. Readers
-have limits: this one takes numbers of up to 4300 digits and nesting up to 1000 deep.
+`Option (Option α)` outside a field is a compile error, since `none` and `some none` would both be
+`null` (`Option α` as a value needs `NotNull α`, which every type that never writes `null` has).
+Because a `none` field is absent, adding an `Option` field changes no existing text, and old texts
+read as the new type.
 
 ## Lean API
 
-* `Value` (`string`, `integer`, `float`, `boolean`, `array`, `table`): `render`, `parse` (any
-  JSON that fits), `parseCanonical` (canonical text only), `renderLines`, `parseLines`,
-  `parseLinesCanonical`, `normalize`, `mkTable`, `get?`.
-* `ToValue`, `FromValue`, `deriving ToValue, FromValue`; `encode`, `decode` (lenient: an integer
-  for a float, unknown keys ignored), `decodeCanonical` (the text must be the canonical encoding,
-  so `decodeCanonical s = .ok a → encode a = s`), and the `…Lines` versions.
-* `tomljson% { … }`: a `Value` written as JSON in Lean source; `1` is an integer, `1.0` a float,
-  `$(e)` is `toValue e`.
+* `encode`, `decode`, `encodeLines`, `decodeLines`; `ToValue`, `FromValue`, `NotNull`, and
+  `deriving ToValue, FromValue` for structures and inductive types.
+* `Value` (`null`, `boolean`, `integer`, `float`, `string`, `array`, `table`): `render`, `parse`,
+  `renderLines`, `parseLines`, `isValid`, `get?`.
+* `tomljson% { … }`: a `Value` written as JSON in Lean source, where `1` is an integer and `1.0` a
+  float, `$(e)` is `toValue e`, and a repeated key is a compile error. It is Lean syntax; what it
+  builds is written as ordinary JSON.
 * Date-times: `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`, `DateTime`,
   `DateTime.parse?`, `isValid`, `OffsetDateTime.now`, `ofUnixNanos?`, `toUnixNanos`.
 * `Lean.Json`: `Value.toJson`, `Value.ofJson?` (a `JsonNumber` with exponent 0 is an integer, one
   with a positive exponent a float), `floatToJson`, and `open scoped TomlJson.ExactFloat`, which
   makes Lean's own `ToJson Float` (and `deriving ToJson`) exact in its scope.
-* `TomlJsonLake` (a separate library, since importing Lake links all of it): `ofTomlText`,
-  `Value.ofToml`, `Value.toToml`, `DateTime.ofLake`, `DateTime.toLake`.
 
 Use it from another package with
 
@@ -110,25 +68,29 @@ git = "<this repository>"
 
 The library's files are `module`s, so `module` files can import them.
 
-## Other tools
+## What Lean does today (4.36)
 
-Reading needs nothing: `json.loads`, `JSON.parse`, `jq` read canonical lines as usual. Writing
-canonical lines needs the shortest-float layout, sorted keys and the extra escapes:
-[`python/tomljson.py`](python/tomljson.py) does it (`dumps`), and `tomljson canon` canonicalizes
-any JSON Lines:
+`Lean.Json` keeps a number as a decimal, so it can tell `1.0` (exponent 1) from `1` (exponent 0),
+but `Json.compress` prints both as `1`, `Json.parse "1.0e16"` is an integer, and `ToJson Float`
+goes through `Float.toString`, six fixed decimals: `toJson 1e-7` is `0`. So no format that keeps
+`1.0` apart from `1` is a fixed point of `Json.compress ∘ Json.parse`, and this library has its own
+writer and reader.
 
-```
-lake build tomljson
-.lake/build/bin/tomljson canon < any.jsonl > canonical.jsonl
-.lake/build/bin/tomljson check < canonical.jsonl
-```
+Lean's TOML is Lake's (`Lake.Toml`): string, integer (`Int`, no 64-bit check), float, boolean,
+date-time (offset date-time, local date-time, local date, local time), array and table. Its printer
+writes floats with six decimals and `00:00:00.05` as `00:00:00.500`, and its reader rejects
+`a = 6` at the very end of the input. This library does not read or write TOML.
 
-## Tests
+## Tools and tests
 
-`lake test` builds `Tests/`, whose checks run as it builds: examples of every rule
-(`Tests/Examples.lean`), randomized laws over values, their non-canonical spellings, typed records
-and date-times (`Tests/Properties.lean`), and Lake's TOML values (`Tests/Lake.lean`).
-`python3 python/crosscheck.py` checks that the Lean CLI and the Python encoder agree byte for byte
-on random data and that `json.loads` reads integers and floats apart;
-`python3 python/crosscheck.py --floats 300000` checks the float printer against CPython's `repr`
-on every power of two and of ten, their neighbours and random doubles.
+`tomljson check < records.jsonl` exits 1 at the first line that is not canonical, with its number
+and the byte where it departs. [`python/tomljson.py`](python/tomljson.py) is a second writer, in standard-library
+Python.
+
+`lake test` builds `Tests/`, whose checks run as it builds: examples of every rule and rejection
+(`Tests/Examples.lean`), randomized checks of the law over values, their other spellings, invalid
+values, typed records and schema evolution (`Tests/Properties.lean`), and compile-time errors
+(`Tests/DeriveErrors.lean`). `python3 python/crosscheck.py` checks that the Python writer and Lean
+agree byte for byte on random data, and `python3 python/crosscheck.py --floats 300000` checks the
+float printer against CPython's `repr` on every power of two and of ten, their neighbours and
+random doubles.

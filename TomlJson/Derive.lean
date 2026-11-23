@@ -6,15 +6,19 @@ public meta import Lean.Elab.Deriving.Util
 
 /-! # `deriving ToValue, FromValue`
 
-The shapes follow Lean's `deriving ToJson, FromJson`, except where TOML has no null:
+The shapes are those of Lean's `deriving ToJson, FromJson`, but for `none` fields:
 
-* a structure is a table of its fields; a field of type `Option α` is omitted when `none` (and
-  read as `none` when missing), a field named `x?` is written under the key `x`;
+* a structure is a table of its fields; a field of type `Option α` is absent when `none`, and a
+  field named `x?` is written under the key `x`;
 * a constructor with no arguments is its name as a string: `"red"`;
-* a constructor with named arguments is a one-key table holding a table of them:
-  `{"circle":{"radius":1.0}}`;
+* a constructor with named arguments is a one-key table holding a table of them, which follow the
+  rules of fields: `{"circle":{"radius":1.0}}`;
 * a constructor with one unnamed argument holds it directly: `{"some":3}`; with several unnamed
   arguments, an array of them: `{"pair":[1,2]}`.
+
+Reading is strict: a key that is not a field is an error, and so is a missing key that is not an
+`Option` field. Keys must differ (fields `x` and `x?` do not), which the handler checks; it writes
+them in key order. A derived type is never written as `null`, so it gets `NotNull` too.
 
 The handler is adapted from Lean's own `ToJson`/`FromJson` handler
 (`Lean.Elab.Deriving.FromToJson`, Apache 2.0, Sebastian Ullrich and Dany Fabian).
@@ -26,8 +30,17 @@ namespace TomlJson.Derive
 
 universe u
 
-/-- A table of members, sorted. -/
-def table (members : Array (String × Value)) : Value := .table (Value.sortMembers members)
+/-- A table of members already in key order. -/
+def table (members : Array (String × Value)) : Value := .table members
+
+/-- Check that every key of the table `v` is one of `keys`, for a type or constructor `name`. -/
+def onlyKeys (name : String) (keys : Array String) (v : Value) : Except String Unit :=
+  match v with
+  | .table members =>
+    match members.find? (!keys.contains ·.1) with
+    | some (k, _) => .error s!"{name} has no field {pushString "" k}"
+    | none => pure ()
+  | _ => pure ()
 
 /-- A constructor and its arguments: the one-key table `{name: payload}`. -/
 def ctor (name : String) (payload : Value) : Value := .table #[(name, payload)]
@@ -128,8 +141,10 @@ def mkToValueStruct (header : Header) (indName : Name) : TermElabM Term := do
   let fields := getStructureFieldsFlattened (← getEnv) indName (includeSubobjectFields := false)
   let target := mkIdent header.targetNames[0]!
   let keys ← fieldKeys fields
+  -- In key order, so that the table needs no sorting when written.
+  let sorted := (fields.zip keys).qsort (·.2 < ·.2)
   let mut members ← `(#[])
-  for field in fields, key in keys do
+  for (field, key) in sorted do
     let key := Syntax.mkStrLit key
     members ← `(TomlJson.ToField.pushField $members $key ($target).$(mkIdent field))
   `(TomlJson.Derive.table $members)
@@ -152,8 +167,9 @@ def mkToValueInduct (ctx : Deriving.Context) (header : Header) (indName : Name) 
       `(TomlJson.Derive.ctor $name (TomlJson.Value.array #[$[$xs],*]))
     | xs, some names =>
       let keys ← fieldKeys names
+      let sorted := (xs.zip keys).qsort (·.2 < ·.2)
       let mut members ← `(#[])
-      for (x, t) in xs, key in keys do
+      for ((x, t), key) in sorted do
         let key := Syntax.mkStrLit key
         if t.isAppOf indVal.name then
           members ← `(Array.push $members ($key, $auxFun:ident $x:ident))
@@ -169,9 +185,11 @@ def mkFromValueStruct (indName : Name) (v : Ident) : TermElabM Term := do
   let getters ← keys.mapM fun key => do
     `(doElem| TomlJson.FromField.getField? $v $(Syntax.mkStrLit key))
   let fieldIds := fields.map mkIdent
-  let typeName := Syntax.mkStrLit indName.eraseMacroScopes.toString
+  let typeName := Syntax.mkStrLit (privateToUserName indName.eraseMacroScopes).toString
+  let keyLits := keys.map Syntax.mkStrLit
   `(do
     TomlJson.Derive.expectTable $typeName $v
+    TomlJson.Derive.onlyKeys $typeName #[$[$keyLits],*] $v
     $[let $fieldIds:ident ← $getters]*
     return { $[$fieldIds:ident := $(id fieldIds)],* })
 
@@ -209,9 +227,11 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
             getters := getters.push (← `(doElem| TomlJson.Derive.fieldWith $auxFun:ident p $key))
           else
             getters := getters.push (← `(doElem| TomlJson.FromField.getField? p $key))
+        let keyLits := keys.map Syntax.mkStrLit
         `(do
           let p ← TomlJson.Derive.payload $name payload
           TomlJson.Derive.expectTable $name p
+          TomlJson.Derive.onlyKeys $name #[$[$keyLits],*] p
           $[let $ids:ident ← $getters]*
           return $(mkIdent ctorName):ident $ids*)
       else if h : binders.size = 1 then
@@ -242,12 +262,43 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
       $[| $names => $rhss]*
       | other => .error s!"unknown constructor {TomlJson.pushString "" other}")
 
+open TSyntax.Compat in
+/-- Lean's `mkHeader`, with instance binders for the field class `field` too: a field whose type is
+a parameter then follows the field rule for whatever the parameter is (an `Option` is a key that
+may be absent). -/
+def mkHeaderWithField (className field : Name) (arity : Nat) (indVal : InductiveVal) :
+    TermElabM Header := do
+  let header ← mkHeader className arity indVal
+  let extra ← mkInstImplicitBinders field indVal header.argNames
+  let n := header.binders.size - arity
+  return { header with
+    binders := header.binders.extract 0 n ++ extra.map (⟨·⟩) ++ header.binders.extract n header.binders.size }
+
+open TSyntax.Compat in
+/-- Lean's `mkInstanceCmds` for one type, with instance binders for the field class `field` too. -/
+def mkInstanceWithField (ctx : Deriving.Context) (className field : Name) (typeName : Name) :
+    TermElabM (Array Command) := do
+  let mut instances := #[]
+  for i in *...ctx.typeInfos.size do
+    let indVal := ctx.typeInfos[i]!
+    if indVal.name == typeName then
+      let argNames ← mkInductArgNames indVal
+      let binders ← mkImplicitBinders argNames
+      let binders := binders ++ (← mkInstImplicitBinders className indVal argNames) ++
+        (← mkInstImplicitBinders field indVal argNames)
+      let indType ← mkInductiveApp indVal argNames
+      let type ← `($(mkCIdent className) $indType)
+      let val ← `(⟨$(mkIdent ctx.auxFunNames[i]!)⟩)
+      instances := instances.push
+        (← `(instance $(mkIdent ctx.instName):ident $binders:implicitBinder* : $type := $val))
+  return instances
+
 /-- The `toValue` function of each type in the mutual block. -/
 def mkToValueFuns (ctx : Deriving.Context) : TermElabM Command := do
   let mut defs := #[]
   for i in *...ctx.typeInfos.size do
     let indVal := ctx.typeInfos[i]!
-    let header ← mkHeader ``ToValue 1 indVal
+    let header ← mkHeaderWithField ``ToValue ``ToField 1 indVal
     let auxFun := mkIdent ctx.auxFunNames[i]!
     let body ← Term.elabBinders header.binders fun _ => do
       let type ← Term.elabTerm header.targetType none
@@ -267,7 +318,7 @@ def mkFromValueFuns (ctx : Deriving.Context) : TermElabM Command := do
   let mut defs := #[]
   for i in *...ctx.typeInfos.size do
     let indVal := ctx.typeInfos[i]!
-    let header ← mkHeader ``FromValue 0 indVal
+    let header ← mkHeaderWithField ``FromValue ``FromField 0 indVal
     -- A fresh name: a field may be called `value`.
     let v := mkIdent (← mkFreshUserName `value)
     let binders := header.binders.push (← `(bracketedBinderF|($v : TomlJson.Value)))
@@ -286,13 +337,23 @@ def mkFromValueFuns (ctx : Deriving.Context) : TermElabM Command := do
       defs := defs.push (← `(def $auxFun:ident $binders:bracketedBinder* : Except String $resultType := $body:term))
   `(mutual $defs:command* end)
 
+/-- `NotNull T` for a type with derived `ToValue`, which writes a table or a string, never
+`null`. -/
+def mkNotNullInstance (declName : Name) : TermElabM Command := do
+  let indVal ← getConstInfoInduct declName
+  let argNames ← mkInductArgNames indVal
+  let binders ← mkImplicitBinders argNames
+  let indType ← mkInductiveApp indVal argNames
+  `(instance $binders:implicitBinder* : TomlJson.NotNull $indType := ⟨⟩)
+
 /-- The handler for `deriving ToValue`. -/
 def mkToValueHandler (declNames : Array Name) : CommandElabM Bool := do
   if declNames.isEmpty || !(← declNames.allM isInductive) then return false
   for declName in declNames do
     let cmds ← liftTermElabM do
       let ctx ← mkContext ``ToValue "toValue" declName
-      return #[← mkToValueFuns ctx] ++ (← mkInstanceCmds ctx ``ToValue #[declName])
+      return #[← mkToValueFuns ctx] ++ (← mkInstanceWithField ctx ``ToValue ``ToField declName) ++
+        #[← mkNotNullInstance declName]
     cmds.forM elabCommand
   return true
 
@@ -302,7 +363,7 @@ def mkFromValueHandler (declNames : Array Name) : CommandElabM Bool := do
   for declName in declNames do
     let cmds ← liftTermElabM do
       let ctx ← mkContext ``FromValue "fromValue" declName
-      return #[← mkFromValueFuns ctx] ++ (← mkInstanceCmds ctx ``FromValue #[declName])
+      return #[← mkFromValueFuns ctx] ++ (← mkInstanceWithField ctx ``FromValue ``FromField declName)
     cmds.forM elabCommand
   return true
 

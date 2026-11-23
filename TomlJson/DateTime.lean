@@ -4,27 +4,24 @@ public import TomlJson.Class
 public import Std.Time.DateTime.Timestamp
 import Std.Time.Zoned
 
-/-! # TOML date-times as strings
+/-! # Date-times as strings
 
-TOML has four date-time types (RFC 3339 and parts of it). JSON has none, so a date-time is a
-string in its canonical RFC 3339 form, which every JSON reader takes as a string and every date
-library parses:
+JSON has no date-time type, so a date-time is a string in one canonical RFC 3339 form, and its
+Lean type says how to read it back. The four kinds (RFC 3339's date-time and its parts):
 
-| TOML           | Lean type here    | canonical text                     |
-|----------------|-------------------|------------------------------------|
-| Offset Date-Time | `OffsetDateTime` | `1979-05-27T07:32:00Z`, `1979-05-27T00:32:00.999999-07:00` |
-| Local Date-Time  | `LocalDateTime`  | `1979-05-27T07:32:00`              |
-| Local Date       | `LocalDate`      | `1979-05-27`                       |
-| Local Time       | `LocalTime`      | `07:32:00`, `00:32:00.5`           |
+| kind             | Lean type         | canonical text                     |
+|------------------|-------------------|------------------------------------|
+| offset date-time | `OffsetDateTime`  | `1979-05-27T07:32:00Z`, `1979-05-27T00:32:00.999999-07:00` |
+| local date-time  | `LocalDateTime`   | `1979-05-27T07:32:00`              |
+| date             | `LocalDate`       | `1979-05-27`                       |
+| time of day      | `LocalTime`       | `07:32:00`, `00:32:00.5`           |
 
-Canonical choices: an upper-case `T`; seconds always written; a fraction only when nonzero,
-with no trailing zero (to the nanosecond); a zero offset written `Z`, any other `±HH:MM`.
-Reading also takes what TOML allows besides: `t` or a space for `T`, `z` for `Z`, `+00:00`,
-a time without seconds (TOML 1.1), and fractions longer than nine digits (truncated, as TOML
-says).
+An upper-case `T`; seconds always written; a fraction only when nonzero, with no trailing zero
+(to the nanosecond); a zero offset as `Z`, any other as `±HH:MM`. Reading takes this form and no
+other.
 
 The structures do not enforce their ranges; `isValid` says whether a value is a real date-time.
-Valid values read back as themselves; an invalid one is written as text no reader takes, never
+Valid values read back as themselves; an invalid one is written as text the reader rejects, never
 as some other date-time.
 -/
 
@@ -32,7 +29,7 @@ public section
 
 namespace TomlJson
 
-/-- A calendar date (TOML Local Date), proleptic Gregorian, years 0 to 9999. -/
+/-- A calendar date, proleptic Gregorian, years 0 to 9999. -/
 structure LocalDate where
   /-- The year, 0 to 9999. -/
   year : Nat
@@ -42,7 +39,7 @@ structure LocalDate where
   day : Nat
   deriving DecidableEq, Ord, Repr, Inhabited
 
-/-- A time of day (TOML Local Time), to the nanosecond. Second 60 is a leap second, as RFC 3339
+/-- A time of day, to the nanosecond. Second 60 is a leap second, as RFC 3339
 allows. -/
 structure LocalTime where
   /-- The hour, 0 to 23. -/
@@ -55,7 +52,7 @@ structure LocalTime where
   nanosecond : Nat := 0
   deriving DecidableEq, Ord, Repr, Inhabited
 
-/-- A date and a time of day, with no offset (TOML Local Date-Time). -/
+/-- A date and a time of day, with no offset. -/
 structure LocalDateTime where
   /-- The date. -/
   date : LocalDate
@@ -63,7 +60,7 @@ structure LocalDateTime where
   time : LocalTime
   deriving DecidableEq, Ord, Repr, Inhabited
 
-/-- A date and time of day at an offset from UTC (TOML Offset Date-Time, RFC 3339 date-time). -/
+/-- A date and time of day at an offset from UTC (an RFC 3339 date-time). -/
 structure OffsetDateTime where
   /-- The local date. -/
   date : LocalDate
@@ -73,7 +70,7 @@ structure OffsetDateTime where
   offsetMinutes : Int := 0
   deriving DecidableEq, Repr, Inhabited
 
-/-- Any of TOML's four date-time types. -/
+/-- Any of the four kinds of date-time. -/
 inductive DateTime where
   /-- An offset date-time. -/
   | offsetDateTime (dt : OffsetDateTime)
@@ -148,7 +145,7 @@ def offsetText (minutes : Int) : String :=
 protected def OffsetDateTime.toString (dt : OffsetDateTime) : String :=
   s!"{dt.date.toString}T{dt.time.toString}{offsetText dt.offsetMinutes}"
 
-/-- The canonical text of any TOML date-time. -/
+/-- The canonical text of any date-time. -/
 protected def DateTime.toString : DateTime → String
   | .offsetDateTime dt => dt.toString
   | .localDateTime dt => dt.toString
@@ -187,32 +184,28 @@ private def date (cs : List Char) : Option (LocalDate × List Char) := do
   let d : LocalDate := { year, month, day }
   if d.isValid then some (d, cs) else none
 
-/-- A time `HH:MM[:SS[.F…]]` at the front, and the rest. -/
+/-- A time `HH:MM:SS[.F…]` at the front (at most nine fractional digits), and the rest. -/
 private def time (cs : List Char) : Option (LocalTime × List Char) := do
   let (hour, cs) ← fixed 2 cs
   let cs ← lit ':' cs
   let (minute, cs) ← fixed 2 cs
-  let (second, nanosecond, cs) ←
-    match lit ':' cs with
-    | none => some (0, 0, cs)
-    | some cs => do
-      let (second, cs) ← fixed 2 cs
-      match lit '.' cs with
-      | none => some (second, 0, cs)
-      | some cs =>
-        let ds := cs.takeWhile Char.isDigit
-        if ds.isEmpty then none
-        -- Beyond nine digits, truncate (TOML: "additional precision must be truncated").
-        let ns := (ds.take 9 ++ List.replicate (9 - min 9 ds.length) '0').foldl
-          (fun acc c => acc * 10 + (c.toNat - 48)) 0
-        some (second, ns, cs.drop ds.length)
+  let cs ← lit ':' cs
+  let (second, cs) ← fixed 2 cs
+  let (nanosecond, cs) ←
+    match lit '.' cs with
+    | none => some (0, cs)
+    | some cs =>
+      let ds := cs.takeWhile Char.isDigit
+      if ds.isEmpty || ds.length > 9 then none
+      some ((ds ++ List.replicate (9 - ds.length) '0').foldl (fun acc c => acc * 10 + (c.toNat - 48)) 0,
+        cs.drop ds.length)
   let t : LocalTime := { hour, minute, second, nanosecond }
   if t.isValid then some (t, cs) else none
 
-/-- An offset `Z`, `z` or `±HH:MM` at the front, in minutes, and the rest. -/
+/-- An offset `Z` or `±HH:MM` at the front, in minutes, and the rest. -/
 private def offset (cs : List Char) : Option (Int × List Char) :=
   match cs with
-  | 'Z' :: rest | 'z' :: rest => some (0, rest)
+  | 'Z' :: rest => some (0, rest)
   | s :: rest =>
     if s == '+' || s == '-' then do
       let (h, rest) ← fixed 2 rest
@@ -224,21 +217,20 @@ private def offset (cs : List Char) : Option (Int × List Char) :=
     else none
   | [] => none
 
-/-- Any TOML date-time, the whole text. -/
-def dateTime? (s : String) : Option DateTime :=
+/-- A date-time of any kind, the whole text, by shape. -/
+private def shape (s : String) : Option DateTime :=
   let cs := s.toList
   match date cs with
   | some (d, []) => some (.localDate d)
-  | some (d, sep :: rest) =>
-    if sep == 'T' || sep == 't' || sep == ' ' then
-      match time rest with
-      | some (t, []) => some (.localDateTime { date := d, time := t })
-      | some (t, rest) =>
-        match offset rest with
-        | some (o, []) => some (.offsetDateTime { date := d, time := t, offsetMinutes := o })
-        | _ => none
-      | none => none
-    else none
+  | some (d, 'T' :: rest) =>
+    match time rest with
+    | some (t, []) => some (.localDateTime { date := d, time := t })
+    | some (t, rest) =>
+      match offset rest with
+      | some (o, []) => some (.offsetDateTime { date := d, time := t, offsetMinutes := o })
+      | _ => none
+    | none => none
+  | some _ => none
   | none =>
     match time cs with
     | some (t, []) => some (.localTime t)
@@ -246,8 +238,11 @@ def dateTime? (s : String) : Option DateTime :=
 
 end DateText
 
-/-- The TOML date-time a string writes, in any form TOML takes. -/
-def DateTime.parse? (s : String) : Option DateTime := DateText.dateTime? s
+/-- The date-time whose canonical text is `s`, if it is one: `parse? s = some dt` exactly when
+`dt` is valid and `dt.toString = s`. -/
+def DateTime.parse? (s : String) : Option DateTime :=
+  -- The shape takes trailing zeros and `+00:00`; the canonical text does not.
+  (DateText.shape s).filter (·.toString == s)
 
 /-! ## As values -/
 
@@ -256,7 +251,7 @@ instance : FromValue DateTime where
   fromValue?
     | .string s => match DateTime.parse? s with
       | some dt => pure dt
-      | none => typeMismatch "an RFC 3339 date-time, date or time" (.string s)
+      | none => typeMismatch "a date-time, date or time in canonical RFC 3339 form" (.string s)
     | v => typeMismatch "a date-time string" v
 
 instance : ToValue OffsetDateTime := ⟨fun dt => .string dt.toString⟩
@@ -279,6 +274,12 @@ instance : FromValue LocalDate where
     match ← (fromValue? v : Except String DateTime) with
     | .localDate d => pure d
     | _ => typeMismatch "a date (YYYY-MM-DD)" v
+
+instance : NotNull DateTime := ⟨⟩
+instance : NotNull OffsetDateTime := ⟨⟩
+instance : NotNull LocalDateTime := ⟨⟩
+instance : NotNull LocalDate := ⟨⟩
+instance : NotNull LocalTime := ⟨⟩
 
 instance : ToValue LocalTime := ⟨fun t => .string t.toString⟩
 instance : FromValue LocalTime where

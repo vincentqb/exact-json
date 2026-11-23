@@ -12,11 +12,6 @@ linter.missingDocs = true
 [[lean_lib]]
 name = "TomlJson"
 
-# Conversions to and from Lake's TOML values (`Lake.Toml.Value`). Separate because an
-# executable that imports Lake links all of Lake.
-[[lean_lib]]
-name = "TomlJsonLake"
-
 # The test suite: its checks (`#guard`, `#eval`) run as it builds, so `lake test` builds it.
 [[lean_lib]]
 name = "Tests"

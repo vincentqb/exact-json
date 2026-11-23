@@ -1,17 +1,17 @@
-"""Cross-check the Lean implementation against Python's json module and the reference encoder.
+"""Cross-check the Lean reader against an independent Python writer.
 
     lake build tomljson && python3 python/crosscheck.py [--count N] [--seed S]
+    python3 python/crosscheck.py --floats N
 
-1. Random Python values, written by the reference ``dumps``, are canonical to ``tomljson check``.
-2. The same values written by plain ``json.dumps`` (spaces, ASCII escapes, unsorted keys, Python's
-   float repr), through ``tomljson canon``, come out exactly as ``dumps`` writes them.
-3. Every canonical line reads back with ``json.loads`` as the same value: integers as ``int``
-   from tokens without a point, floats as ``float`` from tokens with one, bit for bit.
-4. ``str.splitlines`` on canonical JSON Lines finds exactly one line per value.
+1. Random Python values, written by ``tomljson.dumps``, are canonical to ``tomljson check``, which
+   accepts a line only if it is exactly how Lean writes that value: so the two writers agree byte
+   for byte.
+2. ``json.loads`` reads every such line back as the same value, with integers from tokens without
+   a point and floats from tokens with one.
+3. Other spellings of the same values (``json.dumps``'s spaces and ASCII escapes) are rejected.
 
-With ``--floats N``, instead: every power of two and of ten and their neighbours, the subnormal
-boundaries and N random bit patterns, through ``tomljson canon``, are written as ``dumps_float``
-writes them (CPython's ``repr`` digits) and read back bit for bit.
+With ``--floats N``: every power of two and of ten, their neighbours, the smallest subnormals and N
+random doubles, written with CPython's ``repr`` digits, are canonical to Lean.
 """
 
 import argparse
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from tomljson import dumps, dumps_float, loads  # noqa: E402
+from tomljson import dumps, dumps_float  # noqa: E402
 
 EXE = Path(__file__).resolve().parent.parent / ".lake" / "build" / "bin" / "tomljson"
 
@@ -63,7 +63,7 @@ def rand_float(r):
 
 
 def rand_value(r, depth):
-    k = r.randrange(8 if depth else 4)
+    k = r.randrange(9 if depth else 5)
     if k == 0:
         return "".join(rand_char(r) for _ in range(r.randrange(7)))
     if k == 1:
@@ -72,18 +72,23 @@ def rand_value(r, depth):
         return rand_float(r)
     if k == 3:
         return r.random() < 0.5
-    if k in (4, 5):
+    if k == 4:
+        return None
+    if k in (5, 6):
         return [rand_value(r, depth - 1) for _ in range(r.randrange(5))]
     return {r.choice(["a", "b", "é", ""]) if r.random() < 0.5 else
             "".join(rand_char(r) for _ in range(r.randrange(5))): rand_value(r, depth - 1)
             for _ in range(r.randrange(5))}
 
 
-def run(command, text):
-    p = subprocess.run([str(EXE), command], input=text.encode(), capture_output=True)
-    if p.returncode != 0:
-        sys.exit(f"tomljson {command} failed: {p.stderr.decode()}")
-    return p.stdout.decode()
+def check(text):
+    """Whether ``tomljson check`` accepts the JSON Lines ``text``, and its message."""
+    p = subprocess.run([str(EXE), "check"], input=text.encode(), capture_output=True)
+    return p.returncode == 0, p.stderr.decode().strip()
+
+
+def bits(x):
+    return struct.unpack("<Q", struct.pack("<d", x))[0]
 
 
 def same(a, b):
@@ -91,7 +96,7 @@ def same(a, b):
     if type(a) is not type(b):
         return False
     if isinstance(a, float):
-        return struct.pack("<d", a) == struct.pack("<d", b)
+        return bits(a) == bits(b)
     if isinstance(a, list):
         return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
     if isinstance(a, dict):
@@ -99,7 +104,7 @@ def same(a, b):
     return a == b
 
 
-def check_tokens(line):
+def read_typed(line):
     """json.loads, asserting integer tokens have no point and float tokens have one."""
     def as_int(token):
         assert not any(c in token for c in ".eE"), token
@@ -110,10 +115,6 @@ def check_tokens(line):
         return float(token)
 
     return json.loads(line, parse_int=as_int, parse_float=as_float)
-
-
-def bits(x):
-    return struct.unpack("<Q", struct.pack("<d", x))[0]
 
 
 def float_sweep(n, seed):
@@ -133,11 +134,14 @@ def float_sweep(n, seed):
         if math.isfinite(x):
             xs.add(x)
     xs = sorted(xs) + [-x for x in sorted(xs)]
-    lean = run("canon", "".join(json.dumps(x) + "\n" for x in xs)).split("\n")[:-1]
-    for x, text in zip(xs, lean):
-        if text != dumps_float(x) or bits(float(text)) != bits(x):
-            sys.exit(f"float {x!r} ({bits(x):#x}): Lean writes {text}, expected {dumps_float(x)}")
-    print(f"crosscheck: {len(xs)} floats: Lean writes CPython's shortest digits, read back exactly")
+    lines = [dumps_float(x) for x in xs]
+    ok, message = check("".join(line + "\n" for line in lines))
+    if not ok:
+        sys.exit(f"Lean rejects CPython's digits: {message}")
+    for x, line in zip(xs, lines):
+        if bits(float(line)) != bits(x):
+            sys.exit(f"{line} does not read back as {x!r}")
+    print(f"crosscheck: {len(xs)} floats: CPython's shortest digits are Lean's canonical text")
 
 
 def main():
@@ -151,36 +155,29 @@ def main():
         return
     r = random.Random(args.seed)
     values = [rand_value(r, 4) for _ in range(args.count)]
-    canonical = "".join(dumps(v) + "\n" for v in values)
+    lines = [dumps(v) for v in values]
 
-    # 1. the reference encoder writes canonical text
-    run("check", canonical)
+    # 1. the Python writer writes what Lean writes
+    ok, message = check("".join(line + "\n" for line in lines))
+    if not ok:
+        sys.exit(f"Lean rejects Python's canonical text: {message}")
 
-    # 2. plain json.dumps text, canonicalized by Lean, is the reference encoder's text
-    plain = "".join(json.dumps(v) + "\n" for v in values)
-    lean = run("canon", plain)
-    if lean != canonical:
-        for i, (a, b) in enumerate(zip(lean.split("\n"), canonical.split("\n"))):
-            if a != b:
-                sys.exit(f"line {i + 1} differs:\n lean:   {a}\n python: {b}")
-        sys.exit("outputs differ in length")
-
-    # 3. canonical lines read back as the same values, with int and float tokens apart
-    lines = lean.split("\n")[:-1]
+    # 2. the lines read back as the same values, integer and float tokens apart
     for line, v in zip(lines, values):
-        if not same(check_tokens(line), json.loads(dumps(v))):
+        if not same(read_typed(line), v):
             sys.exit(f"{line} does not read back as its value")
 
-    # 4. no line breaks inside a line, for any line splitter
-    if len(lean.splitlines()) != len(values):
-        sys.exit("str.splitlines splits a canonical line")
+    # 3. other spellings are rejected
+    rejected = 0
+    for v in values[:200]:
+        other = json.dumps(v)  # spaces after , and :, ASCII escapes, keys unsorted
+        if other != dumps(v):
+            ok, _ = check(other + "\n")
+            if ok:
+                sys.exit(f"Lean accepts the non-canonical {other}")
+            rejected += 1
 
-    # 5. the Python reader agrees: what Lean wrote reads back and writes again to the same line
-    for line in lines:
-        if dumps(loads(line)) != line:
-            sys.exit(f"python round trip changes {line}")
-
-    print(f"crosscheck: {len(values)} values, {len(lean)} characters: Lean and Python agree")
+    print(f"crosscheck: {len(values)} values agree byte for byte; {rejected} other spellings rejected")
 
 
 if __name__ == "__main__":

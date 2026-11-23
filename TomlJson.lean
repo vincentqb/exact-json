@@ -12,6 +12,6 @@ public import TomlJson.LeanJson
 
 /-! # TomlJson
 
-Canonical JSON for TOML-typed data: one line of JSON per value, which every JSON reader reads as
-usual, and which Lean reads back and writes again to the same bytes. See `SPEC.md`.
+Canonical, strictly typed JSON: one line of ordinary JSON per value, under the law
+`decode s = .ok a ↔ encode a = s`. See `SPEC.md`.
 -/

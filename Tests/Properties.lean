@@ -3,14 +3,15 @@ module
 import TomlJson
 meta import TomlJson
 
-/-! Randomized checks of the format's laws, run when this module is built (`lake test`), with
-fixed seeds so that a failure reproduces. For random values `v` (normal or not):
+/-! Randomized checks of the format's law, run when this module is built (`lake test`), with
+fixed seeds so that a failure reproduces. The law is `parse s = .ok v ↔ (v.isValid ∧ render v = s)`
+and, typed, `decode s = .ok a ↔ encode a = s`:
 
-1. `Value.parse (render v) = v.normalize` and `render v.normalize = render v`;
-2. `Value.parseCanonical (render v)` succeeds, and gives back the text;
-3. any other spelling of `v.normalize` (whitespace, member order, escapes, number forms, `null`
-   members) parses to `v.normalize`, and `parseCanonical` rejects it;
-4. typed values: `decodeCanonical (encode a)` is `a`, and `decode` of any other spelling is too;
+1. for random valid values `v`, `Value.parse (render v)` is `v`;
+2. every other spelling of `v` (whitespace, member order, escapes, number forms) is rejected;
+3. an invalid value's text is rejected too, so it never stands for another value;
+4. typed values: `decode (encode a)` is `a`, every other spelling is rejected, and adding an
+   `Option` field changes no text;
 5. date-times print and parse back, Unix time converts both ways;
 6. `Value.ofJson? v.toJson = v` (for values without `-0.0`).
 -/
@@ -102,30 +103,37 @@ def genInt : Gen Int := do
   | 2 => return ((← word).toNat : Int) - 2 ^ 63
   | _ => return (← below 1000000 : Nat)
 
-/-- A random value of nesting at most `depth`; with `normal := false` also NaNs, infinities and
-tables with unsorted or repeated keys. -/
-partial def genValue (depth : Nat) (normal : Bool) : Gen Value := do
+/-- A random valid value of nesting at most `depth`. -/
+partial def genValue (depth : Nat) : Gen Value := do
   -- containers half the time while depth remains
-  let choice ← below (if depth == 0 then 4 else 8)
+  let choice ← below (if depth == 0 then 5 else 9)
   match choice with
   | 0 => return .string (← genString)
   | 1 => return .integer (← genInt)
-  | 2 => return .float (← genFloat (!normal))
+  | 2 => return .float (← genFloat false)
   | 3 => return .boolean ((← below 2) == 0)
-  | 4 | 5 =>
+  | 4 => return .null
+  | 5 | 6 =>
     let n ← below 5
     let mut items := #[]
-    for _ in [0:n] do items := items.push (← genValue (depth - 1) normal)
+    for _ in [0:n] do items := items.push (← genValue (depth - 1))
     return .array items
   | _ =>
     let n ← below 5
-    let mut members := #[]
+    let mut members : Array (String × Value) := #[]
     for _ in [0:n] do
-      -- short keys collide often, which exercises the last-wins rule
+      -- short keys collide often; a repeated key is dropped to keep the table valid
       let key ← if (← below 2) == 0 then pick #["a", "b", "A", "é", ""] else genString
-      members := members.push (key, ← genValue (depth - 1) normal)
-    let v := Value.table members
-    return if normal then v.normalize else v
+      if members.all (·.1 != key) then members := members.push (key, ← genValue (depth - 1))
+    return .table (members.qsort (·.1 < ·.1))
+
+/-- A random invalid value: a valid one with a non-finite float or a table out of order. -/
+def genInvalid (depth : Nat) : Gen Value := do
+  let v ← genValue depth
+  match ← below 3 with
+  | 0 => return .array #[v, .float (← pick #[0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0])]
+  | 1 => return .table #[("b", v), ("a", v)]
+  | _ => return .table #[("a", v), ("a", v)]
 
 /-! ## Other spellings of a value -/
 
@@ -196,6 +204,7 @@ partial def loose (v : Value) : Gen String := do
     | .integer n => do pure (if n == 0 && (← below 3) == 0 then "-0" else toString n)
     | .float x => looseFloat x
     | .boolean b => do pure (if b then "true" else "false")
+    | .null => do pure "null"
     | .array items => do
       let mut out := "["
       for item in items, i in [0:items.size] do
@@ -203,17 +212,11 @@ partial def loose (v : Value) : Gen String := do
         out := out ++ (← genWs) ++ (← loose item)
       pure (out ++ (← genWs) ++ "]")
     | .table members => do
-      -- members in any order, perhaps with a `null` member (dropped when read)
-      let mut members := (members.map fun (k, v) => (k, some v))
-      if (← below 3) == 0 && (members.all (·.1 != "\x00null")) then
-        members := members.push ("\x00null", none)
+      -- members in any order
       let mut out := "{"
       for (k, v) in (← shuffle members), i in [0:members.size] do
         if i > 0 then out := out ++ (← genWs) ++ ","
-        let text ← match v with
-          | some v => loose v
-          | none => pure "null"
-        out := out ++ (← genWs) ++ (← looseString k) ++ (← genWs) ++ ":" ++ (← genWs) ++ text
+        out := out ++ (← genWs) ++ (← looseString k) ++ (← genWs) ++ ":" ++ (← genWs) ++ (← loose v)
       pure (out ++ (← genWs) ++ "}")
   return (← genWs) ++ body ++ (← genWs)
 
@@ -223,25 +226,24 @@ partial def loose (v : Value) : Gen String := do
 def check (ok : Bool) (msg : String) : IO Unit :=
   unless ok do throw (IO.userError msg)
 
-/-- The value laws, for `count` random values from `seed`, nested at most `depth`. -/
+/-- The value law, for `count` random values from `seed`, nested at most `depth`. -/
 def valueLaws (seed count depth : Nat) : IO Unit := do
   for i in [0:count] do
-    let v := (genValue depth ((i % 3) != 0)).run' (seed + i)
+    let v := (genValue depth).run' (seed + i)
     let text := v.render
-    let n := v.normalize
-    check (n.normalize == n && n.render == text) s!"normalize: {repr v}"
+    check v.isValid s!"generated an invalid value: {text}"
     match Value.parse text with
-    | .ok w => check (w == n) s!"parse ∘ render ≠ normalize: {text}"
-    | .error e => throw (IO.userError s!"parse failed on {text}: {e}")
-    check (((Value.parseCanonical text).map Value.render).toOption == some text)
-      s!"parseCanonical rejects {text}"
-    -- other spellings of the same value
+    | .ok w => check (w == v) s!"parse ∘ render changes {text} into {w.render}"
+    | .error e => throw (IO.userError s!"parse rejects the canonical {text}: {e}")
+    -- every other spelling of the same value is rejected
     for j in [0:3] do
-      let other := (loose n).run' (seed * 7 + i * 3 + j)
+      let other := (loose v).run' (seed * 7 + i * 3 + j)
       match Value.parse other with
-      | .ok w => check (w == n) s!"{other} parses to {w.render}, not {text}"
-      | .error e => throw (IO.userError s!"parse failed on {other}: {e}")
-      check ((Value.parseCanonical other).isOk == (other == text)) s!"parseCanonical accepts {other}"
+      | .ok w => check (other == text && w == v) s!"parse accepts the non-canonical {other}"
+      | .error _ => check (other != text) s!"parse rejects the canonical {text}"
+    -- an invalid value's text is no value's text
+    let bad := (genInvalid (depth - 1)).run' (seed + 5 * i)
+    check (!bad.isValid && !(Value.parse bad.render).isOk) s!"an invalid value's text is read: {bad.render}"
 
 /-! ## Typed values -/
 
@@ -257,6 +259,8 @@ structure Sample where
   note? : Option String
   /-- Points. -/
   points : Array (Int × Float)
+  /-- Readings, some missing. -/
+  readings : Array (Option Float)
   /-- Children. -/
   children : List Sample
   /-- A day. -/
@@ -286,6 +290,10 @@ partial def genSample (depth : Nat) : Gen Sample := do
   let k ← below 3
   let mut points := #[]
   for _ in [0:k] do points := points.push (← genInt, ← genFloat true)
+  let mut readings := #[]
+  for _ in [0:(← below 4)] do
+    let x ← genFloat true
+    readings := readings.push (if (← below 3) == 0 then none else some x)
   let mut children := []
   if depth > 0 then
     for _ in [0:(← below 3)] do children := (← genSample (depth - 1)) :: children
@@ -293,20 +301,52 @@ partial def genSample (depth : Nat) : Gen Sample := do
   let hasNote := (← below 2) == 0
   return { label := ← genString, count := ← below 1000, value := ← genFloat true,
            note? := if hasNote then some note else none,
-           points, children, day := ← genDate, stamp := ← genOffsetDateTime }
+           points, readings, children, day := ← genDate, stamp := ← genOffsetDateTime }
 
-/-- The typed laws, for `count` random samples. -/
+/-- `Sample` and one more `Option` field: what a schema looks like once a field is added. -/
+structure SampleV2 extends Sample where
+  /-- The field added later. -/
+  added? : Option String
+  deriving ToValue, FromValue
+
+/-- `v`, a table, with `key := x` (replacing or inserting, in key order). -/
+def setKey (v : Value) (key : String) (x : Value) : Value :=
+  match v with
+  | .table members =>
+    .table ((members.filter (·.1 != key)).push (key, x) |>.qsort (·.1 < ·.1))
+  | v => v
+
+/-- The instances' own strictness, without `decode`'s check that re-encoding gives the text back:
+`fromValue?` reads `toValue a` back, and refuses an unknown key, a float where a natural number
+belongs, an integer where a string belongs and `null` for a `none` field. -/
+def instanceLaws (seed count : Nat) : IO Unit := do
+  for i in [0:count] do
+    let a := (genSample 1).run' (seed + i)
+    let v := toValue a
+    match (fromValue? v : Except String Sample) with
+    | .ok b => check (toValue b == v) s!"fromValue? ∘ toValue changes {v.render}"
+    | .error e => throw (IO.userError s!"fromValue? rejects {v.render}: {e}")
+    let bad := [setKey v "zz" .null, setKey v "count" (.float 1.0), setKey v "label" (.integer 1)] ++
+      (if a.note?.isNone then [setKey v "note" .null] else [])
+    for w in bad do
+      check (!(fromValue? w : Except String Sample).isOk) s!"fromValue? accepts {w.render}"
+
+/-- The typed law, for `count` random samples. -/
 def typedLaws (seed count : Nat) : IO Unit := do
   for i in [0:count] do
     let a := (genSample 2).run' (seed + i)
     let text := encode a
-    match (decodeCanonical text : Except String Sample) with
-    | .ok b => check (encode b == text) s!"decodeCanonical ∘ encode changes {text}"
-    | .error e => throw (IO.userError s!"decodeCanonical rejects {text}: {e}")
+    match (decode text : Except String Sample) with
+    | .ok b => check (encode b == text) s!"decode ∘ encode changes {text}"
+    | .error e => throw (IO.userError s!"decode rejects {text}: {e}")
     let other := (loose (toValue a)).run' (seed + 1000 + i)
-    match (decode other : Except String Sample) with
-    | .ok b => check (encode b == text) s!"decode {other} gives {encode b}"
-    | .error e => throw (IO.userError s!"decode rejects {other}: {e}")
+    check ((decode other : Except String Sample).isOk == (other == text)) s!"decode accepts {other}"
+    -- schema evolution: the added field, `none`, changes no text, so old texts read as the new type
+    let a2 : SampleV2 := { toSample := a, added? := none }
+    check (encode a2 == text) s!"adding an Option field changed {text}"
+    match (decode text : Except String SampleV2) with
+    | .ok b => check (b.added?.isNone && encode b.toSample == text) s!"the new type reads {text} wrongly"
+    | .error e => throw (IO.userError s!"the new type rejects the old text {text}: {e}")
 
 /-- Date-time laws. -/
 def dateLaws (seed count : Nat) : IO Unit := do
@@ -325,7 +365,7 @@ def dateLaws (seed count : Nat) : IO Unit := do
 /-- `Lean.Json` both ways. -/
 def leanJsonLaws (seed count : Nat) : IO Unit := do
   for i in [0:count] do
-    let v := (genValue 4 true).run' (seed + i)
+    let v := (genValue 4).run' (seed + i)
     -- a `JsonNumber` has no negative zero
     if (v.render.splitOn "-0.0").length > 1 then continue
     match Value.ofJson? v.toJson with
@@ -335,5 +375,6 @@ def leanJsonLaws (seed count : Nat) : IO Unit := do
 #eval valueLaws 1 4000 4
 #eval valueLaws 100000 300 7
 #eval typedLaws 2 500
+#eval instanceLaws 7 500
 #eval dateLaws 3 2000
 #eval leanJsonLaws 4 2000
