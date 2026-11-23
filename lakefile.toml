@@ -1,0 +1,26 @@
+name = "tomljson"
+version = "0.1.0"
+defaultTargets = ["TomlJson", "tomljson"]
+testDriver = "Tests"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+linter.missingDocs = true
+
+# The format and its Lean implementation: no dependency beyond Lean core.
+[[lean_lib]]
+name = "TomlJson"
+
+# Conversions to and from Lake's TOML values (`Lake.Toml.Value`). Separate because an
+# executable that imports Lake links all of Lake.
+[[lean_lib]]
+name = "TomlJsonLake"
+
+# The test suite: its checks (`#guard`, `#eval`) run as it builds, so `lake test` builds it.
+[[lean_lib]]
+name = "Tests"
+
+[[lean_exe]]
+name = "tomljson"
+root = "Main"
