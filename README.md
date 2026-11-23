@@ -52,18 +52,27 @@ law. Each headline states one law, independent of the others:
 
 | headline | law | status |
 |----------|-----|--------|
-| `parse_render_text` | `Value.parse s = .ok v → v.render = s` | proved |
-| `parse_valid` | `Value.parse s = .ok v → v.Valid` | proved |
-| `render_parse` | `v.Valid → Value.parse v.render = .ok v` | not yet proved |
+| `parse_fixed` | `Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s` | proved |
+| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | not yet proved |
+| `readJson_spec` | `(Value.readJson s).toOption = Rfc8259.read? s` | proved |
 | `parse_costed` | `(Value.parseCosted s).value = Value.parse s` | proved |
-| `parse_linear` | `∃ c, ∀ s, (Value.parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 10` |
+| `parse_linear` | `∃ c, ∀ s, (Value.parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 22` |
 | `render_no_control` | every character of `v.render` is at U+0020 or above (so no line feed or carriage return) | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
 | `decode_encode` | `decode (encode a) = .ok a`, when `fromValue? (toValue a) = .ok a` and `toValue a` is valid | not yet proved |
 
 Each has a kill, a proof that some wrong implementation fails it, and each that assumes something of
-the functions it names has a witness that the assumption can hold. The two not yet proved are the
-completeness directions; the tests and the Python cross-check stand for them meanwhile.
+the functions it names has a witness that the assumption can hold.
+
+`Rfc8259.read?` is part of the statement: RFC 8259's grammar, written to be checked against the
+RFC, and what a JSON text holds (an integer when a number has no fraction and no exponent, the
+nearest float otherwise; no repeated key; no lone surrogate). `parse_fixed` says the canonical
+texts are exactly the JSON texts that reading and writing back leaves unchanged, so the format is
+a consistent subset of JSON, and `canon s := render <$> readJson s` brings any JSON text to its
+canonical form. The two headlines not yet proved both follow from one lemma about floats, that
+every finite float's canonical text reads back as it (`FloatsReadBack` in `TomlJson/Fixed.lean`,
+with `read_render_of_floats` and `decode_encode_of_floats`); the tests and the Python
+cross-checks stand for it meanwhile.
 
 Because the soundness laws are proved, the code does no defensive work: `Value.parse` does not
 check what it read (by rendering it again, or validating it), and `decode` compares the value it
@@ -75,11 +84,11 @@ the arithmetic on numbers and the wording of error messages are not counted.
 
 | file | who writes it | holds |
 |------|---------------|-------|
-| `Challenge.lean` | owner | the holes (`Value.render`, `Value.parse`, `Value.parseCosted`, `encode`, `decode`), the headlines, kills and witnesses |
-| `TomlJson/Value.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue`, `Costed` |
+| `Challenge.lean` | owner | the holes (`Value.render`, `Value.parse`, `Value.parseCosted`, `Value.readJson`, `encode`, `decode`), the headlines, kills and witnesses |
+| `TomlJson/Value.lean`, `TomlJson/Rfc8259.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue`, `Costed`, and the RFC 8259 reference reader `Rfc8259.read?` |
 | `TomlJson/{Float,Render,Parse,Codec}.lean` | agent | the code the holes compute through: plain, total Lean |
-| `TomlJson/{Text,Printable,Sound,Cost,Solution}.lean` | agent | the proofs: the renderer's text, no character below U+0020, the reader's soundness, its steps |
-| `TomlJson/Main.lean` | agent | `tomljson check`, whose `main` reaches every hole |
+| `TomlJson/{Text,Printable,NumberValid,NumberText,Reread,Sound,Cost,SpecValid,Fixed,Solution}.lean` | agent | the proofs: the renderer's text, no character below U+0020, the reader's soundness, its steps, what RFC 8259 reads in a canonical text, the fixed points |
+| `TomlJson/Main.lean` | agent | `tomljson check` and `tomljson canon`, whose `main` reaches every hole |
 | `TomlJson/{DateTime,Derive,Literal,LeanJson}.lean`, `TomlJson/Tests/` | agent | what the challenge does not cover |
 
 ```sh
@@ -94,7 +103,8 @@ lake comparator   # the kernel replays the proofs against Challenge.lean
 * `encode`, `decode`, `encodeLines`, `decodeLines`; `ToValue`, `FromValue`, `NotNull`, and
   `deriving ToValue, FromValue` for structures and inductive types.
 * `Value` (`null`, `boolean`, `integer`, `float`, `string`, `array`, `table`): `render`, `parse`,
-  `renderLines`, `parseLines`, `isValid`, `get?`.
+  `renderLines`, `parseLines`, `isValid`, `get?`; `readJson` for JSON in any spelling (RFC 8259,
+  as `Rfc8259.read?` reads it), whose result `render` writes canonically.
 * `tomljson% { … }`: a `Value` written as JSON in Lean source, where `1` is an integer and `1.0` a
   float, `$(e)` is `toValue e`, and a repeated key is a compile error. It is Lean syntax; what it
   builds is written as ordinary JSON.
@@ -130,12 +140,16 @@ writes floats with six decimals and `00:00:00.05` as `00:00:00.500`, and its rea
 ## Tools and tests
 
 `tomljson check < records.jsonl` exits 1 at the first line that is not canonical, with its number
-and the character where it departs. [`python/tomljson.py`](python/tomljson.py) is a second writer,
-in standard-library Python.
+and the character where it departs. `tomljson canon < any.json` writes the canonical text of a JSON
+text in any spelling (`--lines` for one text a line), and exits 1, saying why and where, at one
+that RFC 8259 does not read or that holds what a value cannot (a repeated key, a lone surrogate, a
+float beyond binary64). [`python/tomljson.py`](python/tomljson.py) is a second writer, in
+standard-library Python.
 
 `TomlJson/Tests/` holds examples of every rule and rejection (`Examples.lean`), randomized checks
 of the laws over values, their other spellings, invalid values, typed records and schema evolution
 (`Properties.lean`), and compile-time errors (`DeriveErrors.lean`); they run as they build. `python3 python/crosscheck.py` checks that the Python writer and Lean
-agree byte for byte on random data, and `python3 python/crosscheck.py --floats 300000` checks the
+agree byte for byte on random data, and that `tomljson canon` reads Python's `json.dumps` of it
+(spaces, ASCII escapes, keys in any order) as the same values, and `python3 python/crosscheck.py --floats 300000` checks the
 float printer against CPython's `repr` on every power of two and of ten, their neighbours and
 random doubles.

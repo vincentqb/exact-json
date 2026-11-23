@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Value
+public import TomlJson.Rfc8259
 
 /-! # Exact conversions between `Float` and decimal text
 
@@ -164,20 +164,8 @@ def shortest (x : Float) : Option Decimal :=
         return some { negative, digits, exponent }
 
 /-- The float nearest `(-1)^negative × m × 10^q`, rounding ties to even, or `none` when that is
-an infinity (the magnitude is too large for binary64). -/
-def ofDecimal? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
-  let magnitude : Option Float :=
-    if m = 0 then some 0.0
-    else
-      let n : Int := (Nat.toDigits 10 m).length
-      -- `10^(n+q-1) ≤ value < 10^(n+q)`: above `10^309` overflows, below `10^-324` is zero.
-      if n + q > 309 then none
-      else if n + q < -324 then some 0.0
-      else some (Float.ofScientific m (q < 0) q.natAbs)
-  match magnitude.map fun f => if negative then -f else f with
-  -- what rounds past the largest float is an infinity
-  | some x => if finiteFloat x then some x else none
-  | none => none
+an infinity (`Rfc8259.floatOf?`). -/
+def ofDecimal? (negative : Bool) (m : Nat) (q : Int) : Option Float := Rfc8259.floatOf? negative m q
 
 end FloatText
 

@@ -9,6 +9,8 @@
 2. ``json.loads`` reads every such line back as the same value, with integers from tokens without
    a point and floats from tokens with one.
 3. Other spellings of the same values (``json.dumps``'s spaces and ASCII escapes) are rejected.
+4. ``tomljson canon`` reads any JSON spelling of them (``json.dumps`` with spaces, ASCII escapes
+   and keys in any order) and writes each one's canonical text, byte for byte as Python's writer.
 
 With ``--floats N``: every power of two and of ten, their neighbours, the smallest subnormals and N
 random doubles, written with CPython's ``repr`` digits, are canonical to Lean.
@@ -85,6 +87,12 @@ def check(text):
     """Whether ``tomljson check`` accepts the JSON Lines ``text``, and its message."""
     p = subprocess.run([str(EXE), "check"], input=text.encode(), capture_output=True)
     return p.returncode == 0, p.stderr.decode().strip()
+
+
+def canon_lines(text):
+    """``tomljson canon --lines`` of the JSON Lines ``text``: its exit code, output and message."""
+    p = subprocess.run([str(EXE), "canon", "--lines"], input=text.encode(), capture_output=True)
+    return p.returncode, p.stdout.decode(), p.stderr.decode().strip()
 
 
 def bits(x):
@@ -177,7 +185,21 @@ def main():
                 sys.exit(f"Lean accepts the non-canonical {other}")
             rejected += 1
 
-    print(f"crosscheck: {len(values)} values agree byte for byte; {rejected} other spellings rejected")
+    # 4. any JSON spelling of a value is read as it, and written canonically
+    spellings = []
+    for v in values:
+        separators = r.choice([(",", ":"), (", ", ": "), (" , ", " : ")])
+        spellings.append(json.dumps(v, separators=separators, ensure_ascii=r.random() < 0.5,
+                                    sort_keys=r.random() < 0.5))
+    code, out, message = canon_lines("".join(s + "\n" for s in spellings))
+    if code != 0:
+        sys.exit(f"Lean does not read Python's JSON: {message}")
+    for spelling, line, got in zip(spellings, lines, out.split("\n")):
+        if got != line:
+            sys.exit(f"Lean reads {spelling} as {got}, not {line}")
+
+    print(f"crosscheck: {len(values)} values agree byte for byte; {rejected} other spellings rejected; "
+          f"{len(spellings)} JSON spellings canonicalized")
 
 
 if __name__ == "__main__":

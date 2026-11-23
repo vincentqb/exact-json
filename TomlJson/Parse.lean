@@ -10,9 +10,10 @@ public import TomlJson.Render
 canonical spelling where there is one.
 
 The reader is sound by construction, so nothing it reads is checked again: a string is read
-escape by escape, each one the escape `pushChar` writes; a number is read by JSON's grammar and
-then compared with its own canonical text (`Value.render`), past which the reading goes on; and
-a table's keys are compared as they are read. It works on the text's characters, by structural
+escape by escape, each one the escape `pushChar` writes; a number, the longest run of the
+characters numbers are written in, is read as RFC 8259 reads it (`Rfc8259.numberValue`) and then
+compared with its own canonical text (`Value.render`); and a table's keys are compared as they
+are read. `Value.readJson` reads JSON in any spelling, as `Rfc8259.read` does. It works on the text's characters, by structural
 recursion: on the characters for strings and numbers, and on a fuel larger than the text for
 nested arrays and tables.
 
@@ -182,35 +183,41 @@ def Parts.value? (p : Parts) : Option Value :=
     (FloatText.ofDecimal? p.negative p.digits (exponent - p.fractionDigits)).map .float
   else some (.integer (if p.negative then -(p.digits : Int) else p.digits))
 
-/-- The rest of `input` past `text`, when `input` starts with `text` and `text` has `k`
-characters; with the steps taken, one for each character compared. -/
-def afterText : Nat → List Char → List Char → Nat → Option (List Char) × Nat
-  | 0, [], input, steps => (some input, steps)
-  | k + 1, c :: text, d :: input, steps => if c == d then afterText k text input (steps + 1) else (none, steps + 1)
-  | _, _, _, steps => (none, steps + 1)
+/-- A number as a lenient grammar reads it: JSON's, with leading zeros allowed. -/
+def lenientScan (input : List Char) (steps : Nat) : Read Parts :=
+  match input with
+  | '-' :: rest => scan .sign { negative := true, length := 1 } rest steps
+  | c :: rest => scan .whole { digits := c.toNat - 48, length := 1 } rest steps
+  | [] => .error "expected a value, found the end of the text" [] steps
 
-/-- The number whose parts `scanned` read from the front of `input`, which must be its canonical
-text. -/
-def numberAfter (input : List Char) : Read Parts → Read Value
+/-- The error for a number that is not an RFC 8259 number, as a lenient grammar reads it (leading
+zeros allowed): the canonical text of what it would be, or where that grammar stops. -/
+def lenientError (input : List Char) (steps : Nat) : Read Value :=
+  match lenientScan input steps with
   | .error message rest steps => .error message rest steps
-  | .ok p _ steps =>
-    match p.value? with
-    | some v =>
-      let canonical := v.render
-      match afterText p.length canonical.toList input steps with
-      | (some rest, steps) => .ok v rest steps
-      | (none, steps) =>
-        .error s!"not the canonical text of this {if p.isFloat then "float" else "integer"}: write {canonical}"
-          input steps
-    | none => .error "a float beyond the range of binary64" input steps
+  | .ok p rest steps =>
+    let suggestion : Read Value := match p.value? with
+      | some v => .error s!"not the canonical text of this {if p.isFloat then "float" else "integer"}: write {v.render}" input steps
+      | none => .error "a float beyond the range of binary64" input steps
+    match rest with
+    | c :: _ => if Rfc8259.isNumberChar c then .error s!"a number does not go on with {c}" rest steps else suggestion
+    | [] => suggestion
 
-/-- The number at the front (JSON's grammar), which must be its canonical text, and the rest. A
-number in any other spelling, leading zeros included, is an error that names its canonical text. -/
+/-- The number at the front, the longest run of the characters numbers are written in, which must
+be the canonical text of the RFC 8259 number it is (`Rfc8259.numberValue`); and the rest. Another
+spelling is an error that names the canonical one. -/
 def number (input : List Char) (steps : Nat) : Read Value :=
-  numberAfter input <| match input with
-    | '-' :: rest => scan .sign { negative := true, length := 1 } rest (steps + 1)
-    | c :: rest => scan .whole { digits := c.toNat - 48, length := 1 } rest (steps + 1)
-    | [] => .error "expected a value, found the end of the text" [] steps
+  let (token, rest) := input.span Rfc8259.isNumberChar
+  -- the run, its length, its value and the comparison with its canonical text
+  let steps := steps + 7 * token.length + 7
+  match Rfc8259.numberValue token with
+  | .ok v =>
+    let canonical := v.render
+    if canonical.toList == token then .ok v rest steps
+    else
+      .error s!"not the canonical text of this {if v matches .float _ then "float" else "integer"}: write {canonical}"
+        input steps
+  | .error _ => lenientError input steps
 
 /-- Whether `key` comes after the last key of `acc`, if any. -/
 def keyFollows (acc : Array (String × Value)) (key : String) : Bool :=
@@ -309,6 +316,13 @@ def parseCosted (s : String) : Costed (Except String Value) :=
 
 /-- The valid value whose canonical text is `s`, if `s` is one (see the module docstring). -/
 def parse (s : String) : Except String Value := (parseCosted s).value
+
+/-- The value that the JSON text `s` holds (`Rfc8259.read`), whatever its spelling; or why it is
+not read, and where. -/
+def readJson (s : String) : Except String Value :=
+  match Rfc8259.read s with
+  | .ok v => .ok v
+  | .error (message, rest) => .error s!"at character {s.length - rest.length}: {message}"
 
 /-- The values of canonical JSON Lines text: exactly `renderLines` of valid values, each line one
 canonical text and a line feed. An error names the first line that is not. -/

@@ -1,6 +1,6 @@
 # Canonical, strictly typed JSON
 
-Version 0.2. One line of ordinary JSON per value, which any JSON reader parses, and which Lean
+Version 0.3. One line of ordinary JSON per value, which any JSON reader parses, and which Lean
 writes and reads back under one law. For a Lean type `α` with `ToValue` and `FromValue`
 instances (derived or the library's):
 
@@ -15,6 +15,10 @@ rather than their internal layout. So:
 * reading undoes writing: `decode (encode a) = a`;
 * each value has one text, and `encode (decode s) = s` whenever `decode s` succeeds;
 * nothing else is read: no other spelling of the same data, no other type's data.
+
+The canonical texts are a subset of RFC 8259 JSON, and exactly the JSON texts that reading as
+JSON and writing back gives unchanged (section 6): any JSON reader reads a canonical text, as the
+value it is, and any JSON text can be brought to its canonical form.
 
 The integer/float split and the date-time types follow TOML's data model; nothing else in the
 format depends on TOML. The reference implementation is the Lean library in this repository;
@@ -163,16 +167,44 @@ of any length and nesting of any depth. A reader process still has a finite stac
 of thousands deep can exhaust it.
 
 The reader is sound by construction, so nothing it reads is checked again: a string is read escape
-by escape, each one the escape the writer would write; a number is read by JSON's grammar and then
-compared with its own canonical text, past which reading goes on; a table's keys are compared as
-they are read. The steps it counts are linear in the text's length (`parse_linear`, at most ten a
-character and ten more): a step for each byte decoded, each character examined (in the text, or
+by escape, each one the escape the writer would write; a number, the longest run of the characters
+numbers are written in, is read as RFC 8259 reads it and then compared with its own canonical
+text; a table's keys are compared as they are read. The steps it counts are linear in the text's
+length (`parse_linear`, at most 22 a character and 22 more): a step for each byte decoded, each character examined (in the text, or
 in a text compared with it) and, on an error, each character counted to say where it is. The
 arithmetic on a number's digits and the wording of an error's message are not counted: a number
 of n digits (an integer, or a float's significand) takes time quadratic in n, and is rejected
 only after that when it is not canonical, while a long exponent costs no arithmetic.
 
-## 6. Why not `Lean.Json`
+## 6. Reading any JSON
+
+`Rfc8259.read? s` (in `TomlJson/Rfc8259.lean`, part of the statement) is the value an RFC 8259
+JSON text holds: the RFC's grammar exactly (whitespace only where it has `ws`, numbers without
+leading zeros, its escapes, no comments, no trailing commas, no `NaN`), with this format's
+reading of what it holds:
+
+* a number is an integer when it has neither a fraction nor an exponent (as Python's `json` reads
+  it: `1e5` and `1.0` are floats, `-0` is the integer `0`), and otherwise the float nearest it,
+  which must be finite;
+* a string is its characters, an escaped surrogate pair being one character; a surrogate escaped
+  alone is not read, since a string holds characters only;
+* an object, which is unordered, is a table of its members sorted by key; an object in which a key
+  repeats is not read.
+
+`Value.readJson` reads exactly what `Rfc8259.read?` reads (`readJson_spec`), with a message and a
+position when it does not, and `tomljson canon` writes what it reads canonically. The canonical
+texts are then exactly the fixed points of reading and writing (`parse_fixed`):
+
+```
+parse s = .ok v   ↔   Rfc8259.read? s = some v ∧ render v = s
+```
+
+So `canon s := render <$> readJson s` is the only step that is not strict: it brings any JSON text
+to its canonical form, a canonical text is left as it is, and `decode` of what it writes reads
+what the JSON text holds. Nothing in this is a choice the text leaves open: each JSON text holds
+one value, by the four rules above, which the statement spells out.
+
+## 7. Why not `Lean.Json`
 
 `Lean.Json.compress ∘ Lean.Json.parse` (Lean 4.36) maps `1.0` to `1`, so no format that keeps
 integral floats apart from integers is its fixed point; it also maps `1.0e16` to the integer
@@ -180,12 +212,12 @@ integral floats apart from integers is its fixed point; it also maps `1.0e16` to
 through `Float.toString`, six fixed decimals, so `toJson 1e-7` is `0` and `toJson 0.1234567` is
 `0.123457`. `Json.pretty` lists keys in the reverse of `compress`'s order.
 
-## 7. The challenge
+## 8. The challenge
 
 The laws are stated as theorems in [`Challenge.lean`](Challenge.lean), the statement of a
 [Lean Software Challenge](https://github.com/vincentqb/lean-software-challenge): each headline
 states one law about the functions it names (`Value.render`, `Value.parse`,
-`Value.parseCosted`, `encode`, `decode`),
+`Value.parseCosted`, `Value.readJson`, `encode`, `decode`),
 each has a kill (a proof that a wrong implementation fails it) and, when it assumes something of
 those functions, a witness that the assumption can hold. `Value.parseCosted` is `Value.parse`
 with the steps it counts as it reads. The reader counts them itself, so `parse_linear` bounds that
@@ -195,18 +227,22 @@ about the code that runs, which is plain total Lean (no `partial`, `@[extern]` o
 
 | headline | law | status |
 |----------|-----|--------|
-| `parse_render_text` | `parse s = .ok v → v.render = s` | proved |
-| `parse_valid` | `parse s = .ok v → v.Valid` | proved |
-| `render_parse` | `v.Valid → parse v.render = .ok v` | not yet proved |
+| `parse_fixed` | `parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s` | proved |
+| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | not yet proved |
+| `readJson_spec` | `(readJson s).toOption = Rfc8259.read? s` | proved |
 | `parse_costed` | `(parseCosted s).value = parse s` | proved |
-| `parse_linear` | `∃ c, ∀ s, (parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 10` |
+| `parse_linear` | `∃ c, ∀ s, (parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 22` |
 | `render_no_control` | every character of `v.render` is at U+0020 or above | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
 | `decode_encode` | `decode (encode a) = .ok a`, for instances that read back what they write | not yet proved |
 
-The two not yet proved are tested instead: by compile-time examples of every rule and rejection;
-by randomized tests over valid values, their non-canonical spellings (all rejected), invalid values
-(never read as another value), typed records and schema evolution (`TomlJson/Tests/`); by every
-power of two and of ten, their neighbours and random doubles against CPython's `repr`
-(`python/crosscheck.py --floats`); and by byte-for-byte agreement with the Python writer on random
-data (`python/crosscheck.py`).
+`parse_fixed` gives the rest of the bijection: whatever `parse` reads is valid and its own
+canonical text, and every valid value whose floats read back is read back from its text. The two
+not yet proved both come down to one lemma about floats, `FloatsReadBack` in
+`TomlJson/Fixed.lean`: RFC 8259 reads every finite float's canonical text back as that float (the
+shortest digits round to it). `read_render_of_floats` and `decode_encode_of_floats` derive the
+two headlines from it. Meanwhile it is tested: by every power of two and of ten, their neighbours
+and random doubles against CPython's `repr` (`python/crosscheck.py --floats`), by the randomized
+laws over values, their other spellings (rejected by `parse`, read by `readJson` as the value),
+typed records and schema evolution (`TomlJson/Tests/`), and by byte-for-byte agreement with
+Python's writer and with Python's `json` on random data (`python/crosscheck.py`).

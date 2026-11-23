@@ -108,6 +108,34 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard check (String.ofList (List.replicate 2000 '[')) ==
   "at character 2000: expected a value, found the end of the text"
 
+/-! ## Reading any JSON (RFC 8259) -/
+
+/-- The canonical text of what the JSON text `s` holds, or why it is not read. -/
+def canon (s : String) : String :=
+  match Value.readJson s with
+  | .ok v => v.render
+  | .error e => e
+
+-- any spelling: whitespace, escapes, number spellings, members in any order
+#guard canon " {\"b\" : [1, 2.50, -0, 1E+2, 1e-2, 0.5e1], \"a\":\t\"\\u00e9\\/\\ud83d\\ude00\\n\"}\r\n" ==
+  "{\"a\":\"é/😀\\n\",\"b\":[1,2.5,0,100.0,0.01,5.0]}"
+#guard canon "[ ]" == "[]"
+#guard canon "{ }" == "{}"
+-- a canonical text is read as itself
+#guard ["null", "true", "-17", "1.0e16", "[1,2.5,\"x\",{}]", "{\"a\":{\"b\":[null]},\"b\":1}"].all
+  fun s => canon s == s
+-- not JSON: trailing commas, comments, leading zeros, bare tokens, single quotes, raw control
+-- characters, bad escapes, a byte order mark, missing separators, unclosed or trailing text
+#guard ["", " ", "[1,]", "{\"a\":1,}", "01", "-01", "-", "1.", ".5", "+1", "1e", "NaN", "Infinity", "'a'",
+  "[1 2]", "{\"a\" 1}", "{a:1}", "\"\t\"", "\"\\x\"", "\"\\u12\"", "// c\n1", "\ufeff1", "tru", "1 2",
+  "[", "{\"a\":1", "\"a", "0x10"].all fun s => !(Value.readJson s).isOk
+-- what a value cannot hold is not read
+#guard canon "{\"a\":1,\"a\":2}" == "at character 7: a key repeats"
+#guard canon "\"\\udc00\"" == "at character 1: a low surrogate not after a high one"
+#guard canon "\"\\ud800x\"" == "at character 1: a high surrogate not followed by a low one"
+#guard canon "1e400" == "at character 0: a float beyond the range of binary64"
+#guard canon "[1,]" == "at character 3: expected a value"
+
 /-! ## JSON Lines -/
 
 #guard gives ((Value.parseLines "{\"a\":1}\n[2]\n").map (·.map Value.render)) #["{\"a\":1}", "[2]"]

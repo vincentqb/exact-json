@@ -2,14 +2,20 @@ module
 
 import TomlJson.Codec
 
-/-! # `tomljson check`: is this canonical JSON Lines?
+/-! # `tomljson check` and `tomljson canon`
 
 ```
 tomljson check < records.jsonl
+tomljson canon < any.json
+tomljson canon --lines < any.jsonl
 ```
 
-Exits 0 when every line is a canonical text (see `SPEC.md`), each ended by a line feed, and 1 at
-the first line that is not, with the character where it departs from canonical form.
+`check` exits 0 when every line is a canonical text (see `SPEC.md`), each ended by a line feed, and
+1 at the first line that is not, with the character where it departs from canonical form.
+
+`canon` reads its input as one JSON text (RFC 8259), in any spelling, and writes the canonical
+text of the value it holds, and a line feed; with `--lines`, it does so for each line. It exits 1
+at the first text that is not read, saying why and where.
 -/
 
 open TomlJson
@@ -17,7 +23,9 @@ open TomlJson
 /-- Usage text. -/
 def usage : String :=
   "usage: tomljson check < input.jsonl\n" ++
-  "  exit 1 at the first line that is not canonical JSON Lines\n"
+  "  exit 1 at the first line that is not canonical JSON Lines\n" ++
+  "       tomljson canon [--lines] < input.json\n" ++
+  "  write the canonical text of the JSON text (or of each line)\n"
 
 /-- Standard input, as UTF-8 text, or the first line that is not UTF-8. -/
 def readStdin : IO (Except String String) := do
@@ -43,10 +51,39 @@ def readStdin : IO (Except String String) := do
 
 public section
 
-/-- Run the subcommand: read every line as a `Value` through `decode`, which goes through every
-function the challenge states something about. -/
+/-- The canonical text of each JSON text, each with a line feed, or the first that is not read:
+`input` is one text, or with `lines` one text a line. -/
+def canon (lines : Bool) (input : String) : Except String String := do
+  if !lines then
+    let v ← Value.readJson input
+    return v.render.push '\n'
+  let parts := input.splitOn "\n"
+  let mut out := ""
+  for line in parts, k in [0:parts.length] do
+    -- after the final line feed, nothing
+    if k + 1 == parts.length && line.isEmpty then break
+    match Value.readJson line with
+    | .ok v => out := (Value.renderTo out v).push '\n'
+    | .error e => throw s!"line {k + 1}, {e}"
+  return out
+
+/-- Run the subcommand: `check` reads every line as a `Value` through `decode`, and `canon` reads
+JSON through `Value.readJson`; between them they go through every function the challenge states
+something about. -/
 def main (args : List String) : IO UInt32 := do
   match args with
+  | "canon" :: flags =>
+    let lines ← match flags with
+      | [] => pure false
+      | ["--lines"] => pure true
+      | _ => do IO.eprint usage; return 2
+    match (← readStdin) >>= canon lines with
+    | .ok text =>
+      IO.print text
+      return 0
+    | .error e =>
+      IO.eprintln s!"tomljson: {e}"
+      return 1
   | ["check"] =>
     match (← readStdin) >>= (decodeLines (α := Value) ·) with
     | .ok values =>

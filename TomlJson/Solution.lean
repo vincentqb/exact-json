@@ -4,6 +4,7 @@ public import TomlJson.Codec
 public import TomlJson.Printable
 public import TomlJson.Sound
 public import TomlJson.Cost
+public import TomlJson.Fixed
 
 /-! # Proofs of the challenge's headlines, kills and witnesses -/
 
@@ -22,7 +23,11 @@ theorem parse_valid (s : String) (v : Value) (h : Value.parse s = .ok v) : v.Val
 theorem parse_costed (s : String) : (Value.parseCosted s).value = Value.parse s := rfl
 
 theorem parse_linear : ∃ c : Nat, ∀ s : String, (Value.parseCosted s).steps ≤ c * (s.length + 1) :=
-  ⟨10, parseCosted_steps⟩
+  ⟨22, parseCosted_steps⟩
+
+theorem readJson_spec (s : String) : (Value.readJson s).toOption = Rfc8259.read? s := by
+  unfold Value.readJson Rfc8259.read?
+  split <;> simp_all [Except.toOption]
 
 theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α)
     (h : decode s = .ok a) : encode a = s := by
@@ -40,25 +45,6 @@ theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : 
         exact parse_render_text s v hv
       · cases h
 
-theorem parse_render_text_rejects_constant :
-    ¬ ∀ (s : String) (v : Value), (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v →
-      (fun (_ : Value) => "null") v = s := by
-  intro h
-  exact absurd (h "x" .null rfl) (by decide)
-
-theorem parse_valid_rejects_infinity :
-    ¬ ∀ (s : String) (v : Value),
-      (fun (_ : String) => (Except.ok (Value.float (Float.ofBits 0x7FF0000000000000)) : Except String Value)) s =
-        .ok v → v.Valid := by
-  intro h
-  exact absurd (h "" _ rfl) (by decide +kernel)
-
-theorem render_parse_rejects_constant :
-    ¬ ∀ (v : Value), v.Valid →
-      (fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "null") v) = .ok v := by
-  intro h
-  cases h (.boolean true) rfl
-
 theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat :=
   printable_render v
 
@@ -66,6 +52,33 @@ theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
   intro h
   exact absurd (h .null '\n' (by decide)) (by decide)
+
+theorem parse_fixed_rejects_constant :
+    ¬ ∀ (s : String) (v : Value),
+      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
+        Rfc8259.read? s = some v ∧ (fun (_ : Value) => "null") v = s := by
+  intro h
+  have hx : Rfc8259.read? "x" = none := by rfl
+  have := ((h "x" .null).mp rfl).1
+  rw [hx] at this
+  cases this
+
+theorem read_render_rejects_constant :
+    ¬ ∀ (v : Value), v.Valid → Rfc8259.read? ((fun (_ : Value) => "x") v) = some v := by
+  intro h
+  have hx : Rfc8259.read? "x" = none := by rfl
+  have := h .null rfl
+  rw [hx] at this
+  cases this
+
+theorem readJson_spec_rejects_constant :
+    ¬ ∀ (s : String),
+      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) s).toOption = Rfc8259.read? s := by
+  intro h
+  have hx : Rfc8259.read? "x" = none := by rfl
+  have := h "x"
+  rw [hx] at this
+  cases this
 
 theorem parse_costed_rejects_mismatch :
     ¬ ∀ (s : String), ((fun (_ : String) => (⟨.error "", 0⟩ : Costed (Except String Value))) s).value =
@@ -97,12 +110,6 @@ theorem decode_encode_rejects_failure :
           ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
   intro h
   cases @h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (fun _ => rfl) (fun _ => rfl) ⟨⟩
-
-theorem parse_render_text_applies : ∃ (s : String) (v : Value), Value.parse s = .ok v :=
-  ⟨"null", .null, by rfl⟩
-
-theorem parse_valid_applies : ∃ (s : String) (v : Value), Value.parse s = .ok v :=
-  parse_render_text_applies
 
 theorem render_no_control_applies : ∃ (v : Value), ∃ (c : Char), c ∈ v.render.toList :=
   ⟨.null, 'n', by decide +kernel⟩

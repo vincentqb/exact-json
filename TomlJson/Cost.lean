@@ -59,8 +59,8 @@ theorem string_within (input : List Char) (acc : String) (s0 : Nat) :
 /-- A scan from `p` of `input` that began with `s0` steps took a step for each character it read
 and one more; or it failed within `input`, after a step for each character of `input`. -/
 def ScanWithin (p : Parts) (input : List Char) (s0 : Nat) : Read Parts → Prop
-  | .ok p' _ s => s0 ≤ s ∧ s + p.length ≤ s0 + p'.length + 1 ∧ p.length ≤ p'.length ∧
-      p'.length ≤ p.length + input.length
+  | .ok p' r s => s0 ≤ s ∧ s + p.length ≤ s0 + p'.length + 1 ∧ p.length ≤ p'.length ∧
+      p'.length ≤ p.length + input.length ∧ r.length ≤ input.length
   | .error _ r s => s ≤ s0 + input.length ∧ r.length ≤ input.length
 
 theorem read_length (p : Parts) (g : Grammar) (c : Char) : (p.read g c).length = p.length + 1 := by
@@ -83,71 +83,91 @@ theorem scan_within (g : Grammar) (p : Parts) (input : List Char) (s0 : Nat) :
     cases r <;> simp only [ScanWithin, read_length, List.length_cons] at ih ⊢ <;> omega
   · exact finish_within _ _ _ _ _ (by omega) (by omega) (.inr (by simp))
 
-theorem afterText_steps (k : Nat) (text input : List Char) (s0 : Nat) :
-    s0 ≤ (afterText k text input s0).2 ∧ (afterText k text input s0).2 ≤ s0 + k + 1 ∧
-      ((afterText k text input s0).1.isSome = true → (afterText k text input s0).2 ≤ s0 + k) := by
-  fun_induction afterText k text input s0
-  · simp
-  · rename_i k c text d input steps _ ih
-    obtain ⟨h1, h2, h3⟩ := ih
-    exact ⟨by omega, by omega, fun h => by have := h3 h; omega⟩
-  · simp
-  · simp
-
-/-- What the start of the number reader gives `numberAfter`: the parts of at least one character
-of `input`, after a step for each and one more; or an error within `input`. -/
-def ScanNumber (input : List Char) (s0 : Nat) : Read Parts → Prop
-  | .ok p _ s => s0 ≤ s ∧ s ≤ s0 + p.length + 1 ∧ 1 ≤ p.length ∧ p.length ≤ input.length
+/-- What the lenient grammar gives, within `input` and after a step for each character of it. -/
+def ScanLenient (input : List Char) (s0 : Nat) : Read Parts → Prop
+  | .ok _ r s => s ≤ s0 + input.length ∧ r.length ≤ input.length
   | .error _ r s => s ≤ s0 + input.length ∧ r.length ≤ input.length
 
-theorem scanNumber_of_within (p0 : Parts) (hp0 : p0.length = 1) (rest input : List Char)
-    (hlen : input.length = rest.length + 1) (s0 : Nat) (r : Read Parts) (h : ScanWithin p0 rest (s0 + 1) r) :
-    ScanNumber input s0 r := by
-  cases r <;> simp only [ScanWithin, ScanNumber] at h ⊢ <;> omega
+theorem lenientScan_within (input : List Char) (s0 : Nat) : ScanLenient input s0 (lenientScan input s0) := by
+  unfold lenientScan
+  split
+  · rename_i rest
+    have h := scan_within .sign { negative := true, length := 1 } rest s0
+    revert h
+    generalize scan _ _ rest s0 = r
+    intro h
+    cases r <;> simp only [ScanWithin, ScanLenient, List.length_cons] at h ⊢ <;> omega
+  · rename_i c rest _
+    have h := scan_within .whole { digits := c.toNat - 48, length := 1 } rest s0
+    revert h
+    generalize scan _ _ rest s0 = r
+    intro h
+    cases r <;> simp only [ScanWithin, ScanLenient, List.length_cons] at h ⊢ <;> omega
+  · simp [ScanLenient]
 
-theorem numberAfter_within (input : List Char) (s0 : Nat) (scanned : Read Parts) (h : ScanNumber input s0 scanned) :
-    Within 4 4 input s0 (numberAfter input scanned) := by
-  cases scanned with
-  | error m r s =>
-    simp only [ScanNumber] at h
-    simp only [numberAfter, Within]
-    omega
-  | ok p r s1 =>
-    simp only [ScanNumber] at h
-    simp only [numberAfter]
+/-- The lenient grammar's error is within `input`, after a step for each character of it. -/
+theorem lenientError_steps (input : List Char) (s0 : Nat) (m : String) (r : List Char) (s : Nat)
+    (h : lenientError input s0 = .error m r s) : s ≤ s0 + input.length ∧ r.length ≤ input.length := by
+  have hs := lenientScan_within input s0
+  unfold lenientError at h
+  cases hsc : lenientScan input s0 with
+  | error m' r' s' =>
+    rw [hsc] at h hs
+    simp only [ScanLenient] at hs
+    simp only [Read.error.injEq] at h
+    obtain ⟨-, rfl, rfl⟩ := h
+    exact hs
+  | ok p r' s' =>
+    rw [hsc] at h hs
+    simp only [ScanLenient] at hs
+    simp only at h
+    split at h
+    · split at h
+      · simp only [Read.error.injEq] at h
+        obtain ⟨-, rfl, rfl⟩ := h
+        exact hs
+      · split at h <;> (simp only [Read.error.injEq] at h; obtain ⟨-, rfl, rfl⟩ := h; exact ⟨hs.1, by omega⟩)
+    · split at h <;> (simp only [Read.error.injEq] at h; obtain ⟨-, rfl, rfl⟩ := h; exact ⟨hs.1, by omega⟩)
+
+theorem numberValue_nil : ∃ e, Rfc8259.numberValue [] = .error e := ⟨_, rfl⟩
+
+theorem number_within (input : List Char) (s0 : Nat) : Within 16 16 input s0 (number input s0) := by
+  unfold number
+  split
+  rename_i token rest hspan
+  have hin := span_append _ _ _ _ hspan
+  have hl : input.length = token.length + rest.length := by rw [hin, List.length_append]
+  simp only
+  split
+  · rename_i v hv
+    have hne : token ≠ [] := by
+      rintro rfl
+      obtain ⟨e, he⟩ := numberValue_nil
+      rw [he] at hv
+      cases hv
+    have hk : 1 ≤ token.length := List.length_pos_iff.mpr hne
     split
-    · rename_i v _
-      have hsteps := afterText_steps p.length v.render.toList input s1
-      split
-      · rename_i rest s heq
-        rw [heq] at hsteps
-        obtain ⟨hin, hlen⟩ := afterText_sound _ _ _ _ _ _ heq
-        have hl : input.length = p.length + rest.length := by rw [hin, List.length_append, hlen]
-        simp only [Within, Option.isSome_some, forall_const] at hsteps ⊢
-        omega
-      · rename_i s heq
-        rw [heq] at hsteps
-        simp only [Within] at hsteps ⊢
-        omega
     · simp only [Within]
       omega
+    · simp only [Within]
+      omega
+  · rename_i e _
+    generalize hr : lenientError input (s0 + 7 * token.length + 7) = r
+    cases r with
+    | ok v rest' s => exact absurd hr (lenientError_ne_ok _ _ _ _ _)
+    | error m r s =>
+      have := lenientError_steps _ _ _ _ _ hr
+      simp only [Within]
+      omega
 
-theorem number_within (input : List Char) (s0 : Nat) : Within 4 4 input s0 (number input s0) := by
-  unfold number
-  apply numberAfter_within
-  split
-  · exact scanNumber_of_within _ rfl _ _ (by simp) _ _ (scan_within _ _ _ _)
-  · exact scanNumber_of_within _ rfl _ _ (by simp) _ _ (scan_within _ _ _ _)
-  · simp [ScanNumber]
+/-- Reading a value with `fuel` takes at most sixteen steps a character. -/
+def ValueWithin (fuel : Nat) : Prop := ∀ input s0, Within 16 16 input s0 (value fuel input s0)
 
-/-- Reading a value with `fuel` takes at most four steps a character. -/
-def ValueWithin (fuel : Nat) : Prop := ∀ input s0, Within 4 4 input s0 (value fuel input s0)
+/-- Reading an array's items with `fuel` takes at most sixteen steps a character. -/
+def ItemsWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 16 16 input s0 (items fuel input acc s0)
 
-/-- Reading an array's items with `fuel` takes at most four steps a character. -/
-def ItemsWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 4 4 input s0 (items fuel input acc s0)
-
-/-- Reading a table's members with `fuel` takes at most four steps a character. -/
-def MembersWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 4 4 input s0 (members fuel input acc s0)
+/-- Reading a table's members with `fuel` takes at most sixteen steps a character. -/
+def MembersWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 16 16 input s0 (members fuel input acc s0)
 
 theorem reader_within (fuel : Nat) : ValueWithin fuel ∧ ItemsWithin fuel ∧ MembersWithin fuel := by
   induction fuel with
@@ -241,8 +261,8 @@ theorem reader_within (fuel : Nat) : ValueWithin fuel ∧ ItemsWithin fuel ∧ M
 
 end Parser
 
-/-- `Value.parseCosted s` takes at most `10 * (s.length + 1)` steps. -/
-theorem parseCosted_steps (s : String) : (Value.parseCosted s).steps ≤ 10 * (s.length + 1) := by
+/-- `Value.parseCosted s` takes at most `22 * (s.length + 1)` steps. -/
+theorem parseCosted_steps (s : String) : (Value.parseCosted s).steps ≤ 22 * (s.length + 1) := by
   have hB := utf8ByteSize_le s
   have hn : s.toList.length = s.length := String.length_toList
   have hv := (Parser.reader_within (2 * s.utf8ByteSize + 2)).1 s.toList s.utf8ByteSize

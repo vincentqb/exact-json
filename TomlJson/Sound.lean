@@ -2,6 +2,8 @@ module
 
 public import TomlJson.Text
 public import TomlJson.Codec
+public import TomlJson.NumberValid
+public import TomlJson.Reread
 
 /-! # The reader is sound
 
@@ -90,66 +92,81 @@ theorem string_sound (input : List Char) (acc : String) (s0 : Nat) (str : String
     rw [pushChar_plain c h1 h2 h3] at this
     exact this
 
-theorem afterText_sound (k : Nat) (text input : List Char) (s0 : Nat) (rest : List Char) (s : Nat)
-    (h : afterText k text input s0 = (some rest, s)) : input = text ++ rest ∧ text.length = k := by
-  fun_induction afterText k text input s0 <;> (try cases h)
-  · simp
-  · rename_i c text d input steps hcd ih
-    obtain ⟨h1, h2⟩ := ih h
-    exact ⟨by rw [beq_iff_eq.mp hcd, h1]; rfl, by simp [h2]⟩
+theorem span_loop (p : Char → Bool) : ∀ (l acc token rest : List Char),
+    List.span.loop p l acc = (token, rest) → acc.reverse ++ l = token ++ rest
+  | [], acc, token, rest, h => by
+    simp only [List.span.loop, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    simp
+  | a :: l, acc, token, rest, h => by
+    simp only [List.span.loop] at h
+    split at h
+    · have := span_loop p l (a :: acc) token rest h
+      simpa using this
+    · simp only [Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
 
-/-- The float of a decimal, when there is one, is finite. -/
-theorem ofDecimal?_finite (negative : Bool) (m : Nat) (q : Int) (x : Float)
-    (h : FloatText.ofDecimal? negative m q = some x) : finiteFloat x = true := by
-  unfold FloatText.ofDecimal? at h
+theorem span_append (p : Char → Bool) (l token rest : List Char) (h : l.span p = (token, rest)) :
+    l = token ++ rest := by
+  have := span_loop p l [] token rest h
+  simpa using this
+
+/-- What the lenient grammar gives is always an error. -/
+theorem lenientError_ne_ok (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat) :
+    lenientError input s0 ≠ .ok v rest s := by
+  unfold lenientError
+  simp only
+  repeat' split
+  all_goals simp
+
+/-- An RFC 8259 number holds an integer or a float. -/
+theorem numberValue_shape (token : List Char) (v : Value) (h : Rfc8259.numberValue token = .ok v) :
+    (∃ n, v = .integer n) ∨ (∃ x, v = .float x) := by
+  unfold Rfc8259.numberValue at h
+  simp only at h
+  repeat' (split at h <;> (try cases h))
+  all_goals first
+    | exact .inl ⟨_, rfl⟩
+    | exact .inr ⟨_, rfl⟩
+
+/-- A number read is its own canonical text, valid, and read back from it. -/
+theorem number_sound (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat)
+    (h : number input s0 = .ok v rest s) :
+    input = v.render.toList ++ rest ∧ v.isValid = true ∧ v.reread = some v := by
+  unfold number at h
+  split at h
+  rename_i token after hspan
   simp only at h
   split at h
-  · split at h
-    · cases h
-      assumption
-    · cases h
-  · cases h
-
-/-- The value of a number's parts is valid. -/
-theorem Parts.value?_valid (p : Parts) (v : Value) (h : p.value? = some v) : v.isValid = true := by
-  unfold Parts.value? at h
-  split at h
-  · simp only [Option.map_eq_some_iff] at h
-    obtain ⟨x, hx, rfl⟩ := h
-    simpa [Value.isValid] using ofDecimal?_finite _ _ _ _ hx
-  · cases h
-    rfl
-
-/-- A number read is its own canonical text, and valid, whatever its parts were. -/
-theorem numberAfter_sound (input : List Char) (scanned : Read Parts) (v : Value) (rest : List Char) (s : Nat)
-    (h : numberAfter input scanned = .ok v rest s) : input = v.render.toList ++ rest ∧ v.isValid = true := by
-  cases scanned with
-  | error => simp [numberAfter] at h
-  | ok p r s1 =>
-    simp only [numberAfter] at h
+  · rename_i v' hv
     split at h
-    · rename_i v' hv
-      split at h
-      · cases h
-        exact ⟨(afterText_sound _ _ _ _ _ _ (by assumption)).1, Parts.value?_valid _ _ hv⟩
-      · cases h
+    · rename_i hcanonical
+      cases h
+      have htoken := beq_iff_eq.mp hcanonical
+      refine ⟨?_, Rfc8259.numberValue_valid _ _ hv, ?_⟩
+      · rw [span_append _ _ _ _ hspan, htoken]
+      · rcases numberValue_shape _ _ hv with ⟨n, rfl⟩ | ⟨x, rfl⟩
+        · rfl
+        · have hx : (floatText x).toList = token := by
+            rw [← htoken]
+            simp [Value.render, Value.renderTo]
+          simp [Value.reread, Value.rereadFloat, hx, hv]
     · cases h
-
-theorem number_sound (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat)
-    (h : number input s0 = .ok v rest s) : input = v.render.toList ++ rest ∧ v.isValid = true :=
-  numberAfter_sound _ _ _ _ _ h
+  · exact absurd h (lenientError_ne_ok _ _ _ _ _)
 
 /-- What reading a value with `fuel` gives is a valid value and its text. -/
 def ValueSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
-    value fuel input s0 = .ok v rest s → input = v.render.toList ++ rest ∧ v.isValid = true
+    value fuel input s0 = .ok v rest s →
+      input = v.render.toList ++ rest ∧ v.isValid = true ∧ v.reread = some v
 
 /-- What reading an array's items with `fuel` gives is valid items and their texts. -/
 def ItemsSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (acc : Array Value) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
     items fuel input acc s0 = .ok v rest s →
       ∃ ys, ys ≠ [] ∧ v = .array ⟨acc.toList ++ ys⟩ ∧ input = Value.itemsText ys ++ ']' :: rest ∧
-        itemsValid ys = true
+        itemsValid ys = true ∧ Value.rereadItems ys = some ys
 
 /-- What reading a table's members with `fuel` gives is valid members, in key order after those
 read already, and their texts. -/
@@ -157,7 +174,8 @@ def MembersSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (acc : Array (String × Value)) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
     members fuel input acc s0 = .ok v rest s → keysIncrease (acc.toList.map (·.1)) = true →
       ∃ ms, ms ≠ [] ∧ v = .table ⟨acc.toList ++ ms⟩ ∧ input = Value.membersText ms ++ '}' :: rest ∧
-        membersValid ms = true ∧ keysIncrease ((acc.toList ++ ms).map (·.1)) = true
+        membersValid ms = true ∧ keysIncrease ((acc.toList ++ ms).map (·.1)) = true ∧
+        Value.rereadMembers ms = some ms
 
 theorem array_push_eq {α : Type} (acc : Array α) (x : α) : acc.push x = ⟨acc.toList ++ [x]⟩ := by
   cases acc
@@ -186,34 +204,34 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
           obtain ⟨t, ht, hr⟩ := string_sound _ _ _ _ _ _ hstr
           simp only [String.toList_empty, List.nil_append] at ht
           subst ht
-          refine ⟨?_, by simp [Value.isValid]⟩
+          refine ⟨?_, by simp [Value.isValid], rfl⟩
           rw [Value.text_string, hr]
           simp
         · cases h
       · cases h
         have : (Value.render (.array #[])).toList = ['[', ']'] := by decide
-        exact ⟨by rw [this]; rfl, by decide⟩
-      · obtain ⟨ys, _, hv, hin, hvalid⟩ := ihItems _ _ _ _ _ _ h
+        exact ⟨by rw [this]; rfl, by decide, rfl⟩
+      · obtain ⟨ys, _, hv, hin, hvalid, hre⟩ := ihItems _ _ _ _ _ _ h
         subst hv
-        refine ⟨?_, by simpa [Value.isValid] using hvalid⟩
+        refine ⟨?_, by simpa [Value.isValid] using hvalid, by simp [Value.reread, hre]⟩
         simp only [List.nil_append]
         rw [Value.text_array, hin]
         simp
       · cases h
         have : (Value.render (.table #[])).toList = ['{', '}'] := by decide
-        exact ⟨by rw [this]; rfl, by decide⟩
-      · obtain ⟨ms, _, hv, hin, hvalid, hkeys⟩ := ihMembers _ _ _ _ _ _ h (by decide)
+        exact ⟨by rw [this]; rfl, by decide, rfl⟩
+      · obtain ⟨ms, _, hv, hin, hvalid, hkeys, hre⟩ := ihMembers _ _ _ _ _ _ h (by decide)
         subst hv
         simp only [List.nil_append] at hkeys ⊢
-        refine ⟨?_, by simp [Value.isValid, hvalid, hkeys]⟩
+        refine ⟨?_, by simp [Value.isValid, hvalid, hkeys], by simp [Value.reread, hre]⟩
         rw [Value.text_table, hin]
         simp
       · cases h
-        exact ⟨by rw [Value.text_null]; rfl, by decide⟩
+        exact ⟨by rw [Value.text_null]; rfl, by decide, rfl⟩
       · cases h
-        exact ⟨by rw [Value.text_boolean]; rfl, by decide⟩
+        exact ⟨by rw [Value.text_boolean]; rfl, by decide, rfl⟩
       · cases h
-        exact ⟨by rw [Value.text_boolean]; rfl, by decide⟩
+        exact ⟨by rw [Value.text_boolean]; rfl, by decide, rfl⟩
       · split at h
         · exact number_sound _ _ _ _ _ h
         · split at h <;> cases h
@@ -221,9 +239,9 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
       unfold items at h
       split at h
       · rename_i item rest2 s1 hitem
-        obtain ⟨ys, hne, hv, hin, hvalid⟩ := ihItems _ _ _ _ _ _ h
-        obtain ⟨hinput, hitemValid⟩ := ihValue _ _ _ _ _ hitem
-        refine ⟨item :: ys, by simp, ?_, ?_, ?_⟩
+        obtain ⟨ys, hne, hv, hin, hvalid, hre⟩ := ihItems _ _ _ _ _ _ h
+        obtain ⟨hinput, hitemValid, hitemRe⟩ := ihValue _ _ _ _ _ hitem
+        refine ⟨item :: ys, by simp, ?_, ?_, ?_, by simp [Value.rereadItems, hitemRe, hre]⟩
         · rw [hv, Array.toList_push, List.append_assoc]
           rfl
         · obtain ⟨w, ws, rfl⟩ := List.exists_cons_of_ne_nil hne
@@ -232,8 +250,9 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
         · simp [itemsValid, hitemValid, hvalid]
       · cases h
         rename_i _ item s1 hitem
-        obtain ⟨hinput, hitemValid⟩ := ihValue _ _ _ _ _ hitem
-        refine ⟨[item], by simp, by rw [array_push_eq], ?_, by simp [itemsValid, hitemValid]⟩
+        obtain ⟨hinput, hitemValid, hitemRe⟩ := ihValue _ _ _ _ _ hitem
+        refine ⟨[item], by simp, by rw [array_push_eq], ?_, by simp [itemsValid, hitemValid],
+          by simp [Value.rereadItems, hitemRe]⟩
         rw [Value.itemsText_singleton, hinput]
       · cases h
       · cases h
@@ -260,12 +279,12 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
             · rename_i rest1
               split at h
               · rename_i item more s2 hitem
-                obtain ⟨hinput, hitemValid⟩ := ihValue _ _ _ _ _ hitem
+                obtain ⟨hinput, hitemValid, hitemRe⟩ := ihValue _ _ _ _ _ hitem
                 have hk : keysIncrease ((acc.push (key, item)).toList.map (·.1)) = true := by
                   rw [Array.toList_push]
                   exact keysIncrease_push _ _ _ hkeys hlast
-                obtain ⟨ms, hne, hv, hin, hvalid, hkeysAll⟩ := ihMembers _ _ _ _ _ _ h hk
-                refine ⟨(key, item) :: ms, by simp, ?_, ?_, ?_, ?_⟩
+                obtain ⟨ms, hne, hv, hin, hvalid, hkeysAll, hre⟩ := ihMembers _ _ _ _ _ _ h hk
+                refine ⟨(key, item) :: ms, by simp, ?_, ?_, ?_, ?_, by simp [Value.rereadMembers, hitemRe, hre]⟩
                 · rw [hv, Array.toList_push, List.append_assoc]
                   rfl
                 · obtain ⟨m, ms', rfl⟩ := List.exists_cons_of_ne_nil hne
@@ -276,9 +295,9 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
                   exact hkeysAll
               · cases h
                 rename_i _ item s2 hitem
-                obtain ⟨hinput, hitemValid⟩ := ihValue _ _ _ _ _ hitem
+                obtain ⟨hinput, hitemValid, hitemRe⟩ := ihValue _ _ _ _ _ hitem
                 refine ⟨[(key, item)], by simp, by rw [array_push_eq], ?_, by simp [membersValid, hitemValid],
-                  keysIncrease_push _ _ _ hkeys hlast⟩
+                  keysIncrease_push _ _ _ hkeys hlast, by simp [Value.rereadMembers, hitemRe]⟩
                 rw [Value.membersText_singleton, hr, hinput]
                 simp [Value.memberText]
               · cases h
@@ -297,10 +316,23 @@ theorem parse_sound (s : String) (v : Value) (h : Value.parse s = .ok v) : v.ren
   · rename_i v' steps hread
     simp only [Except.ok.injEq] at h
     subst h
-    obtain ⟨hin, hvalid⟩ := (Parser.reader_sound _).1 _ _ _ _ _ hread
+    obtain ⟨hin, hvalid, -⟩ := (Parser.reader_sound _).1 _ _ _ _ _ hread
     refine ⟨?_, hvalid⟩
     rw [List.append_nil] at hin
     exact (String.toList_inj.mp hin).symm
+  · simp [Parser.failAt] at h
+  · simp [Parser.failAt] at h
+
+/-- What the strict reader reads, it reads back from its floats' texts. -/
+theorem parse_reread (s : String) (v : Value) (h : Value.parse s = .ok v) : v.reread = some v := by
+  unfold Value.parse Value.parseCosted at h
+  simp only at h
+  split at h
+  · rename_i v' steps hread
+    simp only [Except.ok.injEq] at h
+    subst h
+    obtain ⟨-, -, hre⟩ := (Parser.reader_sound _).1 _ _ _ _ _ hread
+    exact hre
   · simp [Parser.failAt] at h
   · simp [Parser.failAt] at h
 

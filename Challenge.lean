@@ -1,6 +1,7 @@
 module
 
 public import TomlJson.Value
+public import TomlJson.Rfc8259
 meta import SoftwareChallenge
 
 public section
@@ -8,14 +9,16 @@ public section
 /-!
 # Canonical, strictly typed JSON
 
-Reading a text and writing back what was read gives the text; reading yields only valid values,
-and every valid value is read back from its text; no text holds a character below U+0020, so no
-line feed or carriage return, and every text is one line of JSON Lines; typed decoding reads
-exactly what typed encoding writes, for any type whose instances read back what they write; and
-the steps the reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are
-linear in the text's length.
+A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it
+holds gives back: reading takes exactly those texts, and holds what any JSON reader reads in
+them. Every valid value's text is JSON that holds that value; no text holds a character below
+U+0020, so no line feed or carriage return, and every text is one line of JSON Lines; reading
+JSON in any spelling holds what RFC 8259 reads in it; typed decoding reads exactly what typed
+encoding writes, for any type whose instances read back what they write; and the steps the reader
+counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's
+length.
 Not claimed: anything about the date-time types, deriving, `tomljson%`, `Lean.Json`, or the
-reader's error messages; nor that the steps are the work done: the reader counts them itself, so
+readers' error messages; nor that the steps are the work done: the reader counts them itself, so
 the law bounds its count, not its running time.
 -/
 
@@ -29,17 +32,20 @@ def Value.parse : String → Except String Value := sorry
 
 def Value.parseCosted : String → Costed (Except String Value) := sorry
 
+def Value.readJson : String → Except String Value := sorry
+
 def encode {α : Type u} [ToValue α] : α → String := sorry
 
 def decode {α : Type u} [ToValue α] [FromValue α] : String → Except String α := sorry
 
-theorem parse_render_text (s : String) (v : Value) (h : Value.parse s = .ok v) : v.render = s := by
+theorem parse_fixed (s : String) (v : Value) :
+    Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
   sorry
 
-theorem parse_valid (s : String) (v : Value) (h : Value.parse s = .ok v) : v.Valid := by
+theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v := by
   sorry
 
-theorem render_parse (v : Value) (h : v.Valid) : Value.parse v.render = .ok v := by
+theorem readJson_spec (s : String) : (Value.readJson s).toOption = Rfc8259.read? s := by
   sorry
 
 theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat := by
@@ -60,20 +66,19 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
     decode (encode a) = .ok a := by
   sorry
 
-@[kills parse_render_text] theorem parse_render_text_rejects_constant :
-    ¬ ∀ (s : String) (v : Value), (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v →
-      (fun (_ : Value) => "null") v = s := by
-  sorry
-
-@[kills parse_valid] theorem parse_valid_rejects_infinity :
+@[kills parse_fixed] theorem parse_fixed_rejects_constant :
     ¬ ∀ (s : String) (v : Value),
-      (fun (_ : String) => (Except.ok (Value.float (Float.ofBits 0x7FF0000000000000)) : Except String Value)) s =
-        .ok v → v.Valid := by
+      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
+        Rfc8259.read? s = some v ∧ (fun (_ : Value) => "null") v = s := by
   sorry
 
-@[kills render_parse] theorem render_parse_rejects_constant :
-    ¬ ∀ (v : Value), v.Valid →
-      (fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "null") v) = .ok v := by
+@[kills read_render] theorem read_render_rejects_constant :
+    ¬ ∀ (v : Value), v.Valid → Rfc8259.read? ((fun (_ : Value) => "x") v) = some v := by
+  sorry
+
+@[kills readJson_spec] theorem readJson_spec_rejects_constant :
+    ¬ ∀ (s : String),
+      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) s).toOption = Rfc8259.read? s := by
   sorry
 
 @[kills render_no_control] theorem render_no_control_rejects_newline :
@@ -102,13 +107,6 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
       (∀ a : α, (toValue a).Valid) → ∀ (a : α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "wrong" : Except String β))
           ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
-  sorry
-
-@[witness parse_render_text] theorem parse_render_text_applies :
-    ∃ (s : String) (v : Value), Value.parse s = .ok v := by
-  sorry
-
-@[witness parse_valid] theorem parse_valid_applies : ∃ (s : String) (v : Value), Value.parse s = .ok v := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :

@@ -235,12 +235,18 @@ def valueLaws (seed count depth : Nat) : IO Unit := do
     match Value.parse text with
     | .ok w => check (w == v) s!"parse ∘ render changes {text} into {w.render}"
     | .error e => throw (IO.userError s!"parse rejects the canonical {text}: {e}")
-    -- every other spelling of the same value is rejected
+    match Value.readJson text with
+    | .ok w => check (w == v) s!"readJson changes {text} into {w.render}"
+    | .error e => throw (IO.userError s!"readJson rejects the canonical {text}: {e}")
+    -- every other spelling of the same value is rejected, and read as JSON as the value
     for j in [0:3] do
       let other := (loose v).run' (seed * 7 + i * 3 + j)
       match Value.parse other with
       | .ok w => check (other == text && w == v) s!"parse accepts the non-canonical {other}"
       | .error _ => check (other != text) s!"parse rejects the canonical {text}"
+      match Value.readJson other with
+      | .ok w => check (w == v) s!"readJson reads {other} as {w.render}, not {text}"
+      | .error e => throw (IO.userError s!"readJson rejects the JSON {other}: {e}")
     -- an invalid value's text is no value's text
     let bad := (genInvalid (depth - 1)).run' (seed + 5 * i)
     check (!bad.isValid && !(Value.parse bad.render).isOk) s!"an invalid value's text is read: {bad.render}"
