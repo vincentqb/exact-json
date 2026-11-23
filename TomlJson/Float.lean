@@ -1,5 +1,7 @@
 module
 
+public import TomlJson.Value
+
 /-! # Exact conversions between `Float` and decimal text
 
 A finite `Float` (IEEE 754 binary64) is printed as the *shortest* decimal that reads back as the
@@ -11,7 +13,8 @@ Lean's own `Float.toString` prints six fixed decimals (`1e-7` prints as `0.00000
 this module exists.
 
 Reading decimal text uses `Float.ofScientific`, which rounds correctly (to nearest, ties to even),
-after bounding the decimal exponent so that absurd exponents (`1e999999999`) cost nothing.
+after bounding the decimal exponent so that an absurd exponent (`1e999999999`) costs nothing; the
+arithmetic on a number's digits is still quadratic in how many there are.
 -/
 
 @[expose] public section
@@ -170,10 +173,11 @@ def ofDecimal? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
       -- `10^(n+q-1) ≤ value < 10^(n+q)`: above `10^309` overflows, below `10^-324` is zero.
       if n + q > 309 then none
       else if n + q < -324 then some 0.0
-      else
-        let f := Float.ofScientific m (q < 0) q.natAbs
-        if f.isInf then none else some f
-  magnitude.map fun f => if negative then -f else f
+      else some (Float.ofScientific m (q < 0) q.natAbs)
+  match magnitude.map fun f => if negative then -f else f with
+  -- what rounds past the largest float is an infinity
+  | some x => if finiteFloat x then some x else none
+  | none => none
 
 end FloatText
 

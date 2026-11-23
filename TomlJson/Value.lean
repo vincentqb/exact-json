@@ -7,7 +7,8 @@ public section
 
 `Value` is the untyped form of a canonical text: JSON whose numbers are integers or binary64
 floats. `Value.Valid` says which values have a canonical text. `ToValue` and `FromValue` say how
-a Lean type is written as a value and read back.
+a Lean type is written as a value and read back. `Costed` is a result with the steps taken to
+compute it, as the computation counts them.
 -/
 
 namespace TomlJson
@@ -54,6 +55,10 @@ mutual
 end
 
 abbrev Value.Valid (v : Value) : Prop := v.isValid = true
+
+structure Costed (α : Type u) where
+  value : α
+  steps : Nat
 
 class ToValue (α : Type u) where
   toValue : α → Value

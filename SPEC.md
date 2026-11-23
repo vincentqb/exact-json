@@ -160,7 +160,17 @@ in any form but its canonical one.
 
 The reader has no limits of its own: it is total (structural recursion only), and reads numbers
 of any length and nesting of any depth. A reader process still has a finite stack, so nesting tens
-of thousands deep can exhaust it; an integer of n digits takes time quadratic in n.
+of thousands deep can exhaust it.
+
+The reader is sound by construction, so nothing it reads is checked again: a string is read escape
+by escape, each one the escape the writer would write; a number is read by JSON's grammar and then
+compared with its own canonical text, past which reading goes on; a table's keys are compared as
+they are read. The steps it counts are linear in the text's length (`parse_linear`, at most ten a
+character and ten more): a step for each byte decoded, each character examined (in the text, or
+in a text compared with it) and, on an error, each character counted to say where it is. The
+arithmetic on a number's digits and the wording of an error's message are not counted: a number
+of n digits (an integer, or a float's significand) takes time quadratic in n, and is rejected
+only after that when it is not canonical, while a long exponent costs no arithmetic.
 
 ## 6. Why not `Lean.Json`
 
@@ -174,9 +184,12 @@ through `Float.toString`, six fixed decimals, so `toJson 1e-7` is `0` and `toJso
 
 The laws are stated as theorems in [`Challenge.lean`](Challenge.lean), the statement of a
 [Lean Software Challenge](https://github.com/vincentqb/lean-software-challenge): each headline
-states one law about the functions it names (`Value.render`, `Value.parse`, `encode`, `decode`),
+states one law about the functions it names (`Value.render`, `Value.parse`,
+`Value.parseCosted`, `encode`, `decode`),
 each has a kill (a proof that a wrong implementation fails it) and, when it assumes something of
-those functions, a witness that the assumption can hold. `TomlJson/Solution.lean` proves them
+those functions, a witness that the assumption can hold. `Value.parseCosted` is `Value.parse`
+with the steps it counts as it reads. The reader counts them itself, so `parse_linear` bounds that
+count and not a running time: a reader that counted nothing would satisfy it as well. `TomlJson/Solution.lean` proves them
 about the code that runs, which is plain total Lean (no `partial`, `@[extern]` or
 `@[implemented_by]`), and `lake comparator` replays the proofs through the kernel.
 
@@ -185,6 +198,8 @@ about the code that runs, which is plain total Lean (no `partial`, `@[extern]` o
 | `parse_render_text` | `parse s = .ok v → v.render = s` | proved |
 | `parse_valid` | `parse s = .ok v → v.Valid` | proved |
 | `render_parse` | `v.Valid → parse v.render = .ok v` | not yet proved |
+| `parse_costed` | `(parseCosted s).value = parse s` | proved |
+| `parse_linear` | `∃ c, ∀ s, (parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 10` |
 | `render_no_control` | every character of `v.render` is at U+0020 or above | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
 | `decode_encode` | `decode (encode a) = .ok a`, for instances that read back what they write | not yet proved |

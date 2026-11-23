@@ -9,11 +9,14 @@ public section
 # Canonical, strictly typed JSON
 
 Reading a text and writing back what was read gives the text; reading yields only valid values,
-and every valid value is read back from its text; no text holds a control character, so every
-text is one line; and typed decoding reads exactly what typed encoding writes, for any type whose
-instances read back what they write.
+and every valid value is read back from its text; no text holds a character below U+0020, so no
+line feed or carriage return, and every text is one line of JSON Lines; typed decoding reads
+exactly what typed encoding writes, for any type whose instances read back what they write; and
+the steps the reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are
+linear in the text's length.
 Not claimed: anything about the date-time types, deriving, `tomljson%`, `Lean.Json`, or the
-reader's error messages.
+reader's error messages; nor that the steps are the work done: the reader counts them itself, so
+the law bounds its count, not its running time.
 -/
 
 namespace TomlJson
@@ -23,6 +26,8 @@ universe u
 def Value.render : Value → String := sorry
 
 def Value.parse : String → Except String Value := sorry
+
+def Value.parseCosted : String → Costed (Except String Value) := sorry
 
 def encode {α : Type u} [ToValue α] : α → String := sorry
 
@@ -38,6 +43,12 @@ theorem render_parse (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
   sorry
 
 theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat := by
+  sorry
+
+theorem parse_costed (s : String) : (Value.parseCosted s).value = Value.parse s := by
+  sorry
+
+theorem parse_linear : ∃ c : Nat, ∀ s : String, (Value.parseCosted s).steps ≤ c * (s.length + 1) := by
   sorry
 
 theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α)
@@ -67,6 +78,17 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
 
 @[kills render_no_control] theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
+  sorry
+
+@[kills parse_costed] theorem parse_costed_rejects_mismatch :
+    ¬ ∀ (s : String), ((fun (_ : String) => (⟨.error "", 0⟩ : Costed (Except String Value))) s).value =
+      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s := by
+  sorry
+
+@[kills parse_linear] theorem parse_linear_rejects_quadratic :
+    ¬ ∃ c : Nat, ∀ s : String,
+      ((fun (s : String) => (⟨.error "", s.length * s.length⟩ : Costed (Except String Value))) s).steps ≤
+        c * (s.length + 1) := by
   sorry
 
 @[kills decode_text] theorem decode_text_rejects_constant :

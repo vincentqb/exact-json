@@ -48,6 +48,13 @@ def errorOf {α : Type} (e : Except String α) : String :=
 -- an exponent's leading zeros, however many, do not change the float it denotes
 #guard check ("1e" ++ String.ofList (List.replicate 5000 '0') ++ "1") ==
   "at character 0: not the canonical text of this float: write 10.0"
+-- a long exponent costs no arithmetic: past the text's length, the float is infinite or zero
+#guard check ("1e" ++ String.ofList (List.replicate 100000 '9')) ==
+  "at character 0: a float beyond the range of binary64"
+#guard check ("1e-" ++ String.ofList (List.replicate 100000 '9')) ==
+  "at character 0: not the canonical text of this float: write 0.0"
+#guard check ("0.0e" ++ String.ofList (List.replicate 100000 '9')) ==
+  "at character 0: not the canonical text of this float: write 0.0"
 -- no whitespace anywhere
 #guard check " 1" == "at character 0: canonical text has no whitespace"
 #guard check "[1, 2]" == "at character 3: canonical text has no whitespace"
@@ -91,6 +98,15 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard !(Value.table #[("b", 1), ("a", 2)]).isValid
 #guard (Value.float (0.0 / 0.0)).render == "NaN"
 #guard !(Value.parse (Value.array #[.float (1.0 / 0.0)]).render).isOk
+
+/-! ## Nesting -/
+
+-- the reader's fuel outlasts any text: a text cut short is an error at its end
+#guard check "[[[[" == "at character 4: expected a value, found the end of the text"
+#guard check "{\"a\":[{\"b\":" == "at character 11: expected a value, found the end of the text"
+#guard check (String.ofList (List.replicate 2000 '[' ++ List.replicate 2000 ']')) == "ok"
+#guard check (String.ofList (List.replicate 2000 '[')) ==
+  "at character 2000: expected a value, found the end of the text"
 
 /-! ## JSON Lines -/
 

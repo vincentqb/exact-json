@@ -2,6 +2,8 @@ module
 
 public import TomlJson.Codec
 public import TomlJson.Printable
+public import TomlJson.Sound
+public import TomlJson.Cost
 
 /-! # Proofs of the challenge's headlines, kills and witnesses -/
 
@@ -11,42 +13,31 @@ namespace TomlJson
 
 universe u
 
-theorem parse_render_text (s : String) (v : Value) (h : Value.parse s = .ok v) : v.render = s := by
-  unfold Value.parse at h
-  split at h
-  · cases h
-  · split at h
-    · rename_i checked
-      cases h
-      simp only [Bool.and_eq_true, beq_iff_eq] at checked
-      exact checked.2
-    · cases h
+theorem parse_render_text (s : String) (v : Value) (h : Value.parse s = .ok v) : v.render = s :=
+  (parse_sound s v h).1
 
-theorem parse_valid (s : String) (v : Value) (h : Value.parse s = .ok v) : v.Valid := by
-  unfold Value.parse at h
-  split at h
-  · cases h
-  · split at h
-    · rename_i checked
-      cases h
-      simp only [Bool.and_eq_true] at checked
-      exact checked.1
-    · cases h
+theorem parse_valid (s : String) (v : Value) (h : Value.parse s = .ok v) : v.Valid :=
+  (parse_sound s v h).2
+
+theorem parse_costed (s : String) : (Value.parseCosted s).value = Value.parse s := rfl
+
+theorem parse_linear : ∃ c : Nat, ∀ s : String, (Value.parseCosted s).steps ≤ c * (s.length + 1) :=
+  ⟨10, parseCosted_steps⟩
 
 theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α)
     (h : decode s = .ok a) : encode a = s := by
   unfold decode at h
   split at h
   · cases h
-  · rename_i v _
-    cases read : (fromValue? v : Except String α) with
-    | error e => simp [read, bind, Except.bind] at h
-    | ok b =>
-      simp only [read, bind, Except.bind] at h
-      split at h
+  · rename_i v hv
+    split at h
+    · cases h
+    · split at h
       · rename_i same
         cases h
-        exact beq_iff_eq.mp same
+        unfold encode
+        rw [Value.eq_of_beq _ _ same]
+        exact parse_render_text s v hv
       · cases h
 
 theorem parse_render_text_rejects_constant :
@@ -75,6 +66,22 @@ theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
   intro h
   exact absurd (h .null '\n' (by decide)) (by decide)
+
+theorem parse_costed_rejects_mismatch :
+    ¬ ∀ (s : String), ((fun (_ : String) => (⟨.error "", 0⟩ : Costed (Except String Value))) s).value =
+      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s := by
+  intro h
+  cases h ""
+
+theorem parse_linear_rejects_quadratic :
+    ¬ ∃ c : Nat, ∀ s : String,
+      ((fun (s : String) => (⟨.error "", s.length * s.length⟩ : Costed (Except String Value))) s).steps ≤
+        c * (s.length + 1) := by
+  intro ⟨c, h⟩
+  have h' := h (String.ofList (List.replicate (c + 1) 'a'))
+  simp only [String.length_ofList, List.length_replicate, Nat.add_mul, Nat.mul_add, Nat.mul_one,
+    Nat.one_mul] at h'
+  omega
 
 theorem decode_text_rejects_constant :
     ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α),

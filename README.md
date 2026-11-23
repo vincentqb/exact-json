@@ -55,7 +55,9 @@ law. Each headline states one law, independent of the others:
 | `parse_render_text` | `Value.parse s = .ok v → v.render = s` | proved |
 | `parse_valid` | `Value.parse s = .ok v → v.Valid` | proved |
 | `render_parse` | `v.Valid → Value.parse v.render = .ok v` | not yet proved |
-| `render_no_control` | every character of `v.render` is at U+0020 or above (so one line) | proved |
+| `parse_costed` | `(Value.parseCosted s).value = Value.parse s` | proved |
+| `parse_linear` | `∃ c, ∀ s, (Value.parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 10` |
+| `render_no_control` | every character of `v.render` is at U+0020 or above (so no line feed or carriage return) | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
 | `decode_encode` | `decode (encode a) = .ok a`, when `fromValue? (toValue a) = .ok a` and `toValue a` is valid | not yet proved |
 
@@ -63,12 +65,20 @@ Each has a kill, a proof that some wrong implementation fails it, and each that 
 the functions it names has a witness that the assumption can hold. The two not yet proved are the
 completeness directions; the tests and the Python cross-check stand for them meanwhile.
 
+Because the soundness laws are proved, the code does no defensive work: `Value.parse` does not
+check what it read (by rendering it again, or validating it), and `decode` compares the value it
+read with the one its result is written as, instead of encoding it again. `parse_linear` bounds
+the steps as `Value.parseCosted` counts them, which the reader charges itself: a step for each
+byte decoded, each character it examines (in the text, or in a text compared with it) and each
+character counted to place an error. So it bounds the reader's own count, not its running time;
+the arithmetic on numbers and the wording of error messages are not counted.
+
 | file | who writes it | holds |
 |------|---------------|-------|
-| `Challenge.lean` | owner | the holes (`Value.render`, `Value.parse`, `encode`, `decode`), the headlines, kills and witnesses |
-| `TomlJson/Value.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue` |
+| `Challenge.lean` | owner | the holes (`Value.render`, `Value.parse`, `Value.parseCosted`, `encode`, `decode`), the headlines, kills and witnesses |
+| `TomlJson/Value.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue`, `Costed` |
 | `TomlJson/{Float,Render,Parse,Codec}.lean` | agent | the code the holes compute through: plain, total Lean |
-| `TomlJson/Printable.lean`, `TomlJson/Solution.lean` | agent | the proofs |
+| `TomlJson/{Text,Printable,Sound,Cost,Solution}.lean` | agent | the proofs: the renderer's text, no character below U+0020, the reader's soundness, its steps |
 | `TomlJson/Main.lean` | agent | `tomljson check`, whose `main` reaches every hole |
 | `TomlJson/{DateTime,Derive,Literal,LeanJson}.lean`, `TomlJson/Tests/` | agent | what the challenge does not cover |
 

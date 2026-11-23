@@ -30,12 +30,13 @@ namespace Value
 
 mutual
 
-/-- Structural equality, with floats compared bit for bit and table members in order. -/
+/-- Structural equality: floats as `Float`'s equality (bit for bit, all NaNs equal), table
+members in order. -/
 def beq : Value → Value → Bool
   | .null, .null => true
   | .string a, .string b => a == b
   | .integer a, .integer b => a == b
-  | .float a, .float b => a.toBits == b.toBits
+  | .float a, .float b => decide (a = b)
   | .boolean a, .boolean b => a == b
   | .array ⟨as⟩, .array ⟨bs⟩ => beqItems as bs
   | .table ⟨as⟩, .table ⟨bs⟩ => beqMembers as bs
@@ -259,16 +260,18 @@ instance {α : Type u} [FromValue α] : FromField (Option α) where
 def encode {α : Type u} [ToValue α] (a : α) : String := (toValue a).render
 
 /-- The value of type `α` whose canonical text is `s`, or an error. The text must be canonical
-(`Value.parse`), must be what `FromValue` reads as an `α`, and must be what that `α` is written
-as; this last check makes the law hold for any instance, hand-written ones included. -/
+(`Value.parse`), must be what `FromValue` reads as an `α`, and that `α` must be written as the
+value read; this last check, one comparison of values, makes the law hold for any instance,
+hand-written ones included. -/
 def decode {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String α :=
   match Value.parse s with
   | .error e => .error e
-  | .ok v => do
-    let a ← fromValue? v
-    let again := encode a
-    if again == s then return a
-    throw s!"not the text of a value of this type: it would be written {again}"
+  | .ok v =>
+    match fromValue? v with
+    | .error e => .error e
+    | .ok a =>
+      if toValue a == v then .ok a
+      else .error s!"not the text of a value of this type: it would be written {encode a}"
 
 /-- The canonical JSON Lines text of some values. -/
 def encodeLines {α : Type u} [ToValue α] (as : Array α) : String :=
