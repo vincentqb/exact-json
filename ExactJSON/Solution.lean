@@ -5,6 +5,7 @@ public import ExactJSON.Printable
 public import ExactJSON.Sound
 public import ExactJSON.Cost
 public import ExactJSON.Fixed
+public import ExactJSON.OfScientific
 
 /-! # Proofs of the challenge's headlines, kills and witnesses -/
 
@@ -47,6 +48,14 @@ theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : 
 
 theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat :=
   printable_render v
+
+theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
+  read_render_of_rounds ofScientificRounds v h
+
+theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
+    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
+    decode (encode a) = .ok a :=
+  decode_encode_of_rounds ofScientificRounds lawful valid a
 
 theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by

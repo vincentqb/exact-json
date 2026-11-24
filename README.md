@@ -53,13 +53,13 @@ law. Each headline states one law, independent of the others:
 | headline | law | status |
 |----------|-----|--------|
 | `parse_fixed` | `Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s` | proved |
-| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | not yet proved |
+| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | proved |
 | `readJson_spec` | `(Value.readJson s).toOption = Rfc8259.read? s` | proved |
 | `parse_costed` | `(Value.parseCosted s).value = Value.parse s` | proved |
 | `parse_linear` | `∃ c, ∀ s, (Value.parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 22` |
 | `render_no_control` | every character of `v.render` is at U+0020 or above (so no line feed or carriage return) | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
-| `decode_encode` | `decode (encode a) = .ok a`, when `fromValue? (toValue a) = .ok a` and `toValue a` is valid | not yet proved |
+| `decode_encode` | `decode (encode a) = .ok a`, when `fromValue? (toValue a) = .ok a` and `toValue a` is valid | proved |
 
 Each has a kill, a proof that some wrong implementation fails it, and each that assumes something of
 the functions it names has a witness that the assumption can hold.
@@ -69,13 +69,13 @@ RFC, and what a JSON text holds (an integer when a number has no fraction and no
 nearest float otherwise; no repeated key; no lone surrogate). `parse_fixed` says the canonical
 texts are exactly the JSON texts that reading and writing back leaves unchanged, so the format is
 a consistent subset of JSON, and `canon s := render <$> readJson s` brings any JSON text to its
-canonical form. The two headlines not yet proved both follow from one property of Lean's own
-floats: that `Float.ofScientific` rounds to nearest, ties to even (`OfScientificRounds` in
-`ExactJSON/ReadBack.lean`). The rest is proved: the printer's shortest digits lie in the float's
-rounding interval (`ExactJSON/Shortest.lean`), RFC 8259 reads a canonical text as those digits,
-so every finite float reads back from its text (`floatsReadBack`), and both headlines follow
-(`read_render_of_rounds`, `decode_encode_of_rounds`). Lean's core states no such lemma about
-`Float.ofScientific`; the tests and the Python cross-checks stand for it meanwhile.
+canonical form. `read_render` and `decode_encode` rest on every finite float reading back from
+its text: the printer's shortest digits lie in the float's rounding interval
+(`ExactJSON/Shortest.lean`), RFC 8259 reads a canonical text as those digits
+(`ExactJSON/ReadBack.lean`), and Lean's `Float.ofScientific` reads every decimal in a float's
+rounding interval as that float, rounding to nearest with ties to even. Lean's core states no
+lemma about its floats; `ExactJSON/OfScientific.lean` proves this one from Lean's own model of
+them (`Float.Model`).
 
 Because the soundness laws are proved, the code does no defensive work: `Value.parse` does not
 check what it read (by rendering it again, or validating it), and `decode` compares the value it

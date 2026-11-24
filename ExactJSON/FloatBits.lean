@@ -18,7 +18,8 @@ namespace FloatText
 
 open Float.Model Float.Model.UnpackedFloat
 
-private theorem packComponents_toNat (s : Sign) (e : BitVec 11) (m : BitVec 52) :
+/-- The bits of a binary64 pattern from its sign, exponent and fraction. -/
+theorem packComponents_toNat (s : Sign) (e : BitVec 11) (m : BitVec 52) :
     (packComponents Format.binary64 s e m).toNat = s.toBitVec.toNat * 2 ^ 63 + e.toNat * 2 ^ 52 + m.toNat := by
   unfold packComponents
   simp only [BitVec.toNat_append]

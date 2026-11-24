@@ -228,25 +228,27 @@ about the code that runs, which is plain total Lean (no `partial`, `@[extern]` o
 | headline | law | status |
 |----------|-----|--------|
 | `parse_fixed` | `parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s` | proved |
-| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | not yet proved |
+| `read_render` | `v.Valid → Rfc8259.read? v.render = some v` | proved |
 | `readJson_spec` | `(readJson s).toOption = Rfc8259.read? s` | proved |
 | `parse_costed` | `(parseCosted s).value = parse s` | proved |
 | `parse_linear` | `∃ c, ∀ s, (parseCosted s).steps ≤ c * (s.length + 1)` | proved, with `c = 22` |
 | `render_no_control` | every character of `v.render` is at U+0020 or above | proved |
 | `decode_text` | `decode s = .ok a → encode a = s`, for any instances | proved |
-| `decode_encode` | `decode (encode a) = .ok a`, for instances that read back what they write | not yet proved |
+| `decode_encode` | `decode (encode a) = .ok a`, for instances that read back what they write | proved |
 
 `parse_fixed` gives the rest of the bijection: whatever `parse` reads is valid and its own
-canonical text, and every valid value whose floats read back is read back from its text. The two
-not yet proved both come down to one property of Lean's floats, `OfScientificRounds` in
-`ExactJSON/ReadBack.lean`: `Float.ofScientific` reads every decimal in the rounding interval of a
-positive finite float as that float (it rounds to nearest, ties to even). From it,
-`floatsReadBack` proves that RFC 8259 reads every finite float's canonical text back as that
-float (`FloatsReadBack`): the shortest digits lie in the float's rounding interval
-(`ExactJSON/Shortest.lean`), and the reader reads the text as those digits.
-`read_render_of_rounds` and `decode_encode_of_rounds` derive the two headlines. Meanwhile the
-property is tested: by every power of two and of ten, their neighbours
-and random doubles against CPython's `repr` (`python/crosscheck.py --floats`), by the randomized
-laws over values, their other spellings (rejected by `parse`, read by `readJson` as the value),
-typed records and schema evolution (`ExactJSON/Tests/`), and by byte-for-byte agreement with
-Python's writer and with Python's `json` on random data (`python/crosscheck.py`).
+canonical text, and every valid value whose floats read back is read back from its text.
+`read_render` and `decode_encode` need one more fact, that RFC 8259 reads every finite float's
+canonical text back as that float (`FloatsReadBack`), and three proofs give it. The shortest
+digits lie in the float's rounding interval (`ExactJSON/Shortest.lean`); the reader reads the
+text as those digits (`ExactJSON/ReadBack.lean`); and `Float.ofScientific` reads every decimal in
+the rounding interval of a positive finite float as that float, rounding to nearest with ties to
+even (`OfScientificRounds`, which `ExactJSON/OfScientific.lean` proves from Lean's model of its
+floats, `Float.Model`). The proofs are about that model: compiled code computes
+`Float.ofScientific`'s fast path with the machine's division and multiplication, which Lean
+trusts to agree with it. The tests check the running code too: by every power of two and of ten,
+their neighbours and random doubles against CPython's `repr` (`python/crosscheck.py --floats`),
+by the randomized laws over values, their other spellings (rejected by `parse`, read by
+`readJson` as the value), typed records and schema evolution (`ExactJSON/Tests/`), and by
+byte-for-byte agreement with Python's writer and with Python's `json` on random data
+(`python/crosscheck.py`).

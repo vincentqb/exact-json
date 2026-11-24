@@ -12,7 +12,7 @@ With `shortest_spec`, this reduces `FloatsReadBack` to one property of Lean's `F
 `OfScientificRounds`: it reads every decimal in the rounding interval of a positive finite float as
 that float (it rounds to nearest, ties to even). `floatsReadBack` derives `FloatsReadBack` from it,
 and with it the two headlines `read_render` and `decode_encode` (`read_render_of_rounds`,
-`decode_encode_of_rounds`).
+`decode_encode_of_rounds`). `ExactJSON/OfScientific.lean` proves `OfScientificRounds`.
 -/
 
 public section
