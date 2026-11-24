@@ -4,7 +4,7 @@ public import ExactJSON.Codec
 public meta import Lean.Elab.Deriving.Basic
 public meta import Lean.Elab.Deriving.Util
 
-public section
+@[expose] public section
 
 namespace ExactJSON.Derive
 
@@ -50,6 +50,32 @@ def fieldWith {α : Type u} (read : Value → Except String α) (v : Value) (key
   match v.get? key with
   | some item => withContext key (read item)
   | none => .error s!"missing key {pushString "" key}"
+
+mutual
+
+def depth : Value → Nat
+  | .array ⟨items⟩ => depthItems items + 1
+  | .table ⟨members⟩ => depthMembers members + 1
+  | _ => 0
+
+def depthItems : List Value → Nat
+  | [] => 0
+  | v :: rest => max (depth v) (depthItems rest)
+
+def depthMembers : List (String × Value) → Nat
+  | [] => 0
+  | (_, v) :: rest => max (depth v) (depthMembers rest)
+
+end
+
+def fuel {α : Type u} (step : (Value → Except String α) → Value → Except String α) :
+    Nat → Value → Except String α
+  | 0, _ => .error "decoding recursed deeper than the value"
+  | n + 1, v => step (fuel step n) v
+
+def fix {α : Type u} (step : (Value → Except String α) → Value → Except String α) (v : Value) :
+    Except String α :=
+  fuel step (depth v + 1) v
 
 end ExactJSON.Derive
 
@@ -153,9 +179,8 @@ def mkFromValueStruct (indName : Name) (v : Ident) : TermElabM Term := do
     $[let $fieldIds:ident ← $getters]*
     return { $[$fieldIds:ident := $(id fieldIds)],* })
 
-def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : TermElabM Term := do
+def mkFromValueInduct (recur : Ident) (indName : Name) (v : Ident) : TermElabM Term := do
   let indVal ← getConstInfoInduct indName
-  let auxFun := mkIdent ctx.auxFunNames[0]!
   let mut names := #[]
   let mut rhss := #[]
   for ctorName in indVal.ctors do
@@ -173,7 +198,7 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
         binders := binders.push (mkIdent (← mkFreshUserName `a), localDecl.type)
       let ids := binders.map (·.1)
       let read (type : Expr) : TermElabM Term :=
-        if type.isAppOf indVal.name then `($auxFun:ident) else `(ExactJSON.fromValue?)
+        if type.isAppOf indVal.name then `($recur:ident) else `(ExactJSON.fromValue?)
       if binders.isEmpty then
         `(do ExactJSON.Derive.noPayload $name payload; return $(mkIdent ctorName):ident)
       else if userNames.size == binders.size then
@@ -182,7 +207,7 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
         for (_, t) in binders, key in keys do
           let key := Syntax.mkStrLit key
           if t.isAppOf indVal.name then
-            getters := getters.push (← `(doElem| ExactJSON.Derive.fieldWith $auxFun:ident p $key))
+            getters := getters.push (← `(doElem| ExactJSON.Derive.fieldWith $recur:ident p $key))
           else
             getters := getters.push (← `(doElem| ExactJSON.FromField.getField? p $key))
         let keyLits := keys.map Syntax.mkStrLit
@@ -274,13 +299,22 @@ def mkFromValueFuns (ctx : Deriving.Context) : TermElabM Command := do
     let v := mkIdent (← mkFreshUserName `value)
     let binders := header.binders.push (← `(bracketedBinderF|($v : ExactJSON.Value)))
     let auxFun := mkIdent ctx.auxFunNames[i]!
+    let recursive := ctx.usePartial || indVal.isRec
+    let fueled := recursive && ctx.typeInfos.size == 1 && indVal.numIndices == 0
+    let decode := mkIdent (← mkFreshUserName `decode)
+    let recur := if fueled then decode else mkIdent ctx.auxFunNames[0]!
     let body ← Term.elabBinders binders fun _ => do
       let type ← Term.elabTerm header.targetType none
       let indName := type.getAppFn.constName!
       if isStructure (← getEnv) indName then mkFromValueStruct indName v
-      else mkFromValueInduct ctx indName v
+      else mkFromValueInduct recur indName v
     let resultType ← mkInductiveApp indVal header.argNames
-    if ctx.usePartial || indVal.isRec then
+    if fueled then
+      let inst := mkIdent (← mkFreshUserName `localinst)
+      defs := defs.push (← `(def $auxFun:ident $binders:bracketedBinder* : Except String $resultType :=
+        ExactJSON.Derive.fix (fun $decode:ident $v:ident =>
+          let $inst:ident : ExactJSON.FromValue $resultType := ⟨$decode⟩; $body) $v))
+    else if recursive then
       let letDecls ← mkLocalInstanceLetDecls ctx ``FromValue header.argNames
       let body ← mkLet letDecls body
       defs := defs.push (← `(partial def $auxFun:ident $binders:bracketedBinder* : Except String $resultType := $body:term))
