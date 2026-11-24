@@ -50,6 +50,14 @@ private theorem unpack_isInf {b : BitVec 64}
     · split at h <;> simp [UnpackedFloat.isInf] at h
     · simp [UnpackedFloat.isInf] at h
 
+private theorem isNaN_or_isInf {b : BitVec 64}
+    (he : unpackExponent (spec := Format.binary64) b = -1#11) :
+    (UnpackedFloat.unpack Format.binary64 b).isNaN = true ∨
+      (UnpackedFloat.unpack Format.binary64 b).isInf = true := by
+  by_cases hm : unpackMantissa (spec := Format.binary64) b = 0#52
+  · exact .inr (by simp [UnpackedFloat.unpack, he, hm, UnpackedFloat.isInf])
+  · exact .inl (by simp [UnpackedFloat.unpack, he, hm, UnpackedFloat.isNaN])
+
 private theorem eq_inf_or_eq_neg_inf {x : Float} (h : x.isInf = true) :
     x = Float.inf ∨ x = -Float.inf := by
   obtain ⟨he, hm⟩ := unpack_isInf h
@@ -80,6 +88,19 @@ theorem eq_neg_inf_of_isInf {x : Float} (h : x.isInf = true) (hp : ¬ x > 0) : x
   · subst hx
     exact absurd (by decide +kernel) hp
   · exact hx
+
+theorem finiteFloat_of_not {x : Float} (hn : x.isNaN = false) (hi : x.isInf = false) :
+    finiteFloat x = true := by
+  unfold finiteFloat
+  rw [bne_iff_ne]
+  intro he
+  have he : unpackExponent (spec := Format.binary64) x.toModel.toBits.toBitVec = -1#11 := by
+    apply BitVec.eq_of_toNat_eq
+    rw [toNat_unpackExponent, show (-1#11 : BitVec 11).toNat = 2047 from rfl]
+    exact he
+  rcases isNaN_or_isInf he with h | h
+  · exact Bool.false_ne_true (hn.symm.trans h)
+  · exact Bool.false_ne_true (hi.symm.trans h)
 
 end FloatText
 
