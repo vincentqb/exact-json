@@ -4,20 +4,12 @@ public import ExactJSON.Sound
 public import ExactJSON.NumberText
 public import ExactJSON.SpecValid
 
-/-! # Canonical texts are the fixed points of reading JSON
-
-RFC 8259 reads a valid value's text as the value with its floats read back (`Value.reread`), and
-the strict reader reads that text as the value when its floats read back as themselves. Together
-with soundness, which says the strict reader only reads such texts, this gives `parse_fixed`.
--/
-
 public section
 
 namespace ExactJSON
 
 universe u
 
-/-- What may follow a value in canonical text: nothing, or `,`, `]` or `}`. -/
 def RestOk (rest : List Char) : Prop :=
   rest = [] ∨ ∃ c t, rest = c :: t ∧ (c = ',' ∨ c = ']' ∨ c = '}')
 
@@ -64,7 +56,6 @@ theorem hex4?_control (c : Char) (h : c.toNat < 0x20) :
   simp
   omega
 
-/-- RFC 8259 reads a string's escaped characters back. -/
 theorem spec_chars_escape : ∀ (t rest acc : List Char),
     Rfc8259.chars (escapeList t ++ '"' :: rest) acc = .ok (acc.reverse ++ t, rest)
   | [], rest, acc => by simp [escapeList_nil, Rfc8259.chars]
@@ -192,7 +183,6 @@ theorem strict_string_control (c : Char) (X : List Char) (acc : String) (s0 : Na
     rw [hpush, String.toList_ofList]
   simp only [hw, ite_true]
 
-/-- The strict reader reads a string's escaped characters back. -/
 theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat),
     ∃ s, Parser.string (escapeList t ++ '"' :: rest) acc s0 = .ok (acc ++ String.ofList t) rest s
   | [], rest, acc, s0 => ⟨s0 + 1, by simp [escapeList_nil, strict_string_quote]⟩
@@ -259,7 +249,6 @@ theorem render_integer_toList (n : Int) : (Value.render (.integer n)).toList = (
 theorem render_float_toList (x : Float) : (Value.render (.float x)).toList = (floatText x).toList := by
   simp [Value.render, Value.renderTo]
 
-/-- A float's text is a decimal's, or the token of a NaN or an infinity. -/
 theorem floatText_cases (x : Float) :
     (∃ d : Decimal, (floatText x).toList = d.toFloatText.toList) ∨ (floatText x).toList = "NaN".toList ∨
       (floatText x).toList = "Infinity".toList ∨ (floatText x).toList = "-Infinity".toList := by
@@ -320,7 +309,6 @@ theorem toFloatText_head (d : Decimal) :
     · exact ⟨'-', by simp, .inl rfl⟩
     · exact ⟨'-', by simp, .inl rfl⟩
 
-/-- RFC 8259 reads a number's text, the whole of it, as `numberValue` does. -/
 theorem spec_value_numberText (f : Nat) (text rest : List Char)
     (htext : ∀ c ∈ text, Rfc8259.isNumberChar c = true) (hne : text ≠ []) (hrest : RestOk rest) :
     Rfc8259.value (f + 1) (text ++ rest) =
@@ -376,7 +364,6 @@ theorem head_ok_of_number (c : Char) (h : c = '-' ∨ c.isDigit = true) :
       refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩ <;> (rintro rfl; simp at h)
     all_goals (rintro rfl; simp at h)
 
-/-- A canonical text starts with no whitespace and no closing character. -/
 theorem render_head (v : Value) : ∃ c t, (Value.render v).toList = c :: t ∧
     Rfc8259.isWs c = false ∧ c ≠ ']' ∧ c ≠ '}' ∧ c ≠ ',' := by
   cases v with
@@ -462,7 +449,6 @@ theorem spec_open_table (f : Nat) (X : List Char) (t : List Char) (hX : X = '"' 
   rw [spec_value_brace, skipWs_cons _ _ (by decide)]
   rfl
 
-/-- The table of members whose keys increase is those members. -/
 theorem spec_table_sorted (l : List (String × Value)) (h : keysIncrease (l.map (·.1)) = true) :
     Rfc8259.table l = .ok (.table ⟨l⟩) := by
   unfold Rfc8259.table
@@ -495,7 +481,6 @@ theorem keys_push_reread (acc : Array (String × Value)) (k : String) (v w : Val
 
 mutual
 
-/-- RFC 8259 reads a valid value's text as the value with its floats read back. -/
 theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestOk rest → v.Valid →
     (Value.render v).toList.length ≤ fuel →
     (Rfc8259.value fuel ((Value.render v).toList ++ rest)).toOption = v.reread.map (·, rest)
@@ -563,7 +548,6 @@ theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestO
     simp only [Value.reread, Option.map_map]
     rfl
 
-/-- RFC 8259 reads an array's items, from the first, with their floats read back. -/
 theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List Char) (acc : Array Value),
     items ≠ [] → RestOk rest → itemsValid items = true → (Value.itemsText items).length + 1 ≤ fuel →
     (Rfc8259.elements fuel (Value.itemsText items ++ ']' :: rest) acc).toOption =
@@ -645,7 +629,6 @@ theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List C
         rw [hcons, h]
         cases Value.rereadItems (w :: ws) <;> simp [Parser.array_push_eq]
 
-/-- RFC 8259 reads a table's members, from the first, with their floats read back. -/
 theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (rest : List Char)
     (acc : Array (String × Value)), members ≠ [] → RestOk rest → membersValid members = true →
     keysIncrease ((acc.toList ++ members).map (·.1)) = true → (Value.membersText members).length + 1 ≤ fuel →
@@ -749,8 +732,6 @@ theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (
         cases Value.rereadMembers (m :: ms) <;> simp [Parser.array_push_eq]
 
 end
-
-/-! ## The strict reader reads a canonical text whose floats read back -/
 
 theorem strict_value_number (f s0 : Nat) (c : Char) (t : List Char) (hc : c = '-' ∨ c.isDigit = true) :
     Parser.value (f + 1) (c :: t) s0 = Parser.number (c :: t) s0 := by
@@ -879,7 +860,6 @@ theorem rereadFloat_numberValue {x : Float} (h : Value.rereadFloat x = some (.fl
 
 mutual
 
-/-- The strict reader reads a valid value's text when its floats read back as themselves. -/
 theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), RestOk rest → v.Valid →
     v.reread = some v → (Value.render v).toList.length ≤ fuel →
     ∃ s, Parser.value fuel ((Value.render v).toList ++ rest) s0 = .ok v rest s
@@ -956,7 +936,6 @@ theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), 
       (by simpa using hboth.1) hre' (by omega)
     exact ⟨s, by rw [hs]; rfl⟩
 
-/-- The strict reader reads an array's items, from the first. -/
 theorem strict_items : (items : List Value) → ∀ (fuel s0 : Nat) (rest : List Char) (acc : Array Value),
     items ≠ [] → RestOk rest → itemsValid items = true → Value.rereadItems items = some items →
     (Value.itemsText items).length + 1 ≤ fuel →
@@ -997,7 +976,6 @@ theorem strict_items : (items : List Value) → ∀ (fuel s0 : Nat) (rest : List
     rw [hs2]
     simp [Parser.array_push_eq]
 
-/-- The strict reader reads a table's members, from the first, keys increasing after `acc`'s. -/
 theorem strict_members : (members : List (String × Value)) → ∀ (fuel s0 : Nat) (rest : List Char)
     (acc : Array (String × Value)), members ≠ [] → RestOk rest → membersValid members = true →
     keysIncrease ((acc.toList ++ members).map (·.1)) = true → Value.rereadMembers members = some members →
@@ -1057,8 +1035,6 @@ theorem strict_members : (members : List (String × Value)) → ∀ (fuel s0 : N
 
 end
 
-/-! ## The fixed points -/
-
 theorem length_ofList_le_utf8ByteSize (l : List Char) : l.length ≤ (String.ofList l).utf8ByteSize := by
   induction l with
   | nil => simp
@@ -1072,7 +1048,6 @@ theorem length_le_utf8ByteSize (s : String) : s.toList.length ≤ s.utf8ByteSize
   have := length_ofList_le_utf8ByteSize s.toList
   rwa [String.ofList_toList] at this
 
-/-- RFC 8259 reads a valid value's text as the value, when its floats read back. -/
 theorem read_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) :
     Rfc8259.read? v.render = some v := by
   have hlen := length_le_utf8ByteSize v.render
@@ -1087,7 +1062,6 @@ theorem read_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) 
   rw [hs, h']
   rfl
 
-/-- What RFC 8259 reads in a valid value's text is that value only if its floats read back. -/
 theorem reread_of_read (v : Value) (hvalid : v.Valid) (h : Rfc8259.read? v.render = some v) :
     v.reread = some v := by
   have hlen := length_le_utf8ByteSize v.render
@@ -1117,7 +1091,6 @@ theorem reread_of_read (v : Value) (hvalid : v.Valid) (h : Rfc8259.read? v.rende
         rw [← hspec.1, h]
     · cases h
 
-/-- The strict reader reads a valid value's text, when its floats read back. -/
 theorem parse_render_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) :
     Value.parse v.render = .ok v := by
   have hlen := length_le_utf8ByteSize v.render
@@ -1128,7 +1101,6 @@ theorem parse_render_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = 
   simp only
   rw [hs]
 
-/-- A canonical text is exactly a JSON text that writing what it holds gives back. -/
 theorem parse_fixed (s : String) (v : Value) :
     Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
   constructor
@@ -1143,13 +1115,9 @@ theorem parse_fixed (s : String) (v : Value) :
     have hvalid := Rfc8259.read?_valid _ _ hread
     exact parse_render_of_reread v hvalid (reread_of_read v hvalid hread)
 
-/-! ## What remains: every finite float reads back from its text -/
-
-/-- Every finite float is read back from its canonical text. -/
 @[expose] def FloatsReadBack : Prop := ∀ x : Float, finiteFloat x = true → Value.rereadFloat x = some (.float x)
 
 section Floats
-
 
 mutual
 
@@ -1191,15 +1159,12 @@ theorem rereadMembers_self (floats : FloatsReadBack) : (members : List (String �
 
 end
 
-/-- `read_render`, from the float lemma. -/
 theorem read_render_of_floats (floats : FloatsReadBack) (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
   read_of_reread v h (reread_self floats v h)
 
-/-- Every valid value is read back from its text, from the float lemma. -/
 theorem render_parse_of_floats (floats : FloatsReadBack) (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
   parse_render_of_reread v h (reread_self floats v h)
 
-/-- `decode_encode`, from the float lemma. -/
 theorem decode_encode_of_floats (floats : FloatsReadBack) {α : Type u} [ToValue α] [FromValue α]
     (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
     decode (encode a) = .ok a := by

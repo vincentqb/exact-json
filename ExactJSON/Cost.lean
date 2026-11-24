@@ -2,16 +2,6 @@ module
 
 public import ExactJSON.Sound
 
-/-! # The reader's steps are linear in the text's length
-
-Each part of the reader takes at most a fixed number of steps for each character it reads (two
-for a string, four for a value), and an error at most as many for each character of the text it
-was given; the steps are counted as `Value.parseCosted` documents. So `Value.parseCosted s` takes
-at most `10 * (s.length + 1)` steps: one for each byte decoded (at most four a character), four
-for each character read, and two for each character counted to place an error. The reader counts
-the steps itself, so this bounds its count, not its running time.
--/
-
 public section
 
 namespace ExactJSON
@@ -31,9 +21,6 @@ theorem utf8ByteSize_le (s : String) : s.utf8ByteSize ≤ 4 * s.length := by
 
 namespace Parser
 
-/-- A reading of `input` that began with `s0` steps took at most `k` steps for each character it
-read; or it failed within `input`, after at most `k` steps for each character of `input` and `e`
-more. -/
 def Within {α : Type} (k e : Nat) (input : List Char) (s0 : Nat) : Read α → Prop
   | .ok _ rest s => s0 ≤ s ∧ s + k * rest.length ≤ s0 + k * input.length
   | .error _ r s => s ≤ s0 + k * input.length + e ∧ r.length ≤ input.length
@@ -56,8 +43,6 @@ theorem string_within (input : List Char) (acc : String) (s0 : Nat) :
     | (simp only [Within, List.length_cons, List.length_nil]; omega)
     | (refine Within.weaken (by assumption) ?_ ?_ ?_ <;> (try simp only [List.length_cons]) <;> omega)
 
-/-- A scan from `p` of `input` that began with `s0` steps took a step for each character it read
-and one more; or it failed within `input`, after a step for each character of `input`. -/
 def ScanWithin (p : Parts) (input : List Char) (s0 : Nat) : Read Parts → Prop
   | .ok p' r s => s0 ≤ s ∧ s + p.length ≤ s0 + p'.length + 1 ∧ p.length ≤ p'.length ∧
       p'.length ≤ p.length + input.length ∧ r.length ≤ input.length
@@ -83,7 +68,6 @@ theorem scan_within (g : Grammar) (p : Parts) (input : List Char) (s0 : Nat) :
     cases r <;> simp only [ScanWithin, read_length, List.length_cons] at ih ⊢ <;> omega
   · exact finish_within _ _ _ _ _ (by omega) (by omega) (.inr (by simp))
 
-/-- What the lenient grammar gives, within `input` and after a step for each character of it. -/
 def ScanLenient (input : List Char) (s0 : Nat) : Read Parts → Prop
   | .ok _ r s => s ≤ s0 + input.length ∧ r.length ≤ input.length
   | .error _ r s => s ≤ s0 + input.length ∧ r.length ≤ input.length
@@ -105,7 +89,6 @@ theorem lenientScan_within (input : List Char) (s0 : Nat) : ScanLenient input s0
     cases r <;> simp only [ScanWithin, ScanLenient, List.length_cons] at h ⊢ <;> omega
   · simp [ScanLenient]
 
-/-- The lenient grammar's error is within `input`, after a step for each character of it. -/
 theorem lenientError_steps (input : List Char) (s0 : Nat) (m : String) (r : List Char) (s : Nat)
     (h : lenientError input s0 = .error m r s) : s ≤ s0 + input.length ∧ r.length ≤ input.length := by
   have hs := lenientScan_within input s0
@@ -160,13 +143,10 @@ theorem number_within (input : List Char) (s0 : Nat) : Within 16 16 input s0 (nu
       simp only [Within]
       omega
 
-/-- Reading a value with `fuel` takes at most sixteen steps a character. -/
 def ValueWithin (fuel : Nat) : Prop := ∀ input s0, Within 16 16 input s0 (value fuel input s0)
 
-/-- Reading an array's items with `fuel` takes at most sixteen steps a character. -/
 def ItemsWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 16 16 input s0 (items fuel input acc s0)
 
-/-- Reading a table's members with `fuel` takes at most sixteen steps a character. -/
 def MembersWithin (fuel : Nat) : Prop := ∀ input acc s0, Within 16 16 input s0 (members fuel input acc s0)
 
 theorem reader_within (fuel : Nat) : ValueWithin fuel ∧ ItemsWithin fuel ∧ MembersWithin fuel := by
@@ -261,7 +241,6 @@ theorem reader_within (fuel : Nat) : ValueWithin fuel ∧ ItemsWithin fuel ∧ M
 
 end Parser
 
-/-- `Value.parseCosted s` takes at most `22 * (s.length + 1)` steps. -/
 theorem parseCosted_steps (s : String) : (Value.parseCosted s).steps ≤ 22 * (s.length + 1) := by
   have hB := utf8ByteSize_le s
   have hn : s.toList.length = s.length := String.length_toList

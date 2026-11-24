@@ -3,14 +3,6 @@ module
 public import ExactJSON.Rfc8259
 public import ExactJSON.Render
 
-/-! # The text of a number is an RFC 8259 number
-
-The renderer writes an integer as `toString` does and a float as `Decimal.toFloatText` does; these
-lemmas say that every character of such a text is one that numbers are written in, that the text is
-not empty, and that RFC 8259 reads an integer's text back as that integer. They also say that the
-reference reader's sorting of a table's members leaves members already in key order as they are.
--/
-
 public section
 
 namespace ExactJSON

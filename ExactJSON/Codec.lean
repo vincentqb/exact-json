@@ -4,22 +4,6 @@ public import ExactJSON.Parse
 public import Std.Data.HashMap
 public import Std.Data.TreeMap
 
-/-! # Typed values
-
-`ToValue α` writes a Lean value as a `Value`, `FromValue α` reads one back, and `encode` and
-`decode` go through canonical text. Every instance here keeps, and `decode` enforces, the law
-
-    decode s = .ok a  ↔  encode a = s
-
-for valid `a`, so reading undoes writing, each value has one text, and no other text is read.
-Reading is strict: no integer where a float belongs, no unknown key, no `null` where the type has
-none.
-
-`none` is an absent key as a structure field (or a named constructor argument), and `null`
-anywhere else. `Option α` can be written as a value only when `α` never writes `null`
-(`NotNull α`): otherwise `none` and `some none` would have one text.
--/
-
 @[expose] public section
 
 namespace ExactJSON
@@ -30,8 +14,6 @@ namespace Value
 
 mutual
 
-/-- Structural equality: floats as `Float`'s equality (bit for bit, all NaNs equal), table
-members in order. -/
 def beq : Value → Value → Bool
   | .null, .null => true
   | .string a, .string b => a == b
@@ -42,13 +24,11 @@ def beq : Value → Value → Bool
   | .table ⟨as⟩, .table ⟨bs⟩ => beqMembers as bs
   | _, _ => false
 
-/-- Item-wise equality of two lists of values. -/
 def beqItems : List Value → List Value → Bool
   | [], [] => true
   | a :: as, b :: bs => beq a b && beqItems as bs
   | _, _ => false
 
-/-- Member-wise equality of two lists of members. -/
 def beqMembers : List (String × Value) → List (String × Value) → Bool
   | [], [] => true
   | (k, a) :: as, (l, b) :: bs => k == l && beq a b && beqMembers as bs
@@ -58,17 +38,14 @@ end
 
 instance : BEq Value := ⟨beq⟩
 
-/-- A table of members whose keys are distinct (as a map's are), put in key order. -/
 def tableOfDistinct (members : Array (String × Value)) : Value :=
   .table (members.qsort (·.1 < ·.1))
 
-/-- The member of a table under `key`, or `none`. -/
 def get? (v : Value) (key : String) : Option Value :=
   match v with
   | .table members => (members.find? (·.1 == key)).map (·.2)
   | _ => none
 
-/-- The type of a value, for messages. -/
 def typeName : Value → String
   | .null => "null"
   | .string _ => "string"
@@ -84,15 +61,11 @@ instance {n : Nat} : OfNat Value n := ⟨.integer n⟩
 
 end Value
 
-/-- `α` is never written as `null`, so `Option α` can write `none` as `null`. Derived instances
-come with it. -/
 class NotNull (α : Type u) : Prop
 
-/-- Prefix the error of `x`, if any, with where it happened. -/
 def withContext {α : Type u} (context : String) (x : Except String α) : Except String α :=
   x.mapError fun e => s!"{context}: {e}"
 
-/-- An error that names what was expected and what was found. -/
 def typeMismatch {α : Type u} (what : String) (v : Value) : Except String α :=
   .error s!"expected {what}, found {v.typeName} {v.render}"
 
@@ -118,7 +91,6 @@ instance : FromValue Nat where
     | v => typeMismatch "a natural number" v
 instance : NotNull Nat := ⟨⟩
 
-/-- An integer in `[lo, hi]`, for the fixed-width integer types named `name`. -/
 def Value.intInRange (lo hi : Int) (name : String) : Value → Except String Int
   | .integer n => if lo ≤ n && n ≤ hi then pure n else typeMismatch s!"an integer in {name}'s range" (.integer n)
   | v => typeMismatch s!"an integer ({name})" v
@@ -148,8 +120,6 @@ instance : ToValue Int64 := ⟨fun n => .integer n.toInt⟩
 instance : FromValue Int64 := ⟨fun v => (Value.intInRange (-2 ^ 63) (2 ^ 63 - 1) "Int64" v).map Int64.ofInt⟩
 instance : NotNull Int64 := ⟨⟩
 
-/-- A float: a finite one as itself; a NaN or an infinity, which JSON has no number for, as the
-string `"NaN"`, `"Infinity"` or `"-Infinity"`. -/
 instance : ToValue Float where
   toValue x :=
     if x.isNaN then .string "NaN"
@@ -193,13 +163,11 @@ instance {α : Type u} {β : Type u} [FromValue α] [FromValue β] : FromValue (
     | v => typeMismatch "an array of two items" v
 instance {α : Type u} {β : Type u} : NotNull (α × β) := ⟨⟩
 
-/-- `none` as `null`, `some a` as `a`; only for an `α` that is never `null` itself. -/
 instance {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) :=
   ⟨fun | none => .null | some a => toValue a⟩
 instance {α : Type u} [FromValue α] [NotNull α] : FromValue (Option α) :=
   ⟨fun | .null => pure none | v => some <$> fromValue? v⟩
 
-/-- A map with string keys is a table. -/
 instance {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) :=
   ⟨fun m => .table (m.toArray.map fun (k, v) => (k, toValue v))⟩
 instance {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) where
@@ -209,7 +177,6 @@ instance {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) where
     | v => typeMismatch "a table" v
 instance {α : Type u} : NotNull (Std.TreeMap String α) := ⟨⟩
 
-/-- A hash map with string keys is a table (in key order, as every table is). -/
 instance {α : Type u} [ToValue α] : ToValue (Std.HashMap String α) :=
   ⟨fun m => Value.tableOfDistinct (m.toArray.map fun (k, v) => (k, toValue v))⟩
 instance {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) where
@@ -219,21 +186,10 @@ instance {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) where
     | v => typeMismatch "a table" v
 instance {α : Type u} : NotNull (Std.HashMap String α) := ⟨⟩
 
-/-! ## Fields
-
-How a structure's fields (and a constructor's named arguments) are written into a table and read
-from one. The derived instances use these, so that a field of type `Option α` is a key that is
-there or not (for any `α`: a field `Option (Option α)` is absent, `null` or a value).
--/
-
-/-- How a field of type `α` is written into a table. -/
 class ToField (α : Type u) where
-  /-- The members `members` and the field `key := a`, if it is written at all. -/
   pushField : Array (String × Value) → String → α → Array (String × Value)
 
-/-- How a field of type `α` is read from a table. -/
 class FromField (α : Type u) where
-  /-- The field `key` of the table `v`. -/
   getField? : Value → String → Except String α
 
 instance (priority := low) {α : Type u} [ToValue α] : ToField α :=
@@ -254,15 +210,8 @@ instance {α : Type u} [FromValue α] : FromField (Option α) where
     | some item => some <$> withContext key (fromValue? item)
     | none => pure none
 
-/-! ## Text -/
-
-/-- The canonical text of `a`. -/
 def encode {α : Type u} [ToValue α] (a : α) : String := (toValue a).render
 
-/-- The value of type `α` whose canonical text is `s`, or an error. The text must be canonical
-(`Value.parse`), must be what `FromValue` reads as an `α`, and that `α` must be written as the
-value read; this last check, one comparison of values, makes the law hold for any instance,
-hand-written ones included. -/
 def decode {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String α :=
   match Value.parse s with
   | .error e => .error e
@@ -273,12 +222,9 @@ def decode {α : Type u} [ToValue α] [FromValue α] (s : String) : Except Strin
       if toValue a == v then .ok a
       else .error s!"not the text of a value of this type: it would be written {encode a}"
 
-/-- The canonical JSON Lines text of some values. -/
 def encodeLines {α : Type u} [ToValue α] (as : Array α) : String :=
   as.foldl (fun out a => (Value.renderTo out (toValue a)).push '\n') ""
 
-/-- The values of canonical JSON Lines text: each line as `decode` reads it, each ended by a line
-feed. An error names the first line that is not. -/
 def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String (Array α) := do
   let parts := s.splitOn "\n"
   let mut out : Array α := #[]

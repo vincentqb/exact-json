@@ -5,13 +5,6 @@ public import ExactJSON.Codec
 public import ExactJSON.NumberValid
 public import ExactJSON.Reread
 
-/-! # The reader is sound
-
-Whatever the reader accepts is the canonical text of a valid value: reading `v` from `input`
-with `rest` left means `input = render v ++ rest` and `v` is valid. So `Value.parse` needs no
-check of what it read, and `decode` only compares values (`Value.beq a b = true ↔ a = b`).
--/
-
 public section
 
 namespace ExactJSON
@@ -25,7 +18,6 @@ theorem keysIncreaseFrom_append (p : String) (l : List String) (k : String) :
       List.getLast?_cons, Option.getD_some]
     exact and_assoc.symm
 
-/-- Keys still increase after a key greater than the last. -/
 theorem keysIncrease_push (l : List (String × Value)) (key : String) (item : Value)
     (hl : keysIncrease (l.map (·.1)) = true)
     (hlast : ∀ p w, l.getLast? = some (p, w) → p < key) :
@@ -64,7 +56,6 @@ theorem string_step {acc str : String} {x : Char} {r rest : List Char}
   obtain ⟨t, h1, h2⟩ := ih
   exact ⟨x :: t, by simp [h1, String.toList_push], by simp [h2, escapeList_cons]⟩
 
-/-- A string read is escaped characters and a closing quote. -/
 theorem string_sound (input : List Char) (acc : String) (s0 : Nat) (str : String) (rest : List Char) (s : Nat)
     (h : string input acc s0 = .ok str rest s) :
     ∃ t, str.toList = acc.toList ++ t ∧ input = escapeList t ++ '"' :: rest := by
@@ -112,7 +103,6 @@ theorem span_append (p : Char → Bool) (l token rest : List Char) (h : l.span p
   have := span_loop p l [] token rest h
   simpa using this
 
-/-- What the lenient grammar gives is always an error. -/
 theorem lenientError_ne_ok (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat) :
     lenientError input s0 ≠ .ok v rest s := by
   unfold lenientError
@@ -120,7 +110,6 @@ theorem lenientError_ne_ok (input : List Char) (s0 : Nat) (v : Value) (rest : Li
   repeat' split
   all_goals simp
 
-/-- An RFC 8259 number holds an integer or a float. -/
 theorem numberValue_shape (token : List Char) (v : Value) (h : Rfc8259.numberValue token = .ok v) :
     (∃ n, v = .integer n) ∨ (∃ x, v = .float x) := by
   unfold Rfc8259.numberValue at h
@@ -130,7 +119,6 @@ theorem numberValue_shape (token : List Char) (v : Value) (h : Rfc8259.numberVal
     | exact .inl ⟨_, rfl⟩
     | exact .inr ⟨_, rfl⟩
 
-/-- A number read is its own canonical text, valid, and read back from it. -/
 theorem number_sound (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat)
     (h : number input s0 = .ok v rest s) :
     input = v.render.toList ++ rest ∧ v.isValid = true ∧ v.reread = some v := by
@@ -155,21 +143,17 @@ theorem number_sound (input : List Char) (s0 : Nat) (v : Value) (rest : List Cha
     · cases h
   · exact absurd h (lenientError_ne_ok _ _ _ _ _)
 
-/-- What reading a value with `fuel` gives is a valid value and its text. -/
 def ValueSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
     value fuel input s0 = .ok v rest s →
       input = v.render.toList ++ rest ∧ v.isValid = true ∧ v.reread = some v
 
-/-- What reading an array's items with `fuel` gives is valid items and their texts. -/
 def ItemsSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (acc : Array Value) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
     items fuel input acc s0 = .ok v rest s →
       ∃ ys, ys ≠ [] ∧ v = .array ⟨acc.toList ++ ys⟩ ∧ input = Value.itemsText ys ++ ']' :: rest ∧
         itemsValid ys = true ∧ Value.rereadItems ys = some ys
 
-/-- What reading a table's members with `fuel` gives is valid members, in key order after those
-read already, and their texts. -/
 def MembersSound (fuel : Nat) : Prop :=
   ∀ (input : List Char) (acc : Array (String × Value)) (s0 : Nat) (v : Value) (rest : List Char) (s : Nat),
     members fuel input acc s0 = .ok v rest s → keysIncrease (acc.toList.map (·.1)) = true →
@@ -269,7 +253,6 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
           simp only at h
           split at h
           · rename_i hordered
-            -- the key comes after the last one read
             have hlast : ∀ p w, acc.toList.getLast? = some (p, w) → p < key := by
               intro p w hpw
               rw [Array.getLast?_toList] at hpw
@@ -308,7 +291,6 @@ theorem reader_sound (fuel : Nat) : ValueSound fuel ∧ ItemsSound fuel ∧ Memb
 
 end Parser
 
-/-- What `Value.parse` reads is a valid value whose text is the text read. -/
 theorem parse_sound (s : String) (v : Value) (h : Value.parse s = .ok v) : v.render = s ∧ v.isValid = true := by
   unfold Value.parse Value.parseCosted at h
   simp only at h
@@ -323,7 +305,6 @@ theorem parse_sound (s : String) (v : Value) (h : Value.parse s = .ok v) : v.ren
   · simp [Parser.failAt] at h
   · simp [Parser.failAt] at h
 
-/-- What the strict reader reads, it reads back from its floats' texts. -/
 theorem parse_reread (s : String) (v : Value) (h : Value.parse s = .ok v) : v.reread = some v := by
   unfold Value.parse Value.parseCosted at h
   simp only at h
@@ -340,7 +321,6 @@ namespace Value
 
 mutual
 
-/-- `Value.beq` is equality. -/
 theorem eq_of_beq : (a b : Value) → Value.beq a b = true → a = b
   | .null, b, h => by cases b <;> simp_all [Value.beq]
   | .string x, b, h => by cases b <;> simp_all [Value.beq]
@@ -399,7 +379,6 @@ theorem beqMembers_self : (xs : List (String × Value)) → Value.beqMembers xs 
 
 end
 
-/-- `Value.beq` is equality. -/
 theorem beq_eq_true_iff (a b : Value) : Value.beq a b = true ↔ a = b :=
   ⟨eq_of_beq a b, fun h => h ▸ beq_self a⟩
 

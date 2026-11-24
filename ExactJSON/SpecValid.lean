@@ -2,30 +2,21 @@ module
 
 public import ExactJSON.NumberValid
 
-/-! # What RFC 8259 reads is a valid value
-
-The reference reader `Rfc8259.read?` only gives valid values: tables with keys strictly increasing
-(it sorts them and rejects a repeated key) and finite floats, at every depth.
--/
-
 public section
 
 namespace ExactJSON
 
 namespace Rfc8259
 
-/-- A table is valid when its keys increase and its values are valid. -/
 theorem spec_isValid_table (ms : Array (String × Value)) :
     (Value.table ms).isValid = (keysIncrease (ms.toList.map (·.1)) && membersValid ms.toList) := by
   cases ms
   rfl
 
-/-- An array is valid when its items are. -/
 theorem spec_isValid_array (vs : Array Value) : (Value.array vs).isValid = itemsValid vs.toList := by
   cases vs
   rfl
 
-/-- Members whose values are each valid are valid members. -/
 theorem spec_membersValid (ms : List (String × Value)) (h : ∀ m ∈ ms, m.2.isValid = true) :
     membersValid ms = true := by
   induction ms with
@@ -35,7 +26,6 @@ theorem spec_membersValid (ms : List (String × Value)) (h : ∀ m ∈ ms, m.2.i
     simp only [membersValid, Bool.and_eq_true]
     exact ⟨h (k, v) List.mem_cons_self, ih fun m hm => h m (List.mem_cons_of_mem _ hm)⟩
 
-/-- Items that are each valid are valid items. -/
 theorem spec_itemsValid (vs : List Value) (h : ∀ v ∈ vs, v.isValid = true) : itemsValid vs = true := by
   induction vs with
   | nil => rfl
@@ -43,7 +33,6 @@ theorem spec_itemsValid (vs : List Value) (h : ∀ v ∈ vs, v.isValid = true) :
     simp only [itemsValid, Bool.and_eq_true]
     exact ⟨h v List.mem_cons_self, ih fun w hw => h w (List.mem_cons_of_mem _ hw)⟩
 
-/-- Keys in order with no two neighbours equal increase from the first. -/
 theorem spec_keysIncreaseFrom (a : String × Value) (l : List (String × Value))
     (hsorted : List.Pairwise (fun x y => decide (x.1 ≤ y.1) = true) (a :: l))
     (hdistinct : neighboursDistinct (a :: l) = true) :
@@ -56,7 +45,6 @@ theorem spec_keysIncreaseFrom (a : String × Value) (l : List (String × Value))
     simp only [List.map_cons, keysIncreaseFrom, Bool.and_eq_true, decide_eq_true_eq]
     exact ⟨Std.lt_of_le_of_ne hab hdistinct.1, ih b (List.Pairwise.of_cons hsorted) hdistinct.2⟩
 
-/-- Keys in order with no two neighbours equal increase. -/
 theorem spec_keysIncrease (l : List (String × Value))
     (hsorted : List.Pairwise (fun x y => decide (x.1 ≤ y.1) = true) l)
     (hdistinct : neighboursDistinct l = true) : keysIncrease (l.map (·.1)) = true := by
@@ -79,8 +67,6 @@ theorem table_valid (members : List (String × Value)) (t : Value)
       spec_membersValid _ fun m hm => hvalid m (List.mem_mergeSort.mp hm)⟩
   · cases h
 
-/-- What the reader reads with `fuel` is valid: a value, and an array's elements or an object's
-members after valid ones read already. -/
 theorem spec_reader_valid (fuel : Nat) :
     (∀ (input : List Char) (v : Value) (rest : List Char),
       value fuel input = .ok (v, rest) → v.isValid = true) ∧

@@ -2,39 +2,12 @@ module
 
 public import ExactJSON.ReadBack
 
-/-! # Lean's `Float.ofScientific` rounds to nearest
-
-`ofScientificRounds` proves `OfScientificRounds` from Lean's own model of its floats
-(`Float.Model`): `Float.ofScientific` reads every decimal in the rounding interval of a positive
-finite float as that float. With `floatsReadBack` this proves `read_render` and `decode_encode`.
-
-The model rounds in `roundWithAccuracy`. It shifts an exact mantissa right to the format's
-precision, keeping a round bit and a sticky bit, rounds to nearest with ties to even, and shifts
-once more when rounding up carries into a 54th bit. `Represents` says what an extended mantissa
-stands for, a fraction `N / D` in units of its last place; shifting keeps it
-(`represents_shift`), and rounding a fraction within one half of `M` gives `M`
-(`roundedMantissa_of_near`). `roundWithAccuracy_eq` puts these together: a value in the
-interval of the float `M × 2 ^ e` is rounded at exponent `e`, except just below a power of two,
-where it is rounded at `e - 1` up to `2 ^ 53`, which the second shift turns into `M × 2 ^ e`.
-
-`Float.ofScientific` reaches `roundWithAccuracy` in two ways. A significand below `2 ^ 53` with
-an exponent at most 22 is a float, and so is the power of ten (`toFloat_unpack`, `table_unpack`),
-and one division or multiplication of the two rounds once. Otherwise `Float.Model.ofScientific`
-multiplies by `10 ^ q`, or divides by `10 ^ -q`, exactly before it rounds
-(`model_ofScientific`); `divCore_spec` says a division keeps the bits rounding needs. Packing the
-result gives the float's own bits (`pack_decompose`).
--/
-
 public section
 
 namespace ExactJSON.FloatText
 
 open Float.Model Float.Model.UnpackedFloat
 
-
-/-- `em` is the fraction `N / D` in units of its last place: its mantissa is the fraction's integer
-part, its round bit says whether the rest is at least one half, and its sticky bit whether the
-rest is neither zero nor one half. -/
 def Represents (em : ExtendedMantissa) (N D : Nat) : Prop :=
   em.mantissa = N / D ∧ em.roundBit = decide (D ≤ 2 * (N % D)) ∧
     em.stickyBit = decide (N % D ≠ 0 ∧ 2 * (N % D) ≠ D)
@@ -70,7 +43,6 @@ theorem represents_shift {em : ExtendedMantissa} {N D : Nat} (hD : 0 < D) (h : R
     rw [this, Nat.pow_succ, ← Nat.mul_assoc]
     exact represents_shiftRightOne (Nat.mul_pos hD (Nat.pow_pos (by decide))) ih
 
-/-- An extended mantissa made from a mantissa and the accuracy of a fraction represents it. -/
 theorem represents_ofMantissaAndAccuracy (N D : Nat) (hD : 0 < D) :
     Represents (ExtendedMantissa.ofMantissaAndAccuracy (N / D) (accuracyOfFraction (N % D) D)) N D := by
   have hR := Nat.mod_lt N hD
@@ -87,12 +59,10 @@ theorem represents_ofMantissaAndAccuracy (N D : Nat) (hD : 0 < D) :
     · rw [(Nat.compare_eq_gt).mpr hc]
       refine ⟨rfl, ?_, ?_⟩ <;> simp [ExtendedMantissa.ofMantissaAndAccuracy] <;> omega
 
-/-- An exact mantissa represents itself. -/
 theorem represents_exact (a : Nat) : Represents (ExtendedMantissa.ofMantissaAndAccuracy a .exact) a 1 := by
   refine ⟨by simp [ExtendedMantissa.ofMantissaAndAccuracy], ?_, ?_⟩ <;>
     simp [ExtendedMantissa.ofMantissaAndAccuracy, Nat.mod_one]
 
-/-- Rounding a represented fraction to nearest, ties to even. -/
 theorem roundedMantissa_eq {em : ExtendedMantissa} {N D : Nat} (hD : 0 < D) (h : Represents em N D) :
     em.roundedMantissa =
       if 2 * (N % D) < D then N / D else if 2 * (N % D) = D then N / D + N / D % 2 else N / D + 1 := by
@@ -111,8 +81,6 @@ theorem roundedMantissa_eq {em : ExtendedMantissa} {N D : Nat} (hD : 0 < D) (h :
   · rw [ite_eq_right (by omega), ite_eq_left (by omega)]
   · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
-/-- A represented fraction rounds to `M` when it is within one half of `M`, the ends included
-when `incl` (and `M` is even). -/
 theorem roundedMantissa_of_near {em : ExtendedMantissa} {N D M : Nat} (hD : 0 < D) (h : Represents em N D)
     (incl : Bool) (hincl : incl = true → M % 2 = 0)
     (hlo : 2 * (M * D) < 2 * N + D ∨ (incl = true ∧ 2 * (M * D) = 2 * N + D))
@@ -125,7 +93,6 @@ theorem roundedMantissa_of_near {em : ExtendedMantissa} {N D M : Nat} (hD : 0 < 
   generalize N % D = R at hN hR ⊢
   subst hN
   rw [Nat.mul_comm D a] at hlo hhi
-  -- `a` is `M` or `M - 1`
   have h1 : M ≤ a + 1 := by
     have : 2 * M * D < (2 * a + 3) * D := by
       rw [Nat.mul_assoc, Nat.add_mul, Nat.mul_assoc]; omega
@@ -155,8 +122,6 @@ theorem roundedMantissa_of_near {em : ExtendedMantissa} {N D M : Nat} (hD : 0 < 
         omega
     · rw [ite_eq_right c1, ite_eq_right c2]
 
-/-! ## Powers of two as fractions, against each other -/
-
 theorem two_pow_mul_powSplit_lt_iff (L K : Nat) (d : Int) :
     2 ^ L * (powSplit 2 d).1 < 2 ^ K * (powSplit 2 d).2 ↔ (L : Int) + d < K := by
   unfold powSplit
@@ -179,7 +144,6 @@ theorem two_pow_mul_powSplit_lt_iff' (L K : Nat) (d : Int) :
     rw [← Nat.pow_add, Nat.pow_lt_pow_iff_right (by decide)]
     omega
 
-/-- `2 ^ (k - s) × 2 ^ s = 2 ^ k`, as fractions. -/
 theorem powSplit_two_shift (k s : Nat) :
     (powSplit 2 ((k : Int) - s)).1 * 2 ^ s = 2 ^ k * (powSplit 2 ((k : Int) - s)).2 := by
   unfold powSplit
@@ -193,7 +157,6 @@ theorem powSplit_two_shift (k s : Nat) :
     congr 1
     omega
 
-/-- Comparisons of `P / Q` with a whole number `c`, moved to `K / D` when `P × D = K × Q`. -/
 theorem transport {P Q K D : Nat} (hQ : 0 < Q) (hDp : 0 < D) (h : P * D = K * Q) (c : Nat) :
     (c * Q < P ↔ c * D < K) ∧ (P < c * Q ↔ K < c * D) ∧ (c * Q = P ↔ c * D = K) ∧
       (c * Q ≤ P ↔ c * D ≤ K) := by
@@ -212,7 +175,6 @@ theorem transport {P Q K D : Nat} (hQ : 0 < Q) (hDp : 0 < D) (h : P * D = K * Q)
       exact Nat.eq_of_mul_eq_mul_right hDp this
   · rw [← Nat.mul_le_mul_right_iff hDp, h, key, Nat.mul_le_mul_right_iff hQ]
 
-/-- The ends of `fits` at scale `(Q, 1)`. -/
 theorem fits_iff (low high Q : Nat) (incl : Bool) (P : Nat) :
     fits low high Q 1 incl P = true ↔
       (low * Q < P ∨ (incl = true ∧ low * Q = P)) ∧ (P < high * Q ∨ (incl = true ∧ P = high * Q)) := by
@@ -234,10 +196,6 @@ theorem finite_of_eq (sg : Sign) {X M : Nat} {Y e : Int} (hX : X = M) (hY : Y = 
   subst hX hY
   simp [hM0]
 
-/-! ## Rounding a fraction inside a float's interval gives that float -/
-
-/-- At the float's own exponent, a value `Pw / Qw = 4 N / D` units of `2 ^ (e - 2)` within one
-half of `M` units of `2 ^ e` rounds to `M`. -/
 theorem round_at_exponent {em : ExtendedMantissa} {N D Pw Qw M : Nat} (incl : Bool) (hD : 0 < D) (hQw : 0 < Qw)
     (hM : 0 < M) (hrep : Represents em N D) (hglue : Pw * D = 4 * N * Qw) (hincl : incl = true → M % 2 = 0)
     (hlo : (4 * M - 2) * Qw < Pw ∨ (incl = true ∧ (4 * M - 2) * Qw = Pw) ∨ 4 * M * Qw ≤ Pw)
@@ -265,8 +223,6 @@ theorem round_at_exponent {em : ExtendedMantissa} {N D Pw Qw M : Nat} (incl : Bo
       rw [Nat.add_mul, hX] at h1
       right; exact ⟨hi, by omega⟩
 
-/-- One exponent below a power of two, a value `Pw / Qw = 2 N / D` units of `2 ^ (e - 2)` at least
-`2 ^ 54 - 1` and below `2 ^ 54` rounds up to `2 ^ 53`, ties included. -/
 theorem round_below_power {em : ExtendedMantissa} {N D Pw Qw : Nat} (hD : 0 < D) (hQw : 0 < Qw)
     (hrep : Represents em N D) (hglue : Pw * D = 2 * N * Qw)
     (hlo : (2 ^ 54 - 1) * Qw ≤ Pw) (hhi : Pw < 2 ^ 54 * Qw) :
@@ -288,11 +244,6 @@ theorem round_below_power {em : ExtendedMantissa} {N D Pw Qw : Nat} (hD : 0 < D)
   · generalize 2 ^ 53 * D = X at h1 h2 ⊢
     exact Or.inl (by omega)
 
-
-/-- `roundWithAccuracy` rounds a value inside the rounding interval of the positive float
-`M × 2 ^ e` to that float. The value is `N / D` units of `2 ^ ex` (which `mant` and `acc`
-represent) and `Pw / Qw` units of `2 ^ (e - 2)`; `mant` has at least the 53 bits the format needs,
-or `ex` is at most the least exponent. -/
 theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM : M < 2 ^ 53)
     (he : -1074 ≤ e) (hsub : M < 2 ^ 52 → e = -1074)
     {mant : Nat} {ex : Int} {acc : Accuracy} {N D : Nat} (hD : 0 < D)
@@ -311,7 +262,6 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
   have hw := powSplit_pos 2 (by decide) (ex - (e - 2))
   generalize hd : ex - (e - 2) = d at hglue hw
   generalize hL : mant.log2 = L at hprec
-  -- the value against powers of two
   have hW2 : Pw * (powSplit 2 d).2 < 2 ^ (L + 1) * (powSplit 2 d).1 * Qw := by
     have h1 : N < 2 ^ (L + 1) * D := by
       have h0 := Nat.div_add_mod N D
@@ -341,7 +291,6 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
         _ ≤ N * (powSplit 2 d).1 * Qw := Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ h1)
         _ = Pw * (powSplit 2 d).2 * D := by rw [← hglue]; ac_rfl
     exact Nat.le_of_mul_le_mul_right this hD
-  -- an upper bound for `Pw / Qw` gives one for the exponent, a lower bound one below it
   have below : ∀ K : Nat, mant ≠ 0 → Pw < 2 ^ K * Qw → (L : Int) + d < K := by
     intro K hm0 hK
     have h1 := hW1 hm0
@@ -361,7 +310,6 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
     have := (two_pow_mul_powSplit_lt_iff' (L + 1) K d).mp (Nat.lt_of_mul_lt_mul_right this)
     push_cast at this
     exact this
-  -- the interval's ends
   simp only [roundingInterval] at hlo hhi
   have hPw55 : Pw < 2 ^ 55 * Qw := by
     have : (4 * M + 2) * Qw < 2 ^ 55 * Qw := Nat.mul_lt_mul_of_pos_right (by omega) hQw
@@ -378,8 +326,7 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
   unfold roundWithAccuracy shiftToTargetExponent shiftToExponent
   simp only [targetExponent_binary64, totalExponent, hL]
   by_cases hA : e = -1074 ∨ 2 ^ 54 * Qw ≤ Pw
-  · -- the value rounds at the float's own exponent
-    have hT : max ((L : Int) + 1 + ex - 53) (-1074) = e := by
+  · have hT : max ((L : Int) + 1 + ex - 53) (-1074) = e := by
       rcases hA with h | h
       · omega
       · have := above 54 h
@@ -388,7 +335,6 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
     have hs' : (s : Int) = e - ex := by omega
     have hrep1 := represents_shift hD hrep s
     have hD' : 0 < D * 2 ^ s := Nat.mul_pos hD (Nat.pow_pos (by decide))
-    -- the value is `4 N / (D 2^s)` units of `2 ^ (e - 2)`
     have hglueT : Pw * (D * 2 ^ s) = 4 * N * Qw := by
       have hd' : d = ((2 : Nat) : Int) - (s : Int) := by omega
       rw [hd'] at hglue hw
@@ -404,8 +350,7 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
     have hround : (ExtendedMantissa.ofMantissaAndAccuracy mant acc >>> s).roundedMantissa = M := by
       apply round_at_exponent (M % 2 == 0) hD' hQw (Nat.pos_of_ne_zero hM0) hrep1 hglueT hincl _ hhi
       by_cases hlc : M = 2 ^ 52 ∧ e > -1074
-      · -- next to a power of two the value is at least the float
-        right; right
+      · right; right
         have h54 : 2 ^ 54 * Qw ≤ Pw := by omega
         rw [hlc.1, show 4 * 2 ^ 52 = 2 ^ 54 by decide]
         exact h54
@@ -422,8 +367,7 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
     refine finite_of_eq sg ?_ ?_ hM0
     · rfl
     · omega
-  · -- next to a power of two, below it: the value rounds up to `2 ^ 53` one exponent lower
-    have he' : e ≠ -1074 := fun h => hA (Or.inl h)
+  · have he' : e ≠ -1074 := fun h => hA (Or.inl h)
     have hPw : Pw < 2 ^ 54 * Qw := by omega
     have hM52 : M = 2 ^ 52 := by
       have : 2 ^ 52 ≤ M := by
@@ -485,8 +429,6 @@ theorem roundWithAccuracy_eq (sg : Sign) {M : Nat} {e : Int} (hM0 : M ≠ 0) (hM
       decide
     · omega
 
-
-/-- Packing a positive finite float whose significand has 53 bits. -/
 theorem pack_normal (m : Nat) (e : Int) (h : 0 < m) (hm1 : 2 ^ 52 ≤ m) (hm2 : m < 2 ^ 53) (he1 : -1074 ≤ e)
     (he2 : e ≤ 971) :
     (UnpackedFloat.pack Format.binary64 (.finite .positive m e h)).toNat =
@@ -508,7 +450,6 @@ theorem pack_normal (m : Nat) (e : Int) (h : 0 < m) (hm1 : 2 ^ 52 ≤ m) (hm2 : 
     · rename_i hc
       simp [Format.mantissaBits, hlog] at hc
 
-/-- Packing a positive float whose significand has fewer than 53 bits, at the least exponent. -/
 theorem pack_subnormal (m : Nat) (h : 0 < m) (hm : m < 2 ^ 52) :
     (UnpackedFloat.pack Format.binary64 (.finite .positive m (-1074) h)).toNat = m := by
   have hlog : m.log2 < 52 := (Nat.log2_lt (by omega)).mpr hm
@@ -526,8 +467,6 @@ theorem pack_subnormal (m : Nat) (h : 0 < m) (hm : m < 2 ^ 52) :
       simp only [Sign.toBitVec, BitVec.toNat_ofNat]
       omega
 
-/-- Packing the positive float with the significand and exponent `decompose` gives a finite float
-gives back that float's bits. -/
 theorem pack_decompose {x : Float} (hx : finiteFloat x = true) {M : Nat} {e : Int}
     (hd : decompose x = (false, M, e)) (hM : 0 < M) :
     UnpackedFloat.pack Format.binary64 (.finite .positive M e hM) = x.toBits.toBitVec := by
@@ -549,11 +488,6 @@ theorem pack_decompose {x : Float} (hx : finiteFloat x = true) {M : Nat} {e : In
     rw [pack_normal _ _ _ (by omega) (by omega) (by omega) (by omega), UInt64.toNat_toBitVec]
     omega
 
-
-
-/-- What `divCore` computes for `m₁ × 2 ^ e₁` over `m₂ × 2 ^ e₂`: the quotient of `m₁ × 2 ^ sh` by
-`m₂`, in units of `2 ^ (e₁ - e₂ - sh)`, with the accuracy of its remainder, and with at least the 53
-bits the format needs unless its exponent is at most the least one. -/
 theorem divCore_spec (m₁ m₂ : Nat) (e₁ e₂ : Int) (h₁ : 0 < m₁) (h₂ : 0 < m₂) :
     ∃ sh : Nat, divCore Format.binary64 m₁ e₁ m₂ e₂ =
       ((m₁ * 2 ^ sh) / m₂, e₁ - e₂ - sh, accuracyOfFraction ((m₁ * 2 ^ sh) % m₂) m₂) ∧
@@ -582,8 +516,6 @@ theorem divCore_spec (m₁ m₂ : Nat) (e₁ e₂ : Int) (h₁ : 0 < m₁) (h₂
       have hq : 2 ^ 52 ≤ (m₁ * 2 ^ sh) / m₂ := (Nat.le_div_iff_mul_le h₂).mpr key
       exact (Nat.le_log2 (by omega)).mpr hq
 
-
-/-- Unpacking the bits of a positive normal float. -/
 theorem unpack_normal (b : BitVec 64) (h1 : b.toNat / 2 ^ 52 % 2 ^ 11 ≠ 0) (h2 : b.toNat / 2 ^ 52 % 2 ^ 11 ≠ 2047)
     (hs : b.toNat < 2 ^ 63) :
     UnpackedFloat.unpack Format.binary64 b =
@@ -610,8 +542,6 @@ theorem unpack_normal (b : BitVec 64) (h1 : b.toNat / 2 ^ 52 % 2 ^ 11 ≠ 0) (h2
   · rw [he]
     simp [Format.exponentBias]
 
-
-/-- Unpacking a packed positive normal float gives it back. -/
 theorem unpack_pack_normal (M : Nat) (E : Int) (h : 0 < M) (hm1 : 2 ^ 52 ≤ M) (hm2 : M < 2 ^ 53) (he1 : -1074 ≤ E)
     (he2 : E ≤ 971) :
     UnpackedFloat.unpack Format.binary64 (UnpackedFloat.pack Format.binary64 (.finite .positive M E h)) =
@@ -622,10 +552,6 @@ theorem unpack_pack_normal (M : Nat) (E : Int) (h : 0 < M) (hm1 : 2 ^ 52 ≤ M) 
   rw [hp]
   omega
 
-/-! ## The value glue -/
-
-/-- A value `N × 2 ^ ex / D` equal to `m × 10 ^ q` is, in units of `2 ^ (e - 2)`, the value
-`m × 10 ^ q` is at scale `scale e q`. -/
 theorem glue_of_value {N D m : Nat} {ex e q : Int}
     (hv : N * (powSplit 2 ex).1 * (powSplit 10 q).2 = m * (powSplit 10 q).1 * D * (powSplit 2 ex).2) :
     m * (scale e q).2 * (D * (powSplit 2 (ex - (e - 2))).2) = N * (powSplit 2 (ex - (e - 2))).1 * (scale e q).1 := by
@@ -659,9 +585,6 @@ theorem powSplit_neg_nat (a L : Nat) : powSplit a (-(L : Int)) = (1, a ^ L) := b
   · subst h; simp
   · simp only [show ¬ (0 ≤ -(L : Int)) by omega, ite_false, Int.neg_neg, Int.toNat_natCast]
 
-/-! ## `Float.Model.ofScientific` reads a decimal in a float's interval as that float -/
-
-/-- What `decompose` says about a finite float with a nonzero significand. -/
 theorem decompose_facts {x : Float} (hx : finiteFloat x = true) {s : Bool} {M : Nat} {e : Int}
     (hd : decompose x = (s, M, e)) (hM : M ≠ 0) :
     M < 2 ^ 53 ∧ -1074 ≤ e ∧ e ≤ 971 ∧ (M < 2 ^ 52 → e = -1074) := by
@@ -693,8 +616,6 @@ theorem scale_fst_pos (e q : Int) : 0 < (scale e q).1 := by
   rw [scale_eq]
   exact Nat.mul_pos (powSplit_pos 2 (by decide) _).1 (powSplit_pos 10 (by decide) _).2
 
-/-- Lean's model of `Float.ofScientific` reads every decimal in the rounding interval of a positive
-finite float as that float. -/
 theorem model_ofScientific {x : Float} (hx : finiteFloat x = true) {M : Nat} {e : Int}
     (hd : decompose x = (false, M, e)) (hM : M ≠ 0) {m : Nat} {q : Int} (hr : roundsTo M e m q = true) :
     UnpackedFloat.ofScientific Format.binary64 m q = .finite .positive M e (Nat.pos_of_ne_zero hM) := by
@@ -746,9 +667,6 @@ theorem model_ofScientific {x : Float} (hx : finiteFloat x = true) {M : Nat} {e 
     simp only [Nat.mul_one]
     ac_rfl
 
-/-! ## The fast path: a short integer, and a power of ten from a table -/
-
-/-- Lean's model reads a positive integer below `2 ^ 53` exactly, as a normal float. -/
 theorem ofNat_eq (m : Nat) (hm : 0 < m) (hm53 : m < 2 ^ 53) :
     UnpackedFloat.ofNat Format.binary64 m =
       .finite .positive (m * 2 ^ (52 - m.log2)) ((m.log2 : Int) - 52)
@@ -793,7 +711,6 @@ theorem ofNat_eq (m : Nat) (hm : 0 < m) (hm53 : m < 2 ^ 53) :
     · left
       omega
 
-/-- The float of a positive integer below `2 ^ 53` unpacks to it. -/
 theorem toFloat_unpack (m : Nat) (hm : 0 < m) (hm53 : m < 2 ^ 53) :
     m.toUInt64.toFloat.toModel.unpack =
       .finite .positive (m * 2 ^ (52 - m.log2)) ((m.log2 : Int) - 52)
@@ -816,7 +733,6 @@ theorem toFloat_unpack (m : Nat) (hm : 0 < m) (hm53 : m < 2 ^ 53) :
   · omega
   · omega
 
-/-- A positive normal float's bits unpack to its significand and exponent. -/
 theorem ofBits_unpack (c : UInt64) (h1 : c.toNat / 2 ^ 52 % 2 ^ 11 ≠ 0) (h2 : c.toNat / 2 ^ 52 % 2 ^ 11 ≠ 2047)
     (h3 : c.toNat < 2 ^ 63) :
     (Float.ofBits c).toModel.unpack =
@@ -827,8 +743,6 @@ theorem ofBits_unpack (c : UInt64) (h1 : c.toNat / 2 ^ 52 % 2 ^ 11 ≠ 0) (h2 : 
   simp only [UInt64.toNat_toBitVec]
   exact unpack_pack_normal _ _ _ (by omega) (by omega) (by omega) (by omega)
 
-/-- The table of powers of ten that `Float.ofScientific` multiplies or divides by unpacks to
-exactly `10 ^ k`. -/
 theorem table_unpack (k : Nat) (hk : k ≤ 22) (h : k < Float.exactlyRepresentablePowersOfTen.size) :
     ∃ P F hP, (Float.exactlyRepresentablePowersOfTen[k]'h).toModel.unpack = .finite .positive P F hP ∧
       P * (powSplit 2 F).1 = 10 ^ k * (powSplit 2 F).2 := by
@@ -839,8 +753,6 @@ theorem table_unpack (k : Nat) (hk : k ≤ 22) (h : k < Float.exactlyRepresentab
       rfl | rfl | rfl | rfl | rfl | rfl
   all_goals exact ⟨_, _, _, ofBits_unpack _ (by decide) (by decide) (by decide), by decide⟩
 
-/-- The value `M₁ × 2 ^ E₁ / (M₂ × 2 ^ E₂)` written as `M₁ × 2 ^ sh` over `M₂`, in units of
-`2 ^ (E₁ - E₂ - sh)`. -/
 theorem div_value {M₁ M₂ v₁ v₂ : Nat} {E₁ E₂ : Int} (sh : Nat)
     (h₁ : M₁ * (powSplit 2 E₁).1 = v₁ * (powSplit 2 E₁).2) (h₂ : M₂ * (powSplit 2 E₂).1 = v₂ * (powSplit 2 E₂).2) :
     M₁ * 2 ^ sh * (powSplit 2 (E₁ - E₂ - sh)).1 * v₂ = v₁ * M₂ * (powSplit 2 (E₁ - E₂ - sh)).2 := by
@@ -872,7 +784,6 @@ theorem div_value {M₁ M₂ v₁ v₂ : Nat} {E₁ E₂ : Int} (sh : Nat)
     _ = (v₁ * a2) * M₂ * x2 * f2 * g2 := by rw [h₁]
     _ = v₁ * M₂ * x2 * (a2 * f2 * g2) := by ac_rfl
 
-/-- The value `M₁ × 2 ^ E₁ × M₂ × 2 ^ E₂`, as `M₁ × M₂` in units of `2 ^ (E₁ + E₂)`. -/
 theorem mul_value {M₁ M₂ v₁ v₂ : Nat} {E₁ E₂ : Int}
     (h₁ : M₁ * (powSplit 2 E₁).1 = v₁ * (powSplit 2 E₁).2) (h₂ : M₂ * (powSplit 2 E₂).1 = v₂ * (powSplit 2 E₂).2) :
     M₁ * M₂ * (powSplit 2 (E₁ + E₂)).1 = v₁ * v₂ * (powSplit 2 (E₁ + E₂)).2 := by
@@ -893,7 +804,6 @@ theorem mul_value {M₁ M₂ v₁ v₂ : Nat} {E₁ E₂ : Int}
     _ = (v₁ * a2) * (v₂ * f2) * x2 := by rw [h₁, h₂]
     _ = v₁ * v₂ * x2 * (a2 * f2) := by ac_rfl
 
-/-- The value of the float a positive integer below `2 ^ 53` reads as. -/
 theorem toFloat_value (m : Nat) (hm53 : m < 2 ^ 53) :
     m * 2 ^ (52 - m.log2) * (powSplit 2 ((m.log2 : Int) - 52)).1 = m * (powSplit 2 ((m.log2 : Int) - 52)).2 := by
   have hL : m.log2 ≤ 52 := by
@@ -902,8 +812,6 @@ theorem toFloat_value (m : Nat) (hm53 : m < 2 ^ 53) :
     · have := (Nat.log2_lt h).mpr hm53; omega
   rw [show (m.log2 : Int) - 52 = -((52 - m.log2 : Nat) : Int) by omega, powSplit_neg_nat]
   simp
-
-/-! ## `Float.ofScientific` rounds to nearest -/
 
 theorem div_toBits (a b : Float) : (a / b).toBits = UInt64.ofBitVec (UnpackedFloat.pack Format.binary64
     (UnpackedFloat.div Format.binary64 a.toModel.unpack b.toModel.unpack)) := rfl
@@ -920,8 +828,6 @@ namespace ExactJSON
 
 open FloatText Float.Model Float.Model.UnpackedFloat
 
-/-- Lean's `Float.ofScientific` rounds to nearest, ties to even: it reads every decimal in the
-rounding interval of a positive finite float as that float. -/
 theorem ofScientificRounds : OfScientificRounds := by
   intro x M e m q hx hd hM hr
   apply toBits_inj

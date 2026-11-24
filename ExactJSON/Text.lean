@@ -2,19 +2,10 @@ module
 
 public import ExactJSON.Render
 
-/-! # The characters of a text
-
-The renderer appends to a string it is given; these lemmas say what it appends, as lists of
-characters: a string is its escaped characters between quotes, an array its items' texts between
-brackets, separated by commas, and a table its members' likewise. The reader's proofs work with
-these lists.
--/
-
 @[expose] public section
 
 namespace ExactJSON
 
-/-- The escaped characters of a string's contents, as `pushChar` writes each one. -/
 def escapeList (cs : List Char) : List Char := cs.flatMap fun c => (pushChar "" c).toList
 
 theorem escapeList_nil : escapeList [] = [] := by simp [escapeList]
@@ -93,10 +84,8 @@ theorem renderMembers_toList (out : String) : (members : List (String × Value))
 
 end
 
-/-- The texts of some items, separated by commas. -/
 def itemsText (items : List Value) : List Char := (renderItems "" items).toList
 
-/-- The texts `"key":value` of some members, separated by commas. -/
 def membersText (members : List (String × Value)) : List Char := (renderMembers "" members).toList
 
 theorem text_null : (render .null).toList = ['n', 'u', 'l', 'l'] := by decide
@@ -132,7 +121,6 @@ theorem itemsText_cons (v w : Value) (rest : List Value) :
   rw [h]
   simp [String.toList_push, render]
 
-/-- The text `"key":value` of a member. -/
 def memberText (key : String) (v : Value) : List Char :=
   '"' :: (escapeList key.toList ++ '"' :: ':' :: (render v).toList)
 

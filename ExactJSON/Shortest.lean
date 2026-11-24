@@ -2,23 +2,11 @@ module
 
 public import ExactJSON.Float
 
-/-! # The shortest decimal of a float reads back as it
-
-`FloatText.shortest x`, for a finite nonzero `x = m × 2^e`, gives a decimal `d × 10^k` inside the
-interval of reals that round to `x`: the half-ulp interval, its ends included when `m` is even
-(`fits`, at the scale `scale e k`). These lemmas show it always gives one: the decimal exponent
-it starts from is exact, 17 digits always fit, and the search and the trailing zeros it removes
-keep the decimal inside the interval. A decimal inside the interval is nonzero, and its digits
-and exponent put it between `10 ^ -324` and `10 ^ 309` (`interval_bounds`).
--/
-
 public section
 
 namespace ExactJSON
 
 namespace FloatText
-
-/-! ## Powers of ten and two as fractions -/
 
 theorem powSplit_pos (a : Nat) (ha : 0 < a) (k : Int) : 0 < (powSplit a k).1 ∧ 0 < (powSplit a k).2 := by
   unfold powSplit
@@ -26,7 +14,6 @@ theorem powSplit_pos (a : Nat) (ha : 0 < a) (k : Int) : 0 < (powSplit a k).1 ∧
   · exact ⟨Nat.pow_pos ha, Nat.one_pos⟩
   · exact ⟨Nat.one_pos, Nat.pow_pos ha⟩
 
-/-- `a ^ (k₁ + k₂) = a ^ k₁ × a ^ k₂`, as fractions. -/
 theorem powSplit_add (a : Nat) (k₁ k₂ : Int) :
     (powSplit a (k₁ + k₂)).1 * ((powSplit a k₁).2 * (powSplit a k₂).2) =
       (powSplit a k₁).1 * (powSplit a k₂).1 * (powSplit a (k₁ + k₂)).2 := by
@@ -39,7 +26,6 @@ theorem powSplit_add (a : Nat) (k₁ k₂ : Int) :
     | (rw [← Nat.pow_add, ← Nat.pow_add]; congr 1; omega)
     | (rw [Nat.mul_comm, ← Nat.pow_add]; congr 1; omega)
 
-/-- `a ^ k ≤ a ^ k'` for `k ≤ k'`, as fractions. -/
 theorem powSplit_mono (a : Nat) (ha : 0 < a) {k k' : Int} (hk : k ≤ k') :
     (powSplit a k).1 * (powSplit a k').2 ≤ (powSplit a k').1 * (powSplit a k).2 := by
   have h := powSplit_add a k (k' - k)
@@ -51,7 +37,6 @@ theorem powSplit_mono (a : Nat) (ha : 0 < a) {k k' : Int} (hk : k ≤ k') :
     simp only [hk0, ↓reduceIte]
   rw [hs] at h
   simp only [Nat.mul_one] at h
-  -- `a ^ k' × d = a ^ k × a ^ j × d'`, and `a ^ j ≥ 1`
   have hj : 1 ≤ a ^ (k' - k).toNat := Nat.pow_pos ha
   calc (powSplit a k).1 * (powSplit a k').2
       ≤ (powSplit a k).1 * a ^ (k' - k).toNat * (powSplit a k').2 := by
@@ -59,14 +44,12 @@ theorem powSplit_mono (a : Nat) (ha : 0 < a) {k k' : Int} (hk : k ≤ k') :
         exact Nat.mul_le_mul_left _ (Nat.le_mul_of_pos_left _ hj)
     _ = (powSplit a k').1 * (powSplit a k).2 := by rw [← h]
 
-/-- `tenPowLe k m e` says `10 ^ k ≤ m × 2 ^ e`; it holds for smaller `k` too. -/
 theorem tenPowLe_mono {k k' : Int} {m : Nat} {e : Int} (hk : k ≤ k') (h : tenPowLe k' m e = true) :
     tenPowLe k m e = true := by
   unfold tenPowLe at h ⊢
   simp only [decide_eq_true_eq] at h ⊢
   have hm := powSplit_mono 10 (by decide) hk
   have hpos := (powSplit_pos 10 (by decide) k').2
-  -- multiply the goal by the denominator of `10 ^ k'`
   refine Nat.le_of_mul_le_mul_right ?_ hpos
   calc (powSplit 10 k).1 * (powSplit 2 e).2 * (powSplit 10 k').2
       = (powSplit 10 k).1 * (powSplit 10 k').2 * (powSplit 2 e).2 := by ac_rfl
@@ -74,8 +57,6 @@ theorem tenPowLe_mono {k k' : Int} {m : Nat} {e : Int} (hk : k ≤ k') (h : tenP
     _ = (powSplit 10 k').1 * (powSplit 2 e).2 * (powSplit 10 k).2 := by ac_rfl
     _ ≤ m * (powSplit 2 e).1 * (powSplit 10 k').2 * (powSplit 10 k).2 := Nat.mul_le_mul_right _ h
     _ = m * (powSplit 2 e).1 * (powSplit 10 k).2 * (powSplit 10 k').2 := by ac_rfl
-
-/-! ## The decimal exponent is exact -/
 
 theorem lowerExponent_spec (m : Nat) (e : Int) : ∀ (n : Nat) (k : Int), tenPowLe (k - n) m e = true →
     tenPowLe (lowerExponent m e n k) m e = true ∧ k - n ≤ lowerExponent m e n k ∧
@@ -107,8 +88,6 @@ theorem raiseExponent_spec (m : Nat) (e : Int) : ∀ (n : Nat) (k : Int), tenPow
     · rename_i hk
       exact ⟨h1, by simpa using hk⟩
 
-/-- The estimate of `⌊log₁₀ 2^n⌋` is off by less than four either way, for every binary exponent
-of a finite float: `10 ^ (k - 4) ≤ 2 ^ n` and `2 ^ (n + 1) ≤ 10 ^ (k + 5)`. -/
 def estimateBrackets (n : Int) : Bool :=
   let k := (n * 78913) / 262144
   let (tn, td) := powSplit 10 (k - 4)
@@ -117,7 +96,6 @@ def estimateBrackets (n : Int) : Bool :=
   let (bn', bd') := powSplit 2 (n + 1)
   tn * bd ≤ bn * td && bn' * td' ≤ tn' * bd'
 
-/-- `estimateBrackets` for the `count` exponents from `-1074`. -/
 def allBrackets : Nat → Bool
   | 0 => true
   | i + 1 => estimateBrackets ((i : Int) - 1074) && allBrackets i
@@ -146,7 +124,6 @@ theorem estimateBrackets_of (n : Int) (h1 : -1074 ≤ n) (h2 : n ≤ 1023) : est
 theorem powSplit_nat (a : Nat) (L : Nat) : powSplit a (L : Int) = (a ^ L, 1) := by
   simp [powSplit]
 
-/-- `2 ^ (L + e) = 2 ^ L × 2 ^ e`, as a fraction of `2 ^ e`'s. -/
 theorem powSplit_two_add (L : Nat) (e : Int) :
     (powSplit 2 (L + e)).1 * (powSplit 2 e).2 = 2 ^ L * (powSplit 2 e).1 * (powSplit 2 (L + e)).2 := by
   have h := powSplit_add 2 L e
@@ -190,7 +167,6 @@ theorem tenPowLe_false_of_lt (k : Int) (m L : Nat) (e : Int) (hL : m < 2 ^ L)
     _ ≤ (powSplit 10 k).1 * (powSplit 2 (L + e)).2 * (powSplit 2 e).2 := Nat.mul_le_mul_right _ h
     _ = (powSplit 10 k).1 * (powSplit 2 e).2 * (powSplit 2 (L + e)).2 := by ac_rfl
 
-/-- `decimalExponent m e` is `⌊log₁₀ (m × 2 ^ e)⌋`: `10 ^ E ≤ m × 2 ^ e < 10 ^ (E + 1)`. -/
 theorem decimalExponent_spec (m : Nat) (e : Int) (hm : 0 < m) (h1 : -1074 ≤ (Nat.log2 m : Int) + e)
     (h2 : (Nat.log2 m : Int) + e ≤ 1023) :
     tenPowLe (decimalExponent m e) m e = true ∧ tenPowLe (decimalExponent m e + 1) m e = false := by
@@ -218,8 +194,6 @@ theorem decimalExponent_spec (m : Nat) (e : Int) (hm : 0 < m) (h1 : -1074 ≤ (N
   · rw [show lowerExponent m e 4 k0 + ↑(4 : Nat) + 1 = k0 + 5 by omega]
     exact hi
 
-/-! ## A candidate fits the rounding interval, and one exists when the interval is wide -/
-
 theorem candidate_fits {m : Nat} {e : Int} {lc incl : Bool} {k : Int} {d : Nat}
     (h : candidate m e lc incl k = some d) :
     fits (roundingInterval m lc).1 (roundingInterval m lc).2.2 (scale e k).1 (scale e k).2 incl d = true := by
@@ -238,8 +212,6 @@ theorem candidate_fits {m : Nat} {e : Int} {lc incl : Bool} {k : Int} {d : Nat}
     cases h; exact h1
   · cases h
 
-/-- A candidate exists when, in units of `10 ^ k`, the interval reaches more than half a unit on
-each side of `x`, or more than a unit above it. -/
 theorem candidate_isSome {m : Nat} {e : Int} {lc incl : Bool} {k : Int} (hm : 0 < m)
     (hwide : let (low, x, high) := roundingInterval m lc
       let (a, b) := scale e k
@@ -261,7 +233,6 @@ theorem candidate_isSome {m : Nat} {e : Int} {lc incl : Bool} {k : Int} (hm : 0 
     obtain ⟨h1, h2, h3⟩ := hr
     split at h1 <;> omega
   simp only at hwide ha hb
-  -- the two candidates, as multiples of `b`
   have hdiv := Nat.div_mul_le_self (x * a) b
   have hlt := Nat.lt_div_mul_add (a := x * a) hb
   have fits_of : ∀ d, low * a < d * b → d * b < high * a → fits low high a b incl d = true := by
@@ -276,7 +247,6 @@ theorem candidate_isSome {m : Nat} {e : Int} {lc incl : Bool} {k : Int} (hm : 0 
   have hsub2 : (high - x) * a = high * a - x * a := Nat.sub_mul _ _ _
   rw [hsub1, hsub2] at hwide
   have hd1b : (d0 + 1) * b = d0 * b + b := Nat.succ_mul _ _
-  -- one of `d0` and `d0 + 1` fits
   have : fits low high a b incl d0 = true ∨ fits low high a b incl (d0 + 1) = true := by
     rcases hwide with ⟨w1, w2⟩ | w
     · by_cases hr2 : 2 * (x * a - d0 * b) ≤ b
@@ -293,15 +263,10 @@ theorem candidate_isSome {m : Nat} {e : Int} {lc incl : Bool} {k : Int} (hm : 0 
   · cases fits low high a b incl (d0 + 1) <;> simp only [h0] <;> (repeat' split) <;> simp
   · cases fits low high a b incl d0 <;> simp only [h1] <;> (repeat' split) <;> simp
 
-/-! ## Seventeen digits always fit -/
-
-/-- At `10 ^ (E - 16)`, for `10 ^ E ≤ M × 2 ^ e`, a unit is smaller than `c` quarter-units of
-`2 ^ e` whenever `4 M < c × 10 ^ 16`. -/
 theorem scale_wide (M : Nat) (e E : Int) (hE : tenPowLe E M e = true) (c : Nat) (hc : M * 4 < c * 10 ^ 16) :
     (scale e (E - 16)).2 < c * (scale e (E - 16)).1 := by
   unfold tenPowLe at hE
   simp only [decide_eq_true_eq] at hE
-  -- the fractions: `2 ^ e = 4 × 2 ^ (e - 2)` and `10 ^ E = 10 ^ 16 × 10 ^ (E - 16)`
   have h2 := powSplit_add 2 2 (e - 2)
   rw [show (2 : Int) + (e - 2) = e by omega, show ((2 : Int)) = ((2 : Nat) : Int) by rfl, powSplit_nat] at h2
   have h10 := powSplit_add 10 16 (E - 16)
@@ -333,8 +298,6 @@ theorem scale_wide (M : Nat) (e E : Int) (hE : tenPowLe E M e = true) (c : Nat) 
       Nat.mul_lt_mul_of_pos_right hc (Nat.mul_pos (Nat.mul_pos (Nat.mul_pos p10.2 p2.1) hBd) hTd)
     _ = c * (a2 * a10) * ((powSplit 2 e).2 * (powSplit 10 E).2 * 10 ^ 16) := by ac_rfl
 
-/-! ## Moving trailing zeros into the exponent keeps a decimal in the interval -/
-
 theorem fits_scale (low high : Nat) (e k : Int) (incl : Bool) (d j : Nat) :
     fits low high (scale e k).1 (scale e k).2 incl (d * 10 ^ j) =
       fits low high (scale e (k + j)).1 (scale e (k + j)).2 incl d := by
@@ -352,7 +315,6 @@ theorem fits_scale (low high : Nat) (e k : Int) (incl : Bool) (d j : Nat) :
   obtain ⟨b10, a10⟩ := q
   obtain ⟨b10', a10'⟩ := q'
   simp only at h10 pa pa' ⊢
-  -- every comparison scales by `a10` on one side and `a10'` on the other
   have key : ∀ y : Nat, (y * (a2 * a10)) * a10' = (y * (a2 * a10')) * a10 := fun y => by ac_rfl
   have keyv : (d * 10 ^ j * (b2 * b10)) * a10' = (d * (b2 * b10')) * a10 := by
     calc (d * 10 ^ j * (b2 * b10)) * a10' = d * b2 * (b10 * 10 ^ j * a10') := by ac_rfl
@@ -412,8 +374,6 @@ theorem searchDigits_spec (cand : Nat → Bool) : ∀ (n lo hi : Nat), cand hi =
     · have : lo = hi := by omega
       rw [this]; exact h
 
-/-! ## The shortest decimal of a finite float is in its interval -/
-
 theorem decompose_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M : Nat) (e : Int)
     (hd : decompose x = (neg, M, e)) :
     M < 2 ^ 53 ∧ (M ≠ 0 → -1074 ≤ (Nat.log2 M : Int) + e ∧ (Nat.log2 M : Int) + e ≤ 1023) := by
@@ -440,7 +400,6 @@ theorem decompose_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M :
     have : x.toBits.toNat / 2 ^ 52 % 2 ^ 11 ≤ 2046 := by omega
     omega
 
-/-- The shortest decimal of a finite nonzero float lies in its rounding interval. -/
 theorem shortest_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M : Nat) (e : Int)
     (hd : decompose x = (neg, M, e)) (hM : M ≠ 0) :
     ∃ dd : Decimal, shortest x = some dd ∧ dd.negative = neg ∧
@@ -453,7 +412,6 @@ theorem shortest_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M : 
   generalize hlc : (decide (M = 2 ^ 52) && decide (e > -1074)) = lc
   generalize hincl : (M % 2 == 0) = incl
   generalize hbig : decimalExponent M e = big at hE
-  -- seventeen digits always fit
   have h17 : (candidate M e lc incl (big - (17 : Nat) + 1)).isSome = true := by
     apply candidate_isSome (Nat.pos_of_ne_zero hM)
     rw [show big - ((17 : Nat) : Int) + 1 = big - 16 by omega]
@@ -501,20 +459,15 @@ theorem shortest_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M : 
     rw [hj2]
     exact hf
 
-/-! ## A decimal in the interval has a bounded exponent -/
-
-/-- The ends of `fits`, as inequalities. -/
 theorem fits_le {low high a b : Nat} {incl : Bool} {d : Nat} (h : fits low high a b incl d = true) :
     low * a ≤ d * b ∧ d * b ≤ high * a := by
   unfold fits at h
   simp only [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq] at h
   omega
 
-/-- `scale` unfolded. -/
 theorem scale_eq (e q : Int) : scale e q =
     ((powSplit 2 (e - 2)).1 * (powSplit 10 q).2, (powSplit 2 (e - 2)).2 * (powSplit 10 q).1) := rfl
 
-/-- `10 ^ (j + q) ≤ y × 2 ^ (e - 2)` when `10 ^ j ≤ m` and `m × 10 ^ q ≤ y × 2 ^ (e - 2)`. -/
 theorem tenPowLe_of_scale (j m y : Nat) (e q : Int) (hm : 10 ^ j ≤ m)
     (h : m * (scale e q).2 ≤ y * (scale e q).1) : tenPowLe (j + q) y (e - 2) = true := by
   have hadd := powSplit_add 10 j q
@@ -540,7 +493,6 @@ theorem tenPowLe_of_scale (j m y : Nat) (e q : Int) (hm : 10 ^ j ≤ m)
     _ ≤ y * (p1 * t2) * T2 := Nat.mul_le_mul_right _ h
     _ = y * p1 * T2 * t2 := by ac_rfl
 
-/-- `y × 2 ^ (e - 2) < 10 ^ (j + q)` when `m < 10 ^ j` and `y × 2 ^ (e - 2) ≤ m × 10 ^ q`. -/
 theorem tenPowLe_false_of_scale (j m y : Nat) (e q : Int) (hm : m < 10 ^ j)
     (h : y * (scale e q).1 ≤ m * (scale e q).2) : tenPowLe (j + q) y (e - 2) = false := by
   have hadd := powSplit_add 10 j q
@@ -568,19 +520,14 @@ theorem tenPowLe_false_of_scale (j m y : Nat) (e q : Int) (hm : m < 10 ^ j)
     _ = p2 * (T1 * t2) := by rw [hadd]
     _ = T1 * p2 * t2 := by ac_rfl
 
-/-- `2 ^ 1024 ≤ 10 ^ 309`: the largest float is below `10 ^ 309`. -/
 theorem two_pow_le_ten_pow : 2 ^ 1024 ≤ 10 ^ 309 := by decide +kernel
-/-- `2 ^ 1075 ≤ 10 ^ 325`: half the least float is above `10 ^ -325`. -/
 theorem two_pow_le_ten_pow' : 2 ^ 1075 ≤ 10 ^ 325 := by decide +kernel
 
-/-- `a ^ -L` for `L > 0`, as a fraction. -/
 theorem powSplit_neg (a L : Nat) (hL : 0 < L) : powSplit a (-(L : Int)) = (1, a ^ L) := by
   unfold powSplit
   simp only [show ¬ (0 ≤ -(L : Int)) by omega, ite_false, Int.neg_neg, Int.toNat_natCast]
 
 set_option exponentiation.threshold 1100 in
-/-- A decimal in the rounding interval of a finite nonzero float is nonzero, and its digits and
-exponent keep it between `10 ^ -324` and `10 ^ 309`. -/
 theorem interval_bounds (M : Nat) (e : Int) (hM : M ≠ 0) (h1 : -1074 ≤ (Nat.log2 M : Int) + e)
     (h2 : (Nat.log2 M : Int) + e ≤ 1023) (lc incl : Bool) (m : Nat) (q : Int)
     (h : fits (roundingInterval M lc).1 (roundingInterval M lc).2.2 (scale e q).1 (scale e q).2 incl m = true) :
@@ -609,8 +556,7 @@ theorem interval_bounds (M : Nat) (e : Int) (hM : M ≠ 0) (h1 : -1074 ≤ (Nat.
     · have := mt (Nat.length_toDigits_le_iff (b := 10) (n := m) (k := n - 1) (by decide) (by omega)).mpr (by omega)
       omega
   refine ⟨hm0, ?_, ?_⟩
-  · -- below `10 ^ -324` the decimal is less than the interval's lower end
-    apply Classical.byContradiction
+  · apply Classical.byContradiction
     intro hlt
     have hf := tenPowLe_false_of_scale n m _ e q hmlt hlo
     have ht : tenPowLe (-325) (roundingInterval M lc).1 (e - 2) = true := by
@@ -622,8 +568,7 @@ theorem interval_bounds (M : Nat) (e : Int) (hM : M ≠ 0) (h1 : -1074 ≤ (Nat.
       exact Nat.le_trans hmono (Nat.mul_le_mul_left _ two_pow_le_ten_pow')
     have := tenPowLe_mono (k := (n : Int) + q) (by omega) ht
     rw [hf] at this; cases this
-  · -- above `10 ^ 309` the decimal is more than the interval's upper end
-    apply Classical.byContradiction
+  · apply Classical.byContradiction
     intro hlt
     have ht := tenPowLe_of_scale (n - 1) m _ e q hmge hhi
     have ht' := tenPowLe_mono (k := ((309 : Nat) : Int)) (by omega) ht
@@ -635,7 +580,6 @@ theorem interval_bounds (M : Nat) (e : Int) (hM : M ≠ 0) (h1 : -1074 ≤ (Nat.
       simp only [Nat.mul_one] at hmono ⊢
       exact Nat.le_trans hmono (Nat.mul_le_mul_right _ two_pow_le_ten_pow)
     rw [hf] at ht'; cases ht'
-
 
 end FloatText
 

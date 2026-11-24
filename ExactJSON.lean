@@ -9,8 +9,3 @@ public import ExactJSON.DateTime
 public import ExactJSON.Derive
 public import ExactJSON.Literal
 public import ExactJSON.LeanJson
-
-/-! # ExactJSON
-
-Canonical, strictly typed JSON. The laws are the headlines of `Challenge.lean`.
--/

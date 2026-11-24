@@ -4,24 +4,12 @@ public import ExactJSON.Shortest
 public import ExactJSON.FloatBits
 public import ExactJSON.Fixed
 
-/-! # A float's canonical text is read back as its decimal
-
-`Rfc8259.numberValue` reads the canonical text of a decimal `D × 10^X` (`Decimal.toFloatText`) as
-the float that `Rfc8259.floatOf?` makes of the same decimal, written `(D × 10^j) × 10^(X - j)`.
-With `shortest_spec`, this reduces `FloatsReadBack` to one property of Lean's `Float.ofScientific`,
-`OfScientificRounds`: it reads every decimal in the rounding interval of a positive finite float as
-that float (it rounds to nearest, ties to even). `floatsReadBack` derives `FloatsReadBack` from it,
-and with it the two headlines `read_render` and `decode_encode` (`read_render_of_rounds`,
-`decode_encode_of_rounds`). `ExactJSON/OfScientific.lean` proves `OfScientificRounds`.
--/
-
 public section
 
 namespace ExactJSON
 
 universe u
 
-/-- What `numberValue` makes of a float's sign, digits and decimal exponent. -/
 def floatResult (negative : Bool) (m : Nat) (q : Int) : Except String Value :=
   match Rfc8259.floatOf? negative m q with
   | some x => .ok (.float x)
@@ -182,8 +170,6 @@ theorem zeros_digits (z : Nat) : ∀ c ∈ Decimal.zeros z, c.isDigit = true := 
   rw [h.2]
   rfl
 
-/-- `numberValue` reads the canonical text of a nonzero decimal as `floatOf?` makes the same
-decimal, written with `j` more zeros. -/
 theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
     (hs : (d.exponent + ((Nat.toDigits 10 d.digits).length : Int) - 1).natAbs < 400) :
     ∃ j : Nat, Rfc8259.numberValue d.toFloatText.toList =
@@ -205,8 +191,7 @@ theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
   by_cases h1 : -4 ≤ sci ∧ sci < 16
   · simp only [h1, and_self, ite_true]
     by_cases h2 : sci ≥ (n : Int) - 1
-    · -- digits, zeros, and `.0`
-      simp only [h2, ite_true]
+    · simp only [h2, ite_true]
       refine ⟨(sci - (n - 1)).toNat + 1, ?_⟩
       have h := numberValue_fixed d.negative (c0 :: ds' ++ Decimal.zeros (sci - (n - 1)).toNat) ['0']
         (by simp) (by
@@ -225,8 +210,7 @@ theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
       · omega
     · simp only [h2, ite_false]
       by_cases h3 : 0 ≤ sci
-      · -- digits with the point inside
-        simp only [h3, ite_true]
+      · simp only [h3, ite_true]
         refine ⟨0, ?_⟩
         have hkn : sci.toNat + 1 < n := by omega
         have hlen : (List.drop (sci.toNat + 1) (c0 :: ds')).length = n - (sci.toNat + 1) := by
@@ -246,8 +230,7 @@ theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
         simp only [Nat.pow_zero, Nat.mul_one]
         congr 1
         omega
-      · -- `0.`, zeros, digits
-        simp only [h3, ite_false]
+      · simp only [h3, ite_false]
         refine ⟨0, ?_⟩
         have h := numberValue_fixed d.negative ['0'] (Decimal.zeros ((-sci).toNat - 1) ++ c0 :: ds')
           (by simp) (by simp) (by simp) (by simp) (by
@@ -262,8 +245,7 @@ theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
         congr 1
         simp only [Decimal.zeros, List.length_replicate]
         omega
-  · -- scientific
-    simp only [h1, ite_false]
+  · simp only [h1, ite_false]
     simp only [List.take_succ_cons, List.take_zero, List.drop_succ_cons, List.drop_zero]
     by_cases h4 : n = 1
     · simp only [h4, ite_true]
@@ -299,12 +281,8 @@ theorem numberValue_toFloatText (d : Decimal) (hd : d.digits ≠ 0)
       simp only [List.length_cons] at hn
       omega
 
-/-! ## Every finite float reads back, if `Float.ofScientific` rounds to nearest -/
-
 open FloatText
 
-/-- `floatOf?` of a nonzero decimal whose exponent is in range is `Float.ofScientific`'s float,
-with its sign, when that is finite. -/
 theorem floatOf?_eq (neg : Bool) (m : Nat) (q : Int) (hm : m ≠ 0)
     (h1 : -324 ≤ ((Nat.toDigits 10 m).length : Int) + q) (h2 : ((Nat.toDigits 10 m).length : Int) + q ≤ 309) :
     Rfc8259.floatOf? neg m q =
@@ -314,23 +292,16 @@ theorem floatOf?_eq (neg : Bool) (m : Nat) (q : Int) (hm : m ≠ 0)
   simp only [hm, ite_false, show ¬ (((Nat.toDigits 10 m).length : Int) + q > 309) by omega,
     show ¬ (((Nat.toDigits 10 m).length : Int) + q < -324) by omega, Option.map]
 
-/-- Whether the decimal `m × 10^q` rounds to the positive float `M × 2^e` (the significand and
-binary exponent `decompose` gives): whether it lies in the interval of reals that round to it, to
-nearest with ties to an even significand. -/
 @[expose] def FloatText.roundsTo (M : Nat) (e : Int) (m : Nat) (q : Int) : Bool :=
   let lowerCloser := decide (M = 2 ^ 52) && decide (e > -1074)
   FloatText.fits (FloatText.roundingInterval M lowerCloser).1 (FloatText.roundingInterval M lowerCloser).2.2
     (FloatText.scale e q).1 (FloatText.scale e q).2 (M % 2 == 0) m
 
-
-/-- Lean's `Float.ofScientific` rounds to nearest, ties to even: it reads every decimal in the
-rounding interval of a positive finite float as that float. -/
 @[expose] def OfScientificRounds : Prop :=
   ∀ (x : Float) (M : Nat) (e : Int) (m : Nat) (q : Int), finiteFloat x = true →
     FloatText.decompose x = (false, M, e) → M ≠ 0 → FloatText.roundsTo M e m q = true →
     Float.ofScientific m (decide (q < 0)) q.natAbs = x
 
-/-- A float is read back when its text reads as a decimal that `floatOf?` makes it. -/
 theorem rereadFloat_of_numberValue {x : Float} {neg : Bool} {m : Nat} {q : Int}
     (h : Rfc8259.numberValue (floatText x).toList = floatResult neg m q) (hf : Rfc8259.floatOf? neg m q = some x) :
     Value.rereadFloat x = some (.float x) := by
@@ -339,15 +310,12 @@ theorem rereadFloat_of_numberValue {x : Float} {neg : Bool} {m : Nat} {q : Int}
   unfold floatResult
   rw [hf]
 
-/-- The text of a finite float is the text of its shortest decimal. -/
 theorem floatText_of_shortest {x : Float} {dd : Decimal} (h : shortest x = some dd) :
     floatText x = dd.toFloatText := by
   unfold floatText Float.toCanonical?
   rw [h]
   rfl
 
-/-- Every finite float is read back from its canonical text, if `Float.ofScientific` rounds to
-nearest. -/
 theorem floatsReadBack (rounds : OfScientificRounds) : FloatsReadBack := by
   intro x hx
   rcases hd : decompose x with ⟨neg, M, e⟩
@@ -401,12 +369,10 @@ theorem floatsReadBack (rounds : OfScientificRounds) : FloatsReadBack := by
     · have := rounds (-x) M e _ _ (finiteFloat_neg hx) (by rw [decompose_neg hx hd]; rfl) hM hround
       simp only [ite_true, this, neg_neg_of_finite hx, hx]
 
-/-- `read_render`, if `Float.ofScientific` rounds to nearest. -/
 theorem read_render_of_rounds (rounds : OfScientificRounds) (v : Value) (h : v.Valid) :
     Rfc8259.read? v.render = some v :=
   read_render_of_floats (floatsReadBack rounds) v h
 
-/-- `decode_encode`, if `Float.ofScientific` rounds to nearest. -/
 theorem decode_encode_of_rounds (rounds : OfScientificRounds) {α : Type u} [ToValue α] [FromValue α]
     (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
     decode (encode a) = .ok a :=

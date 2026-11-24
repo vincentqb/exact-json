@@ -2,18 +2,10 @@ module
 
 public import ExactJSON.Render
 
-/-! # A text holds no control character
-
-Every character `Value.render` writes is at U+0020 or above: each piece it appends is a literal,
-a digit, an escape or a character at U+0020 or above, since JSON's escaping writes the control
-characters below U+0020 as escapes. So a text is one line, for line feeds and carriage returns
-alike. -/
-
 public section
 
 namespace ExactJSON
 
-/-- Every character is at U+0020 or above. -/
 abbrev Printable (cs : List Char) : Prop := ∀ c ∈ cs, 0x20 ≤ c.toNat
 
 theorem printable_append {a b : List Char} (ha : Printable a) (hb : Printable b) : Printable (a ++ b) :=

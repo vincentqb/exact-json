@@ -2,14 +2,6 @@ module
 
 public import ExactJSON.Float
 
-/-! # The bits of a finite float
-
-Facts about the bit patterns of Lean's floats that reading floats back needs: a float is its bits
-(`toBits_inj`), negating a finite float flips its sign bit and nothing else (`neg_toBits`), so
-it keeps its significand and exponent and negating twice gives it back, and a finite float whose
-significand is zero is `0.0` or `-0.0`.
--/
-
 public section
 
 namespace ExactJSON
@@ -18,7 +10,6 @@ namespace FloatText
 
 open Float.Model Float.Model.UnpackedFloat
 
-/-- The bits of a binary64 pattern from its sign, exponent and fraction. -/
 theorem packComponents_toNat (s : Sign) (e : BitVec 11) (m : BitVec 52) :
     (packComponents Format.binary64 s e m).toNat = s.toBitVec.toNat * 2 ^ 63 + e.toNat * 2 ^ 52 + m.toNat := by
   unfold packComponents
@@ -30,7 +21,6 @@ theorem packComponents_toNat (s : Sign) (e : BitVec 11) (m : BitVec 52) :
 private theorem sign_neg_toNat (s : BitVec 1) : (-(Sign.ofBitVec s)).toBitVec.toNat = 1 - s.toNat := by
   revert s; decide
 
-/-- Negating a finite float flips its sign bit. -/
 theorem neg_toBits (x : Float) (hx : finiteFloat x = true) :
     (-x).toBits.toNat = (x.toBits.toNat + 2 ^ 63) % 2 ^ 64 := by
   have hdef : (-x).toBits = UInt64.ofBitVec (UnpackedFloat.pack Format.binary64
@@ -94,14 +84,12 @@ theorem neg_toBits (x : Float) (hx : finiteFloat x = true) :
       simp only [BitVec.toNat_ofNat]
       omega
 
-/-- A float is its bits. -/
 theorem toBits_inj {x y : Float} (h : x.toBits = y.toBits) : x = y := by
   cases x with | ofModel mx => cases y with | ofModel my =>
   cases mx; cases my
   simp only [Float.toBits] at h
   subst h; rfl
 
-/-- The negation of a finite float is finite. -/
 theorem finiteFloat_neg {x : Float} (hx : finiteFloat x = true) : finiteFloat (-x) = true := by
   have h := neg_toBits x hx
   unfold finiteFloat at hx ⊢
@@ -110,7 +98,6 @@ theorem finiteFloat_neg {x : Float} (hx : finiteFloat x = true) : finiteFloat (-
   rw [h]
   omega
 
-/-- Negating a finite float flips its sign and keeps its significand and exponent. -/
 theorem decompose_neg {x : Float} (hx : finiteFloat x = true) {s : Bool} {M : Nat} {e : Int}
     (hd : decompose x = (s, M, e)) : decompose (-x) = (!s, M, e) := by
   have h := neg_toBits x hx
@@ -131,7 +118,6 @@ theorem decompose_neg {x : Float} (hx : finiteFloat x = true) {s : Bool} {M : Na
     | (simp only [Prod.mk.injEq] at hd; obtain ⟨rfl, rfl, rfl⟩ := hd; rfl)
     | omega
 
-/-- Negating a finite float twice gives it back. -/
 theorem neg_neg_of_finite {x : Float} (hx : finiteFloat x = true) : -(-x) = x := by
   apply toBits_inj
   apply UInt64.toNat_inj.mp
@@ -139,7 +125,6 @@ theorem neg_neg_of_finite {x : Float} (hx : finiteFloat x = true) : -(-x) = x :=
   have := x.toBits.toNat_lt
   omega
 
-/-- A finite float whose significand is zero is a zero. -/
 theorem eq_zero_of_decompose {x : Float} {s : Bool} {e : Int} (hd : decompose x = (s, 0, e)) :
     x = if s then -0.0 else 0.0 := by
   have hlt := x.toBits.toNat_lt

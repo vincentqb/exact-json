@@ -7,8 +7,6 @@ public import ExactJSON.Cost
 public import ExactJSON.Fixed
 public import ExactJSON.OfScientific
 
-/-! # Proofs of the challenge's headlines, kills and witnesses -/
-
 public section
 
 namespace ExactJSON

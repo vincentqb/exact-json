@@ -2,65 +2,28 @@ module
 
 public import ExactJSON.Value
 
-/-!
-# JSON as RFC 8259 writes it, and the value it holds
-
-`Rfc8259.read? s` is the value that the JSON text `s` holds, or `none` when `s` is not read. It
-follows RFC 8259's grammar exactly (§2 to §7): whitespace only where the grammar has `ws`, the
-literals `true`, `false` and `null`, numbers without leading zeros, strings with the RFC's escapes,
-arrays and objects. What a JSON text holds is a value of this format, as follows.
-
-* A number is an integer when it has neither a fraction nor an exponent, as Python's `json`
-  reads it, and otherwise the float nearest it, which must be finite (§6 lets a reader limit the
-  range of numbers).
-* A string is its characters, a surrogate pair escaped as `\uD83D\uDE00` being one character
-  (§8.2). A surrogate escaped alone is not read: a `String` holds characters only.
-* An object, which is unordered (§4), is a table of its members sorted by key. An object in which
-  a key repeats is not read (§4 leaves its meaning to the reader).
-
-`Rfc8259.read s` also says why a text is not read, and where it stops.
-
-The reader is written for the reader of this file, not for speed, but it is linear in the text
-except for the arithmetic on a number's digits. Fuel bounds the nesting it reads: twice the text's
-size in bytes and two more, which no text uses up, since each unit spent reads a character.
--/
-
 @[expose] public section
 
 namespace ExactJSON
 
 namespace Rfc8259
 
-/-- What reading part of a text gives: a result and the rest of the text after it, or why the
-text is not read and the rest of the text from where reading stops. -/
 abbrev Reading (α : Type) := Except (String × List Char) (α × List Char)
 
-/-- Whether `c` is whitespace (`ws`, §2): a space, a horizontal tab, a line feed or a carriage
-return. -/
 def isWs (c : Char) : Bool := c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
-/-- The text past the whitespace at its front. -/
 def skipWs : List Char → List Char
   | c :: rest => if isWs c then skipWs rest else c :: rest
   | [] => []
 
-/-- Whether `c` is one of the characters numbers are written in (§6): a digit, `-`, `+`, `.`, `e`
-or `E`. In a JSON text a number is a longest run of them, since what may come before or after a
-number (whitespace, `[`, `,`, `:`, `]`, `}`) is none of them. -/
 def isNumberChar (c : Char) : Bool :=
   c.isDigit || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
 
-/-- The natural number that the decimal digits `ds` stand for. -/
 def digitsValue (ds : List Char) : Nat := Nat.ofDigitChars 10 ds 0
 
-/-- `digitsValue ds`, or `bound` if that is less. -/
 def digitsValueUpTo (bound : Nat) (ds : List Char) : Nat :=
   ds.foldl (fun n d => min (10 * n + (d.toNat - 48)) bound) 0
 
-/-- The float nearest `(-1)^negative × m × 10^q`, rounding to nearest with ties to even as
-`Float.ofScientific` does, or `none` when that is an infinity. A decimal exponent far out of range
-decides without its power of ten being computed: `10^(n+q-1) ≤ m × 10^q < 10^(n+q)` for the `n`
-digits of `m`, so beyond `10^309` the float is infinite, and below `10^-324` it is zero. -/
 def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
   let magnitude : Option Float :=
     if m = 0 then some 0.0
@@ -73,22 +36,15 @@ def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
   | some x => if finiteFloat x then some x else none
   | none => none
 
-/-- A number's sign: whether it starts with `-`, and the rest. -/
 def numberSign : List Char → Bool × List Char
   | '-' :: t => (true, t)
   | t => (false, t)
 
-/-- An exponent's sign: whether it is `-` (none, and `+`, are positive), and the rest. -/
 def exponentSign : List Char → Bool × List Char
   | '-' :: t => (true, t)
   | '+' :: t => (false, t)
   | t => (false, t)
 
-/-- The value of the number written as all of `token` (§6): `[ minus ] int [ frac ] [ exp ]`, where
-`int` is `0` or digits not starting with `0`, `frac` is `.` and digits, and `exp` is `e` or `E`, a
-sign or none, and digits. It is an integer when there is neither a fraction nor an exponent, and
-otherwise the float nearest it, if that is finite. An exponent is counted only up to the token's
-length and 400: one that large already makes the float infinite or zero (see `floatOf?`). -/
 def numberValue (token : List Char) : Except String Value :=
   let (negative, t) := numberSign token
   let (whole, t) := t.span Char.isDigit
@@ -125,17 +81,14 @@ def numberValue (token : List Char) : Except String Value :=
           | some x => .ok (.float x)
           | none => .error "a float beyond the range of binary64"
 
-/-- The value of a hexadecimal digit, either case. -/
 def hexValue? (c : Char) : Option Nat :=
   if '0' ≤ c && c ≤ '9' then some (c.toNat - 48)
   else if 'a' ≤ c && c ≤ 'f' then some (c.toNat - 87)
   else if 'A' ≤ c && c ≤ 'F' then some (c.toNat - 55) else none
 
-/-- The code unit that four hexadecimal digits write. -/
 def hex4? (a b c d : Char) : Option Nat := do
   return (← hexValue? a) * 4096 + (← hexValue? b) * 256 + (← hexValue? c) * 16 + (← hexValue? d)
 
-/-- The character that a backslash and `e` write, for the two-character escapes (§7). -/
 def unescape? : Char → Option Char
   | '"' => some '"'
   | '\\' => some '\\'
@@ -147,10 +100,6 @@ def unescape? : Char → Option Char
   | 't' => some '\t'
   | _ => none
 
-/-- A string's characters from just past its opening quote (§7), with `acc` the characters read
-before them, last first; and the rest past its closing quote. A character below U+0020 must be
-escaped. `\uXXXX` writes the character U+XXXX; a high surrogate so written must be followed by a
-low one, and the two write one character (§8.2). -/
 def chars : List Char → List Char → Reading (List Char)
   | [], _ => .error ("a string is not closed", [])
   | '"' :: rest, acc => .ok (acc.reverse, rest)
@@ -178,13 +127,10 @@ def chars : List Char → List Char → Reading (List Char)
     if c.val < 0x20 then .error ("a character below U+0020 must be escaped", c :: rest)
     else chars rest (c :: acc)
 
-/-- Whether no two neighbours in `members` have the same key. -/
 def neighboursDistinct : List (String × Value) → Bool
   | a :: b :: rest => a.1 != b.1 && neighboursDistinct (b :: rest)
   | _ => true
 
-/-- The table of an object's members, which is unordered (§4): the members sorted by key, or the
-key that repeats. -/
 def table (members : List (String × Value)) : Except String Value :=
   let sorted := members.mergeSort fun a b => decide (a.1 ≤ b.1)
   if neighboursDistinct sorted then .ok (.table sorted.toArray)
@@ -192,8 +138,6 @@ def table (members : List (String × Value)) : Except String Value :=
 
 mutual
 
-/-- The value at the front of `input`, which starts past any whitespace (§3), and the rest after
-it. -/
 def value : Nat → List Char → Reading Value
   | 0, input => .error ("nested deeper than the fuel", input)
   | fuel + 1, input =>
@@ -221,7 +165,6 @@ def value : Nat → List Char → Reading Value
         | .ok v => .ok (v, rest)
         | .error e => .error (e, input)
 
-/-- An array's elements (§5) from the next one, `acc` read so far, and the rest after its `]`. -/
 def elements : Nat → List Char → Array Value → Reading Value
   | 0, input, _ => .error ("nested deeper than the fuel", input)
   | fuel + 1, input, acc =>
@@ -233,7 +176,6 @@ def elements : Nat → List Char → Array Value → Reading Value
       | other => .error ("expected , or ]", other)
     | .error e => .error e
 
-/-- An object's members (§4) from the next one, `acc` read so far, and the rest after its `}`. -/
 def members : Nat → List Char → Array (String × Value) → Reading Value
   | 0, input, _ => .error ("nested deeper than the fuel", input)
   | fuel + 1, input, acc =>
@@ -259,8 +201,6 @@ def members : Nat → List Char → Array (String × Value) → Reading Value
 
 end
 
-/-- The value of the JSON text `s` (§2: whitespace, a value, whitespace), or why it is not read and
-the rest of the text from where reading stops. -/
 def read (s : String) : Except (String × List Char) Value :=
   match value (2 * s.utf8ByteSize + 2) (skipWs s.toList) with
   | .ok (v, rest) =>
@@ -269,7 +209,6 @@ def read (s : String) : Except (String × List Char) Value :=
     | other => .error ("expected the end of the text", other)
   | .error e => .error e
 
-/-- The value of the JSON text `s`, or `none` (see the module docstring). -/
 def read? (s : String) : Option Value := (read s).toOption
 
 end Rfc8259
