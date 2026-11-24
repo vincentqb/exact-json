@@ -55,9 +55,6 @@ def typeName : Value → String
   | .array _ => "array"
   | .table _ => "table"
 
-instance : Coe String Value := ⟨.string⟩
-instance : Coe Bool Value := ⟨.boolean⟩
-instance {n : Nat} : OfNat Value n := ⟨.integer n⟩
 
 end Value
 

@@ -3,7 +3,6 @@ module
 public import ExactJSON.ShortestCore
 public import ExactJSON.ReadBackExact
 public import ExactJSON.RenderInjective
-public import ExactJSON.LeanJson
 
 public section
 
@@ -225,13 +224,6 @@ theorem render_float (x : Float) (hx : finiteFloat x = true) :
     ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.IsShortest x := by
   obtain ⟨D, hs⟩ := shortest_isSome x hx
   exact ⟨D, by rw [render_float_text, floatText_of_shortest hs], shortest_isShortest x hx D hs⟩
-
-theorem floatToJson_finite (x : Float) (d : Decimal) (h : d.IsShortest x) :
-    floatToJson x = .num d.toJsonNumber := by
-  unfold floatToJson
-  rw [shortest_unique x d h]
-  unfold Decimal.toJsonNumber
-  by_cases hc : d.exponent < 0 <;> simp only [hc, ↓reduceIte]
 
 theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none :=
   parse_render_invalid_of v h

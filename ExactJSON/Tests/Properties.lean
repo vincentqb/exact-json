@@ -282,22 +282,9 @@ def dateLaws (seed count : Nat) : IO Unit := do
     for d in [DateTime.offsetDateTime dt, .localDateTime ⟨dt.date, dt.time⟩, .localDate dt.date,
         .localTime dt.time] do
       check (DateTime.parse? d.toString == some d) s!"date-time {d.toString}"
-    let ns : Int := genInt.run' (seed + i) % 300000000000000000000 - 60000000000000000000
-    match OffsetDateTime.ofUnixNanos? ns with
-    | some utc => check (utc.toUnixNanos == ns && utc.isValid) s!"unix {ns} → {utc.toString}"
-    | none => throw (IO.userError s!"unix {ns} is in range")
-
-def leanJsonLaws (seed count : Nat) : IO Unit := do
-  for i in [0:count] do
-    let v := (genValue 4).run' (seed + i)
-    if (v.render.splitOn "-0.0").length > 1 then continue
-    match Value.ofJson? v.toJson with
-    | .ok w => check (w == v) s!"ofJson? ∘ toJson changes {v.render} into {w.render}"
-    | .error e => throw (IO.userError s!"ofJson? fails on {v.render}: {e}")
 
 #eval valueLaws 1 4000 4
 #eval valueLaws 100000 300 7
 #eval typedLaws 2 500
 #eval instanceLaws 7 500
 #eval dateLaws 3 2000
-#eval leanJsonLaws 4 2000

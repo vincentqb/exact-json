@@ -8,14 +8,11 @@ public import ExactJSON.Fixed
 public import ExactJSON.OfScientific
 public import ExactJSON.Write
 public import ExactJSON.CodecLaws
-public import ExactJSON.LeanJsonLaws
 public import ExactJSON.DateTimeLaws
 public import ExactJSON.ShortestLaws
 public import ExactJSON.ShapesCodec
 public import ExactJSON.LinesLaws
 public import ExactJSON.ApiLaws
-public import ExactJSON.LiteralExamples
-public import ExactJSON.CanonLaws
 
 public section
 
@@ -68,10 +65,6 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
 theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v :=
   Value.render_eq_write v
 
-theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
-    (Value.float x).render = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
-  simp [Value.render, Value.renderTo, floatText, Float.toCanonical?, FloatText.shortest, hx]
-
 theorem render_composes_rejects_null :
     ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write (fun x => (fun (_ : Value) => "null") (.float x)) v := by
   intro h
@@ -86,14 +79,6 @@ theorem render_float_rejects_empty :
   have := toFloatText_toList_ne_nil d
   rw [← hd] at this
   exact this rfl
-
-theorem render_nonfinite_rejects_zero :
-    ¬ ∀ (x : Float), finiteFloat x = false →
-      (fun (_ : Value) => "0.0") (.float x) = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
-  intro h
-  have := h Float.nan (by decide +kernel)
-  rw [show Float.nan.isNaN = true by decide +kernel] at this
-  simp at this
 
 theorem parse_render_invalid_rejects_null :
     ¬ ∀ (v : Value), ¬ v.Valid →

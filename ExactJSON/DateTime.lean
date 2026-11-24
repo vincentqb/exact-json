@@ -2,8 +2,6 @@ module
 
 public import ExactJSON.Codec
 public import ExactJSON.Calendar
-public import Std.Time.DateTime.Timestamp
-import Std.Time.Zoned
 
 @[expose] public section
 
@@ -39,11 +37,6 @@ protected def DateTime.toString : DateTime → String
   | .localDate d => d.toString
   | .localTime t => t.toString
 
-instance : ToString LocalDate := ⟨LocalDate.toString⟩
-instance : ToString LocalTime := ⟨LocalTime.toString⟩
-instance : ToString LocalDateTime := ⟨LocalDateTime.toString⟩
-instance : ToString OffsetDateTime := ⟨OffsetDateTime.toString⟩
-instance : ToString DateTime := ⟨DateTime.toString⟩
 
 namespace DateText
 
@@ -149,54 +142,11 @@ instance : FromValue LocalDate where
     | .localDate d => pure d
     | _ => typeMismatch "a date (YYYY-MM-DD)" v
 
-
 instance : ToValue LocalTime := ⟨fun t => .string t.toString⟩
 instance : FromValue LocalTime where
   fromValue? v := do
     match ← (fromValue? v : Except String DateTime) with
     | .localTime t => pure t
     | _ => typeMismatch "a time of day (HH:MM:SS)" v
-
-def LocalDate.toDaysSinceEpoch (d : LocalDate) : Int :=
-  let y : Int := (d.year : Int) - (if d.month ≤ 2 then 1 else 0)
-  let era := y / 400
-  let yoe := y - era * 400
-  let m : Int := d.month
-  let doy := (153 * (if m > 2 then m - 3 else m + 9) + 2) / 5 + (d.day : Int) - 1
-  let doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
-  era * 146097 + doe - 719468
-
-def LocalDate.ofDaysSinceEpoch? (days : Int) : Option LocalDate :=
-  let z := days + 719468
-  let era := z / 146097
-  let doe := z - era * 146097
-  let yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
-  let doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
-  let mp := (5 * doy + 2) / 153
-  let day := doy - (153 * mp + 2) / 5 + 1
-  let month := if mp < 10 then mp + 3 else mp - 9
-  let year := yoe + era * 400 + (if month ≤ 2 then 1 else 0)
-  if 0 ≤ year && year ≤ 9999 then some { year := year.toNat, month := month.toNat, day := day.toNat }
-  else none
-
-def OffsetDateTime.ofUnixNanos? (ns : Int) : Option OffsetDateTime := do
-  let perDay : Int := 86400 * 1000000000
-  let days := ns / perDay
-  let rest := (ns - days * perDay).toNat
-  let secs := rest / 1000000000
-  return { date := ← LocalDate.ofDaysSinceEpoch? days
-           time := { hour := secs / 3600, minute := secs / 60 % 60, second := secs % 60,
-                     nanosecond := rest % 1000000000 } }
-
-def OffsetDateTime.toUnixNanos (dt : OffsetDateTime) : Int :=
-  let secs : Int := dt.date.toDaysSinceEpoch * 86400 + dt.time.hour * 3600 +
-    dt.time.minute * 60 + dt.time.second - dt.offsetMinutes * 60
-  secs * 1000000000 + dt.time.nanosecond
-
-def OffsetDateTime.now : IO OffsetDateTime := do
-  let ns := (← Std.Time.Timestamp.now).toNanosecondsSinceUnixEpoch.val
-  match OffsetDateTime.ofUnixNanos? ns with
-  | some dt => return dt
-  | none => throw (IO.userError s!"the clock reads {ns} ns after 1970, outside the years 0 to 9999")
 
 end ExactJSON

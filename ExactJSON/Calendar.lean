@@ -91,11 +91,6 @@ def DateTime.text : DateTime → String
   | .localDate d => d.text
   | .localTime t => t.text
 
-def LocalDate.next (d : LocalDate) : LocalDate :=
-  if d.day < daysInMonth d.year d.month then { d with day := d.day + 1 }
-  else if d.month < 12 then { d with month := d.month + 1, day := 1 }
-  else { year := d.year + 1, month := 1, day := 1 }
-
 instance : NotNull DateTime := ⟨⟩
 instance : NotNull OffsetDateTime := ⟨⟩
 instance : NotNull LocalDateTime := ⟨⟩

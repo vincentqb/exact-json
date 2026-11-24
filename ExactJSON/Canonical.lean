@@ -1,7 +1,6 @@
 module
 
 public import ExactJSON.Rfc8259
-public import Lean.Data.Json.Basic
 
 @[expose] public section
 
@@ -58,10 +57,6 @@ def IsShortest (d : Decimal) (x : Float) : Prop :=
           ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
             ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧ (d' = d ∨ d.digits % 2 = 0))))
 
-def toJsonNumber (d : Decimal) : Lean.JsonNumber :=
-  let m : Int := if d.negative then -(d.digits : Int) else d.digits
-  if d.exponent < 0 then ⟨m, (-d.exponent).toNat⟩ else ⟨m * 10 ^ (d.exponent.toNat + 1), 1⟩
-
 end Decimal
 
 def hexChar (n : Nat) : Char := if n < 10 then Char.ofNat (48 + n) else Char.ofNat (87 + n)
@@ -102,27 +97,5 @@ def writeMembers (float : Float → String) : List (String × Value) → String
   | (k, v) :: ms => stringText k ++ ":" ++ write float v ++ "," ++ writeMembers float ms
 
 end
-
-mutual
-
-def Value.noNegativeZero : Value → Bool
-  | .float x => x.toBits != 0x8000000000000000
-  | .array ⟨items⟩ => itemsNoNegativeZero items
-  | .table ⟨members⟩ => membersNoNegativeZero members
-  | _ => true
-
-def itemsNoNegativeZero : List Value → Bool
-  | [] => true
-  | v :: vs => v.noNegativeZero && itemsNoNegativeZero vs
-
-def membersNoNegativeZero : List (String × Value) → Bool
-  | [] => true
-  | (_, v) :: ms => v.noNegativeZero && membersNoNegativeZero ms
-
-end
-
-def jsonLines (s : String) : List String :=
-  let parts := s.splitOn "\n"
-  if parts.getLast? = some "" then parts.dropLast else parts
 
 end ExactJSON

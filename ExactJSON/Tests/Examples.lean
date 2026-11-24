@@ -72,8 +72,8 @@ def errorOf {α : Type} (e : Except String α) : String :=
   "[1 2]", "{}x", "'a'", "{1:2}", "NaN", "Infinity", "\"\\x\"", "0x10", "1_000"].all
   fun s => !(Value.parse s).isOk
 
-#guard (Value.table #[("b", 1), ("a", 2)]).render == "{\"b\":1,\"a\":2}"
-#guard !(Value.table #[("b", 1), ("a", 2)]).isValid
+#guard (Value.table #[("b", .integer 1), ("a", .integer 2)]).render == "{\"b\":1,\"a\":2}"
+#guard !(Value.table #[("b", .integer 1), ("a", .integer 2)]).isValid
 #guard (Value.float (0.0 / 0.0)).render == "NaN"
 #guard !(Value.parse (Value.array #[.float (1.0 / 0.0)]).render).isOk
 
@@ -110,12 +110,6 @@ def canon (s : String) : String :=
 #guard errorOf (Value.parseLines "1\n\n2\n") == "line 2, at character 0: expected a value, found the end of the text"
 #guard errorOf (Value.parseLines "1\r\n") == "line 1, at character 1: text after the value (canonical text has no whitespace)"
 
-#guard (exactjson% {"b": 1, "a": 1.0, c: [-2, -0.5, "x", true, null], "d": {}}).render ==
-  "{\"a\":1.0,\"b\":1,\"c\":[-2,-0.5,\"x\",true,null],\"d\":{}}"
-#guard (exactjson% {"n": $(3 + 4), "s": $("a" ++ "b")}).render == "{\"n\":7,\"s\":\"ab\"}"
-#guard (exactjson% {«a b»: 1, «1»: 2}).render == "{\"1\":2,\"a b\":1}"
-macro "keysInMacro" : term => `(exactjson% {foo: 1, "bar": 2})
-#guard (keysInMacro).render == "{\"bar\":2,\"foo\":1}"
 
 structure Run where
   name : String
@@ -197,43 +191,14 @@ inductive Cmd where
 
 #guard ["1979-05-27T07:32:00Z", "1979-05-27T00:32:00.999999-07:00", "1979-05-27T07:32:00.5",
   "1979-05-27", "07:32:00", "23:59:60", "00:00:00.000000001"].all fun s =>
-  (DateTime.parse? s).map toString == some s
+  (DateTime.parse? s).map DateTime.toString == some s
 #guard ["1979-05-27t07:32:00Z", "1979-05-27 07:32:00Z", "1979-05-27T07:32:00z",
   "1979-05-27T07:32:00+00:00", "1979-05-27T07:32", "07:32:00.50", "07:32:00.5000000001",
   "2024-13-01", "2023-02-29", "24:00:00", "1979-05-27T07:32:00+24:00", "1979-5-27"].all
   fun s => (DateTime.parse? s).isNone
-#guard (OffsetDateTime.ofUnixNanos? 0).map toString == some "1970-01-01T00:00:00Z"
-#guard (OffsetDateTime.ofUnixNanos? 951782400123456789).map toString == some "2000-02-29T00:00:00.123456789Z"
-#guard (OffsetDateTime.ofUnixNanos? (-1)).map toString == some "1969-12-31T23:59:59.999999999Z"
-#guard (OffsetDateTime.ofUnixNanos? (-62167219200 * 1000000000)).map toString == some "0000-01-01T00:00:00Z"
-#guard (OffsetDateTime.ofUnixNanos? (-62167219200 * 1000000000 - 1)).isNone
-#guard (OffsetDateTime.ofUnixNanos? (253402300800 * 1000000000 - 1)).map toString ==
-  some "9999-12-31T23:59:59.999999999Z"
-#guard (OffsetDateTime.ofUnixNanos? (253402300800 * 1000000000)).isNone
-#guard (DateTime.parse? "2000-02-29T05:30:00+05:30").all fun
-  | .offsetDateTime dt => dt.toUnixNanos == 951782400 * 1000000000
-  | _ => false
 #guard !(decode (encode ({ hour := 0, minute := 0, second := 0, nanosecond := 1000000000 } : LocalTime))
   : Except String LocalTime).isOk
 
-#guard gives ((Value.parse "{\"a\":[1,1.0,0.5,1.0e16,\"s\",null]}").map (·.toJson.compress))
-  "{\"a\":[1,1,0.5,10000000000000000,\"s\",null]}"
-#guard gives (((Value.parse "{\"a\":[1,1.0,1.0e16,null]}").toOption.get!.toJson |> Value.ofJson?).map Value.render)
-  "{\"a\":[1,1.0,1.0e16,null]}"
-#guard (Lean.toJson (1e-7 : Float)).compress == "0"
-#guard (floatToJson 1e-7).compress == "0.0000001"
-#guard (floatToJson 0.1234567).compress == "0.1234567"
-
-section
-open scoped ExactJSON.ExactFloat
-
-structure Timing where
-  seconds : Float
-  deriving Lean.ToJson
-
-#guard (Lean.toJson (1e-7 : Float)).compress == "0.0000001"
-#guard (Lean.toJson ({ seconds := 0.1234567 } : Timing)).compress == "{\"seconds\":0.1234567}"
-end
 
 structure Bench where
   name : String
@@ -249,8 +214,5 @@ structure Bench where
 /-- info: Except.error "missing key \"day\"" -/
 #guard_msgs in
 #eval (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench)
-#guard (exactjson% {"name": "fast", "iters": 100, "time": 2.0, "sizes": [1, 2],
-  "day": $(LocalDate.mk 2024 2 29)}).render ==
-  "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\",\"sizes\":[1,2],\"time\":2.0}"
 #guard (decode "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\"}" : Except String Bench).isOk
 #guard errorOf (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench) == "missing key \"day\""

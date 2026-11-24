@@ -5,7 +5,6 @@ public import ExactJSON.Rfc8259
 public import ExactJSON.Canonical
 public import ExactJSON.Calendar
 public import ExactJSON.Shapes
-public import Lean.Data.Json.FromToJson
 meta import SoftwareChallenge
 
 public section
@@ -17,19 +16,17 @@ A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that wri
 holds gives back: reading takes exactly those texts, and holds what any JSON reader reads in
 them. A value's text is `write` of its parts: minimal escapes in strings, an integer in decimal,
 keys as they come; a finite float is the shortest decimal that reads back as it, the nearest of
-those, ties to an even last digit, laid out by `Decimal.toFloatText`; a float that is not finite
-is `NaN`, `Infinity` or `-Infinity`; and an invalid value's text is not read. Every valid value's
-text is JSON that holds that value; no text holds a character below U+0020; reading JSON in any
-spelling holds what RFC 8259 reads in it; JSON Lines is one canonical text a line; typed decoding
-reads exactly what typed encoding writes, for any type whose instances read back what they
-write; each of the library's instances writes the value its codec law states and reads exactly
-that; derived instances write and read the shapes their examples state; dates and times are
-written in one RFC 3339 form each, read in that form only, and convert to and from days and
-nanoseconds since 1970; the `exactjson%` literals, the `Lean.Json` conversions and `canon` do what
-their laws state; and the steps the reader counts as it reads (`Value.parseCosted`, whose value
-is `Value.parse`) are linear in the text's length.
-Not claimed: what `OffsetDateTime.now` reads from the clock; the readers' error messages; which
-`deriving` and `exactjson%` uses fail to compile; the library's definitions that no law names; nor
+those, ties to an even last digit, laid out by `Decimal.toFloatText`; and an invalid value's text
+is not read. Every valid value's text is JSON that holds that value; no text holds a character
+below U+0020; reading JSON in any spelling holds what RFC 8259 reads in it; JSON Lines is one
+canonical text a line; typed decoding reads exactly what typed encoding writes, for any type
+whose instances read back what they write; each of the library's instances writes the value its
+codec law states and reads exactly that; derived instances write and read the shapes their
+examples state; dates and times are written in one RFC 3339 form each and read in that form
+only; and the steps the reader counts as it reads (`Value.parseCosted`, whose value is
+`Value.parse`) are linear in the text's length.
+Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
+definitions that no law names, and the command line tool beyond the functions it calls; nor
 that the steps are the work done: the reader counts them itself, so the law bounds its count, not
 its running time.
 -/
@@ -60,30 +57,6 @@ def decodeLines {α : Type u} [ToValue α] [FromValue α] : String → Except St
 
 instance Value.instBEq : BEq Value := sorry
 
-def Value.get? : Value → String → Option Value := sorry
-
-instance Value.instCoeString : Coe String Value := sorry
-
-instance Value.instCoeBool : Coe Bool Value := sorry
-
-instance Value.instOfNat {n : Nat} : OfNat Value n := sorry
-
-instance Value.instToString : ToString Value := sorry
-
-def literalExample : Value := sorry
-
-def literalSplice (n : Nat) (s : String) : Value := sorry
-
-def floatToJson : Float → Lean.Json := sorry
-
-def Value.toJson : Value → Lean.Json := sorry
-
-def Value.ofJson? : Lean.Json → Except String Value := sorry
-
-def ExactFloat.exactToJsonFloat : Lean.ToJson Float := sorry
-
-def canon : Bool → String → Except String String := sorry
-
 protected def LocalDate.toString : LocalDate → String := sorry
 
 protected def LocalTime.toString : LocalTime → String := sorry
@@ -96,43 +69,25 @@ protected def DateTime.toString : DateTime → String := sorry
 
 def DateTime.parse? : String → Option DateTime := sorry
 
-instance instToStringLocalDate : ToString LocalDate := sorry
-
 instance instToValueLocalDate : ToValue LocalDate := sorry
 
 instance instFromValueLocalDate : FromValue LocalDate := sorry
-
-instance instToStringLocalTime : ToString LocalTime := sorry
 
 instance instToValueLocalTime : ToValue LocalTime := sorry
 
 instance instFromValueLocalTime : FromValue LocalTime := sorry
 
-instance instToStringLocalDateTime : ToString LocalDateTime := sorry
-
 instance instToValueLocalDateTime : ToValue LocalDateTime := sorry
 
 instance instFromValueLocalDateTime : FromValue LocalDateTime := sorry
-
-instance instToStringOffsetDateTime : ToString OffsetDateTime := sorry
 
 instance instToValueOffsetDateTime : ToValue OffsetDateTime := sorry
 
 instance instFromValueOffsetDateTime : FromValue OffsetDateTime := sorry
 
-instance instToStringDateTime : ToString DateTime := sorry
-
 instance instToValueDateTime : ToValue DateTime := sorry
 
 instance instFromValueDateTime : FromValue DateTime := sorry
-
-def LocalDate.toDaysSinceEpoch : LocalDate → Int := sorry
-
-def LocalDate.ofDaysSinceEpoch? : Int → Option LocalDate := sorry
-
-def OffsetDateTime.ofUnixNanos? : Int → Option OffsetDateTime := sorry
-
-def OffsetDateTime.toUnixNanos : OffsetDateTime → Int := sorry
 
 instance Example.instToValuePoint : ToValue Example.Point := sorry
 
@@ -265,10 +220,6 @@ theorem render_float (x : Float) (hx : finiteFloat x = true) :
     ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.IsShortest x := by
   sorry
 
-theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
-    (Value.float x).render = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
-  sorry
-
 theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none := by
   sorry
 
@@ -394,71 +345,6 @@ theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α]
 theorem beq_iff (v w : Value) : (v == w) = true ↔ v = w := by
   sorry
 
-theorem get?_eq (v : Value) (k : String) :
-    v.get? k = (match v with | .table ms => (ms.toList.find? fun m => m.1 == k).map (·.2) | _ => none) := by
-  sorry
-
-theorem coe_eq (s : String) (b : Bool) (n : Nat) (v : Value) :
-    (Coe.coe s : Value) = .string s ∧ (Coe.coe b : Value) = .boolean b ∧ (OfNat.ofNat n : Value) = .integer n ∧
-      toString v = v.render := by
-  sorry
-
-theorem literalExample_eq :
-    literalExample = .table #[("a", .integer 1), ("b", .float 2.5),
-      ("c", .array #[.null, .boolean true, .string "x"]), ("d", .integer (-3))] := by
-  sorry
-
-theorem literalSplice_eq (n : Nat) (s : String) :
-    literalSplice n s = .table #[("count", toValue n), ("name", toValue s)] := by
-  sorry
-
-theorem floatToJson_finite (x : Float) (d : Decimal) (h : d.IsShortest x) :
-    floatToJson x = .num d.toJsonNumber := by
-  sorry
-
-theorem floatToJson_nonfinite (x : Float) (hx : finiteFloat x = false) :
-    floatToJson x = .str (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity") := by
-  sorry
-
-theorem toJson_eq (v : Value) :
-    v.toJson = match v with
-      | .null => .null
-      | .string s => .str s
-      | .integer n => .num ⟨n, 0⟩
-      | .float x => floatToJson x
-      | .boolean b => .bool b
-      | .array items => .arr (items.map Value.toJson)
-      | .table members => Lean.Json.mkObj (members.toList.map fun (k, w) => (k, w.toJson)) := by
-  sorry
-
-theorem ofJson_eq (j : Lean.Json) :
-    (Value.ofJson? j).toOption = match j with
-      | .null => some .null
-      | .bool b => some (.boolean b)
-      | .str s => some (.string s)
-      | .num n =>
-        if n.exponent = 0 then some (.integer n.mantissa)
-        else (Rfc8259.floatOf? (decide (n.mantissa < 0)) n.mantissa.natAbs (-(n.exponent : Int))).map .float
-      | .arr items => (items.toList.mapM fun i => (Value.ofJson? i).toOption).map fun (l : List Value) => .array l.toArray
-      | .obj kvs =>
-        ((kvs.toList : List (String × Lean.Json)).mapM fun (p : String × Lean.Json) => (Value.ofJson? p.2).toOption.map (p.1, ·)).map
-          fun (l : List (String × Value)) => .table l.toArray := by
-  sorry
-
-theorem ofJson_toJson (v : Value) (h : v.Valid) (hz : v.noNegativeZero = true) : Value.ofJson? v.toJson = .ok v := by
-  sorry
-
-theorem exactToJsonFloat_eq (x : Float) : ExactFloat.exactToJsonFloat.toJson x = floatToJson x := by
-  sorry
-
-theorem canon_text (s : String) : canon false s = (Value.readJson s).map fun v => v.render ++ "\n" := by
-  sorry
-
-theorem canon_lines (s : String) :
-    (canon true s).toOption =
-      ((jsonLines s).mapM fun l => (Value.readJson l).toOption).map fun vs => Value.renderLines vs.toArray := by
-  sorry
-
 theorem localDate_text (d : LocalDate) (h : d.isValid = true) : d.toString = d.text := by
   sorry
 
@@ -475,11 +361,6 @@ theorem dateTime_text (d : DateTime) (h : d.isValid = true) : d.toString = d.tex
   sorry
 
 theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.isValid = true ∧ d.text = s := by
-  sorry
-
-theorem toString_dateTimes (d : LocalDate) (t : LocalTime) (ldt : LocalDateTime) (odt : OffsetDateTime) (dt : DateTime) :
-    toString d = d.toString ∧ toString t = t.toString ∧ toString ldt = ldt.toString ∧ toString odt = odt.toString ∧
-      toString dt = dt.toString := by
   sorry
 
 theorem codec_localDate (d : LocalDate) :
@@ -500,27 +381,6 @@ theorem codec_offsetDateTime (dt : OffsetDateTime) :
 
 theorem codec_dateTime (d : DateTime) :
     toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
-  sorry
-
-theorem toDaysSinceEpoch_epoch : LocalDate.toDaysSinceEpoch ⟨1970, 1, 1⟩ = 0 := by
-  sorry
-
-theorem toDaysSinceEpoch_next (d : LocalDate) (h : d.isValid = true) (h' : d.next.isValid = true) :
-    d.next.toDaysSinceEpoch = d.toDaysSinceEpoch + 1 := by
-  sorry
-
-theorem ofDaysSinceEpoch_spec (n : Int) (d : LocalDate) :
-    LocalDate.ofDaysSinceEpoch? n = some d ↔ d.isValid = true ∧ d.toDaysSinceEpoch = n := by
-  sorry
-
-theorem toUnixNanos_eq (dt : OffsetDateTime) :
-    dt.toUnixNanos = (dt.date.toDaysSinceEpoch * 86400 + dt.time.hour * 3600 + dt.time.minute * 60 + dt.time.second -
-      dt.offsetMinutes * 60) * 1000000000 + dt.time.nanosecond := by
-  sorry
-
-theorem ofUnixNanos_spec (n : Int) (dt : OffsetDateTime) :
-    OffsetDateTime.ofUnixNanos? n = some dt ↔
-      dt.isValid = true ∧ dt.offsetMinutes = 0 ∧ dt.time.second < 60 ∧ dt.toUnixNanos = n := by
   sorry
 
 theorem codec_point (p : Example.Point) :
@@ -596,11 +456,6 @@ theorem codec_envelope (e : Example.Envelope) :
 @[kills render_float] theorem render_float_rejects_empty :
     ¬ ∀ (x : Float), finiteFloat x = true →
       ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.IsShortest x := by
-  sorry
-
-@[kills render_nonfinite] theorem render_nonfinite_rejects_zero :
-    ¬ ∀ (x : Float), finiteFloat x = false →
-      (fun (_ : Value) => "0.0") (.float x) = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
   sorry
 
 @[kills parse_render_invalid] theorem parse_render_invalid_rejects_null :
@@ -772,88 +627,6 @@ theorem codec_envelope (e : Example.Envelope) :
     ¬ ∀ (v w : Value), @BEq.beq Value ⟨fun _ _ => true⟩ v w = true ↔ v = w := by
   sorry
 
-@[kills get?_eq] theorem get?_eq_rejects_none :
-    ¬ ∀ (v : Value) (k : String), (fun (_ : Value) (_ : String) => (none : Option Value)) v k =
-      (match v with | .table ms => (ms.toList.find? fun m => m.1 == k).map (·.2) | _ => none) := by
-  sorry
-
-@[kills coe_eq] theorem coe_eq_rejects_null :
-    ¬ ∀ (s : String) (b : Bool) (n : Nat) (v : Value),
-      @Coe.coe String Value ⟨fun _ => .null⟩ s = .string s ∧ @Coe.coe Bool Value ⟨fun _ => .null⟩ b = .boolean b ∧
-        @OfNat.ofNat Value n ((fun {m : Nat} => (⟨.null⟩ : OfNat Value m)) (m := n)) = .integer n ∧
-          @ToString.toString Value ⟨fun _ => ""⟩ v = v.render := by
-  sorry
-
-@[kills literalExample_eq] theorem literalExample_eq_rejects_null :
-    ¬ (Value.null : Value) = .table #[("a", .integer 1), ("b", .float 2.5),
-      ("c", .array #[.null, .boolean true, .string "x"]), ("d", .integer (-3))] := by
-  sorry
-
-@[kills literalSplice_eq] theorem literalSplice_eq_rejects_null :
-    ¬ ∀ (n : Nat) (s : String), (fun (_ : Nat) (_ : String) => Value.null) n s =
-      .table #[("count", toValue n), ("name", toValue s)] := by
-  sorry
-
-@[kills floatToJson_finite] theorem floatToJson_finite_rejects_null :
-    ¬ ∀ (x : Float) (d : Decimal), d.IsShortest x → (fun (_ : Float) => Lean.Json.null) x = .num d.toJsonNumber := by
-  sorry
-
-@[kills floatToJson_nonfinite] theorem floatToJson_nonfinite_rejects_null :
-    ¬ ∀ (x : Float), finiteFloat x = false →
-      (fun (_ : Float) => Lean.Json.null) x = .str (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity") := by
-  sorry
-
-@[kills toJson_eq] theorem toJson_eq_rejects_null :
-    ¬ ∀ (v : Value),
-      (fun (_ : Value) => Lean.Json.null) v = match v with
-        | .null => .null
-        | .string s => .str s
-        | .integer n => .num ⟨n, 0⟩
-        | .float x => (fun (_ : Float) => Lean.Json.null) x
-        | .boolean b => .bool b
-        | .array items => .arr (items.map (fun (_ : Value) => Lean.Json.null))
-        | .table members => Lean.Json.mkObj (members.toList.map fun (k, w) => (k, (fun (_ : Value) => Lean.Json.null) w)) := by
-  sorry
-
-@[kills ofJson_eq] theorem ofJson_eq_rejects_error :
-    ¬ ∀ (j : Lean.Json),
-      ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) j).toOption = match j with
-        | .null => some .null
-        | .bool b => some (.boolean b)
-        | .str s => some (.string s)
-        | .num n =>
-          if n.exponent = 0 then some (.integer n.mantissa)
-          else (Rfc8259.floatOf? (decide (n.mantissa < 0)) n.mantissa.natAbs (-(n.exponent : Int))).map .float
-        | .arr items =>
-          (items.toList.mapM fun i => ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) i).toOption).map
-            fun (l : List Value) => .array l.toArray
-        | .obj kvs =>
-          ((kvs.toList : List (String × Lean.Json)).mapM fun (p : String × Lean.Json) =>
-            ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) p.2).toOption.map (p.1, ·)).map
-              fun (l : List (String × Value)) => .table l.toArray := by
-  sorry
-
-@[kills ofJson_toJson] theorem ofJson_toJson_rejects_error :
-    ¬ ∀ (v : Value), v.Valid → v.noNegativeZero = true →
-      (fun (_ : Lean.Json) => (Except.error "" : Except String Value)) ((fun (_ : Value) => Lean.Json.null) v) = .ok v := by
-  sorry
-
-@[kills exactToJsonFloat_eq] theorem exactToJsonFloat_eq_rejects_null :
-    ¬ ∀ (x : Float), (⟨fun _ => Lean.Json.null⟩ : Lean.ToJson Float).toJson x = (fun (_ : Float) => Lean.Json.str "") x := by
-  sorry
-
-@[kills canon_text] theorem canon_text_rejects_empty :
-    ¬ ∀ (s : String), (fun (_ : Bool) (_ : String) => (Except.ok "" : Except String String)) false s =
-      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) s).map fun v => (fun (_ : Value) => "null") v ++ "\n" := by
-  sorry
-
-@[kills canon_lines] theorem canon_lines_rejects_error :
-    ¬ ∀ (s : String),
-      ((fun (_ : Bool) (_ : String) => (Except.error "" : Except String String)) true s).toOption =
-        ((jsonLines s).mapM fun l => ((fun (_ : String) => (Except.ok Value.null : Except String Value)) l).toOption).map
-          fun vs => (fun (_ : Array Value) => "") vs.toArray := by
-  sorry
-
 @[witness decodeLines_text] theorem decodeLines_text_applies :
     ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (as : Array α), decodeLines s = .ok as := by
   sorry
@@ -882,15 +655,6 @@ theorem codec_envelope (e : Example.Envelope) :
     ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.isValid = true ∧ d.text = s := by
   sorry
 
-@[kills toString_dateTimes] theorem toString_dateTimes_rejects_empty :
-    ¬ ∀ (d : LocalDate) (t : LocalTime) (ldt : LocalDateTime) (odt : OffsetDateTime) (dt : DateTime),
-      @ToString.toString LocalDate ⟨fun _ => ""⟩ d = (fun (_ : LocalDate) => "x") d ∧
-        @ToString.toString LocalTime ⟨fun _ => ""⟩ t = (fun (_ : LocalTime) => "x") t ∧
-        @ToString.toString LocalDateTime ⟨fun _ => ""⟩ ldt = (fun (_ : LocalDateTime) => "x") ldt ∧
-        @ToString.toString OffsetDateTime ⟨fun _ => ""⟩ odt = (fun (_ : OffsetDateTime) => "x") odt ∧
-        @ToString.toString DateTime ⟨fun _ => ""⟩ dt = (fun (_ : DateTime) => "x") dt := by
-  sorry
-
 @[kills codec_localDate] theorem codec_localDate_rejects_null :
     ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string ((fun (_ : LocalDate) => "") d) ∧
       ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
@@ -914,31 +678,6 @@ theorem codec_envelope (e : Example.Envelope) :
 @[kills codec_dateTime] theorem codec_dateTime_rejects_null :
     ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string ((fun (_ : DateTime) => "") d) ∧
       ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
-  sorry
-
-@[kills toDaysSinceEpoch_epoch] theorem toDaysSinceEpoch_epoch_rejects_one :
-    ¬ (fun (_ : LocalDate) => (1 : Int)) ⟨1970, 1, 1⟩ = 0 := by
-  sorry
-
-@[kills toDaysSinceEpoch_next] theorem toDaysSinceEpoch_next_rejects_zero :
-    ¬ ∀ (d : LocalDate), d.isValid = true → d.next.isValid = true →
-      (fun (_ : LocalDate) => (0 : Int)) d.next = (fun (_ : LocalDate) => (0 : Int)) d + 1 := by
-  sorry
-
-@[kills ofDaysSinceEpoch_spec] theorem ofDaysSinceEpoch_spec_rejects_none :
-    ¬ ∀ (n : Int) (d : LocalDate), (fun (_ : Int) => (none : Option LocalDate)) n = some d ↔
-      d.isValid = true ∧ (fun (_ : LocalDate) => (0 : Int)) d = n := by
-  sorry
-
-@[kills toUnixNanos_eq] theorem toUnixNanos_eq_rejects_zero :
-    ¬ ∀ (dt : OffsetDateTime), (fun (_ : OffsetDateTime) => (0 : Int)) dt =
-      ((fun (_ : LocalDate) => (0 : Int)) dt.date * 86400 + dt.time.hour * 3600 + dt.time.minute * 60 + dt.time.second -
-        dt.offsetMinutes * 60) * 1000000000 + dt.time.nanosecond := by
-  sorry
-
-@[kills ofUnixNanos_spec] theorem ofUnixNanos_spec_rejects_none :
-    ¬ ∀ (n : Int) (dt : OffsetDateTime), (fun (_ : Int) => (none : Option OffsetDateTime)) n = some dt ↔
-      dt.isValid = true ∧ dt.offsetMinutes = 0 ∧ dt.time.second < 60 ∧ (fun (_ : OffsetDateTime) => (0 : Int)) dt = n := by
   sorry
 
 @[kills codec_point] theorem codec_point_rejects_null :

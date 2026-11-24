@@ -1,22 +1,13 @@
 module
 
 public import ExactJSON.Codec
-public import ExactJSON.LeanJson
 public import ExactJSON.DateTime
 public import ExactJSON.ShapesDerived
-public import ExactJSON.LiteralExamples
 
 open ExactJSON
 
 def usage : String :=
-  "usage: exactjson version\n" ++
-  "       exactjson now\n" ++
-  "  write the time now in each date-time form, with its days and nanoseconds since 1970\n" ++
-  "       exactjson lean-json < input.json\n" ++
-  "  write the JSON text as Lean.Json compresses it, then its canonical text read back from Lean.Json\n" ++
-  "       exactjson get KEY < input.jsonl\n" ++
-  "  write the value under KEY of each line's table, or null\n" ++
-  "       exactjson check [--as TYPE] < input.jsonl\n" ++
+  "usage: exactjson check [--as TYPE] < input.jsonl\n" ++
   "  exit 1 at the first line that is not canonical JSON Lines (of a value of TYPE)\n" ++
   "       exactjson canon [--lines] < input.json\n" ++
   "  write the canonical text of the JSON text (or of each line)\n"
@@ -43,49 +34,20 @@ def readStdin : IO (Except String String) := do
 
 public section
 
-namespace ExactJSON
+def textLines (s : String) : List String :=
+  let parts := s.splitOn "\n"
+  if parts.getLast? = some "" then parts.dropLast else parts
 
-@[expose] def canon (lines : Bool) (input : String) : Except String String :=
-  if lines then (readEach 0 #[] (jsonLines input)).map Value.renderLines
-  else (Value.readJson input).map fun v => v.render.push '\n'
-where
-  readEach (number : Nat) (out : Array Value) : List String → Except String (Array Value)
-    | [] => .ok out
-    | line :: rest =>
-      match Value.readJson line with
-      | .error e => .error s!"line {number + 1}, {e}"
-      | .ok v => readEach (number + 1) (out.push v) rest
+def readEach (number : Nat) (out : Array Value) : List String → Except String (Array Value)
+  | [] => .ok out
+  | line :: rest =>
+    match Value.readJson line with
+    | .error e => .error s!"line {number + 1}, {e}"
+    | .ok v => readEach (number + 1) (out.push v) rest
 
-end ExactJSON
-
-def version : Value :=
-  .table #[("examples", .array #[literalExample, literalSplice 1 "exactjson"]), ("name", Coe.coe "exactjson"),
-    ("strict", Coe.coe true), ("version", (1 : Value))]
-
-def getAll (key : String) (input : String) : Except String String := do
-  let values ← Value.parseLines input
-  return encodeLines (values.map fun v => (v.get? key).getD .null)
-
-def nowInfo (dt : OffsetDateTime) : Value :=
-  let ldt : LocalDateTime := { date := dt.date, time := dt.time }
-  .table #[("date", .string (toString dt.date)),
-    ("dateTime", .string (toString (DateTime.offsetDateTime dt))),
-    ("day", toValue (LocalDate.ofDaysSinceEpoch? dt.date.toDaysSinceEpoch)),
-    ("days", .integer dt.date.toDaysSinceEpoch),
-    ("local", .string (toString ldt)),
-    ("nanos", .integer dt.toUnixNanos),
-    ("offset", .string (toString dt)),
-    ("time", .string (toString dt.time)),
-    ("value", toValue dt)]
-
-def leanJsonOf : Value → Lean.Json
-  | .float x => ExactFloat.exactToJsonFloat.toJson x
-  | v => v.toJson
-
-def viaLeanJson (input : String) : Except String String := do
-  let j := leanJsonOf (← Value.readJson input)
-  let w ← Value.ofJson? j
-  return j.compress ++ "\n" ++ w.render ++ "\n"
+def canon (lines : Bool) (input : String) : Except String String :=
+  if lines then (readEach 0 #[] (textLines input)).map (encodeLines (α := Value))
+  else (Value.readJson input).map fun v => Value.renderLines #[v]
 
 def typedCheck : String → Option (String → Except String Nat)
   | "Value" => some fun (s : String) => (decodeLines (α := Value) s).map (·.size)
@@ -127,28 +89,6 @@ def main (args : List String) : IO UInt32 := do
       | ["--lines"] => pure true
       | _ => do IO.eprint usage; return 2
     match (← readStdin) >>= canon lines with
-    | .ok text =>
-      IO.print text
-      return 0
-    | .error e =>
-      IO.eprintln s!"exactjson: {e}"
-      return 1
-  | ["lean-json"] =>
-    match (← readStdin) >>= viaLeanJson with
-    | .ok text =>
-      IO.print text
-      return 0
-    | .error e =>
-      IO.eprintln s!"exactjson: {e}"
-      return 1
-  | ["now"] =>
-    IO.println (nowInfo (← OffsetDateTime.now)).render
-    return 0
-  | ["version"] =>
-    IO.println (toString version)
-    return 0
-  | ["get", key] =>
-    match (← readStdin) >>= getAll key with
     | .ok text =>
       IO.print text
       return 0
