@@ -118,7 +118,7 @@ structure Run where
   day : LocalDate
   deriving ToValue, FromValue
 
-def run : Run := { name := "a", iters := 3, time? := some 2.0, day := ⟨2024, 2, 29⟩ }
+def run : Run := { name := "a", iters := 3, time? := some 2.0, day := { year := 2024, month := 2, day := 29 } }
 
 #guard encode run == "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":2.0}"
 #guard encode { run with time? := none } == "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\"}"
@@ -197,8 +197,6 @@ inductive Cmd where
   "1979-05-27T07:32:00+00:00", "1979-05-27T07:32", "07:32:00.50", "07:32:00.5000000001",
   "2024-13-01", "2023-02-29", "24:00:00", "1979-05-27T07:32:00+24:00", "1979-5-27"].all
   fun s => (DateTime.parse? s).isNone
-#guard !(decode (encode ({ hour := 0, minute := 0, second := 0, nanosecond := 1000000000 } : LocalTime))
-  : Except String LocalTime).isOk
 
 
 structure Bench where
@@ -210,7 +208,7 @@ structure Bench where
 
 /-- info: {"day":"2024-02-29","iters":100,"name":"fast","time":2.0} -/
 #guard_msgs in
-#eval IO.println (encode ({ name := "fast", iters := 100, time? := some 2.0, day := ⟨2024, 2, 29⟩ } : Bench))
+#eval IO.println (encode ({ name := "fast", iters := 100, time? := some 2.0, day := { year := 2024, month := 2, day := 29 } } : Bench))
 
 /-- info: Except.error "missing key \"day\"" -/
 #guard_msgs in

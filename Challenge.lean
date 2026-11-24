@@ -343,42 +343,42 @@ theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValu
 theorem beq_iff (v w : Value) : (v == w) = true ↔ v = w := by
   sorry
 
-theorem localDate_text (d : LocalDate) (h : d.isValid = true) : d.toString = d.text := by
+theorem localDate_text (d : LocalDate) : d.toString = d.text := by
   sorry
 
-theorem localTime_text (t : LocalTime) (h : t.isValid = true) : t.toString = t.text := by
+theorem localTime_text (t : LocalTime) : t.toString = t.text := by
   sorry
 
-theorem localDateTime_text (dt : LocalDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
+theorem localDateTime_text (dt : LocalDateTime) : dt.toString = dt.text := by
   sorry
 
-theorem offsetDateTime_text (dt : OffsetDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
+theorem offsetDateTime_text (dt : OffsetDateTime) : dt.toString = dt.text := by
   sorry
 
-theorem dateTime_text (d : DateTime) (h : d.isValid = true) : d.toString = d.text := by
+theorem dateTime_text (d : DateTime) : d.toString = d.text := by
   sorry
 
-theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.isValid = true ∧ d.text = s := by
+theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.text = s := by
   sorry
 
 theorem codec_localDate (d : LocalDate) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text := by
   sorry
 
 theorem codec_localTime (t : LocalTime) :
-    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ t.isValid = true ∧ w = .string t.text := by
+    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ w = .string t.text := by
   sorry
 
 theorem codec_localDateTime (dt : LocalDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text := by
   sorry
 
 theorem codec_offsetDateTime (dt : OffsetDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text := by
   sorry
 
 theorem codec_dateTime (d : DateTime) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text := by
   sorry
 
 theorem codec_point (p : Example.Point) :
@@ -629,52 +629,52 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
   sorry
 
 @[kills localDate_text] theorem localDate_text_rejects_empty :
-    ¬ ∀ (d : LocalDate), d.isValid = true → (fun (_ : LocalDate) => "") d = d.text := by
+    ¬ ∀ (d : LocalDate), (fun (_ : LocalDate) => "") d = d.text := by
   sorry
 
 @[kills localTime_text] theorem localTime_text_rejects_empty :
-    ¬ ∀ (t : LocalTime), t.isValid = true → (fun (_ : LocalTime) => "") t = t.text := by
+    ¬ ∀ (t : LocalTime), (fun (_ : LocalTime) => "") t = t.text := by
   sorry
 
 @[kills localDateTime_text] theorem localDateTime_text_rejects_empty :
-    ¬ ∀ (dt : LocalDateTime), dt.isValid = true → (fun (_ : LocalDateTime) => "") dt = dt.text := by
+    ¬ ∀ (dt : LocalDateTime), (fun (_ : LocalDateTime) => "") dt = dt.text := by
   sorry
 
 @[kills offsetDateTime_text] theorem offsetDateTime_text_rejects_empty :
-    ¬ ∀ (dt : OffsetDateTime), dt.isValid = true → (fun (_ : OffsetDateTime) => "") dt = dt.text := by
+    ¬ ∀ (dt : OffsetDateTime), (fun (_ : OffsetDateTime) => "") dt = dt.text := by
   sorry
 
 @[kills dateTime_text] theorem dateTime_text_rejects_empty :
-    ¬ ∀ (d : DateTime), d.isValid = true → (fun (_ : DateTime) => "") d = d.text := by
+    ¬ ∀ (d : DateTime), (fun (_ : DateTime) => "") d = d.text := by
   sorry
 
 @[kills dateTime_parse] theorem dateTime_parse_rejects_none :
-    ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.isValid = true ∧ d.text = s := by
+    ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.text = s := by
   sorry
 
 @[kills codec_localDate] theorem codec_localDate_rejects_null :
     ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string ((fun (_ : LocalDate) => "") d) ∧
-      ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+      ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   sorry
 
 @[kills codec_localTime] theorem codec_localTime_rejects_null :
     ¬ ∀ (t : LocalTime), @toValue LocalTime ⟨fun _ => .null⟩ t = .string ((fun (_ : LocalTime) => "") t) ∧
-      ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ t.isValid = true ∧ w = .string t.text := by
+      ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ w = .string t.text := by
   sorry
 
 @[kills codec_localDateTime] theorem codec_localDateTime_rejects_null :
     ¬ ∀ (dt : LocalDateTime), @toValue LocalDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : LocalDateTime) => "") dt) ∧
-      ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+      ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   sorry
 
 @[kills codec_offsetDateTime] theorem codec_offsetDateTime_rejects_null :
     ¬ ∀ (dt : OffsetDateTime), @toValue OffsetDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : OffsetDateTime) => "") dt) ∧
-      ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+      ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   sorry
 
 @[kills codec_dateTime] theorem codec_dateTime_rejects_null :
     ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string ((fun (_ : DateTime) => "") d) ∧
-      ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+      ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   sorry
 
 @[kills codec_point] theorem codec_point_rejects_null :

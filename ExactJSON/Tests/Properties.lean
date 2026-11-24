@@ -206,20 +206,26 @@ structure Sample where
   readings : Array (Option Float)
   day : LocalDate
   stamp : OffsetDateTime
-  deriving ToValue, FromValue, Inhabited
+  deriving ToValue, FromValue, LawfulValue, Inhabited
 
 def genDate : Gen LocalDate := do
   let year ← below 10000
   let month := 1 + (← below 12)
-  return { year, month, day := 1 + (← below (daysInMonth year month)) }
+  let day := 1 + (← below (daysInMonth year month))
+  return if h : LocalDate.Valid year month day then ⟨year, month, day, h⟩ else default
 
 def genTime : Gen LocalTime := do
   let ns ← pick #[0, 0, 500000000, 1, 123456789, 999999999, 100]
-  return { hour := ← below 24, minute := ← below 60, second := ← below 61, nanosecond := ns }
+  let hour ← below 24
+  let minute ← below 60
+  let second ← below 61
+  return if h : LocalTime.Valid hour minute second ns then ⟨hour, minute, second, ns, h⟩ else default
 
 def genOffsetDateTime : Gen OffsetDateTime := do
   let offset ← pick #[0, 0, 60, -420, 330, 1439, -1439]
-  return { date := ← genDate, time := ← genTime, offsetMinutes := offset }
+  let date ← genDate
+  let time ← genTime
+  return if h : offset.natAbs < 24 * 60 then ⟨date, time, offset, h⟩ else { date, time }
 
 def genSample : Gen Sample := do
   let k ← below 3

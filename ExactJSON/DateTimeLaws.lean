@@ -6,10 +6,43 @@ public section
 
 namespace ExactJSON
 
-theorem localDate_text (d : LocalDate) (h : d.isValid = true) : d.toString = d.text :=
-  (fun _ => rfl) h
+private def LocalDate.isValid (d : LocalDate) : Bool :=
+  d.year ≤ 9999 && 1 ≤ d.month && d.month ≤ 12 && 1 ≤ d.day && d.day ≤ daysInMonth d.year d.month
 
-theorem localTime_text (t : LocalTime) (h : t.isValid = true) : t.toString = t.text := by
+private def LocalTime.isValid (t : LocalTime) : Bool :=
+  t.hour ≤ 23 && t.minute ≤ 59 && t.second ≤ 60 && t.nanosecond < 1000000000
+
+private def LocalDateTime.isValid (dt : LocalDateTime) : Bool := dt.date.isValid && dt.time.isValid
+
+private def OffsetDateTime.isValid (dt : OffsetDateTime) : Bool :=
+  dt.date.isValid && dt.time.isValid && dt.offsetMinutes.natAbs < 24 * 60
+
+private def DateTime.isValid : DateTime → Bool
+  | .offsetDateTime dt => dt.isValid
+  | .localDateTime dt => dt.isValid
+  | .localDate d => d.isValid
+  | .localTime t => t.isValid
+
+private theorem LocalDate.isValid_true (d : LocalDate) : d.isValid = true := by
+  obtain ⟨_, _, _, h1, h2, h3, h4, h5⟩ := d
+  simp [LocalDate.isValid, h1, h2, h3, h4, h5]
+
+private theorem LocalTime.isValid_true (t : LocalTime) : t.isValid = true := by
+  obtain ⟨_, _, _, _, h1, h2, h3, h4⟩ := t
+  simp [LocalTime.isValid, h1, h2, h3, h4]
+
+private theorem DateTime.isValid_true (d : DateTime) : d.isValid = true := by
+  cases d with
+  | offsetDateTime dt =>
+    simp [DateTime.isValid, OffsetDateTime.isValid, LocalDate.isValid_true, LocalTime.isValid_true, dt.valid]
+  | localDateTime dt => simp [DateTime.isValid, LocalDateTime.isValid, LocalDate.isValid_true, LocalTime.isValid_true]
+  | localDate d => exact d.isValid_true
+  | localTime t => exact t.isValid_true
+
+theorem localDate_text (d : LocalDate) : d.toString = d.text := rfl
+
+theorem localTime_text (t : LocalTime) : t.toString = t.text := by
+  have h := t.isValid_true
   have hns : t.nanosecond < 1000000000 := by
     simp only [LocalTime.isValid, Bool.and_eq_true, decide_eq_true_eq] at h
     omega
@@ -21,10 +54,9 @@ theorem localTime_text (t : LocalTime) (h : t.isValid = true) : t.toString = t.t
     rw [String.append_assoc]
     rfl
 
-theorem localDateTime_text (dt : LocalDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
-  simp only [LocalDateTime.isValid, Bool.and_eq_true] at h
+theorem localDateTime_text (dt : LocalDateTime) : dt.toString = dt.text := by
   unfold LocalDateTime.toString LocalDateTime.text
-  rw [← localDate_text dt.date h.1, ← localTime_text dt.time h.2]
+  rw [← localDate_text dt.date, ← localTime_text dt.time]
   rfl
 
 private theorem offsetText_eq (m : Int) : offsetText m = Calendar.offset m := by
@@ -34,18 +66,17 @@ private theorem offsetText_eq (m : Int) : offsetText m = Calendar.offset m := by
   · simp only [h0, beq_iff_eq, ite_false]
     rfl
 
-theorem offsetDateTime_text (dt : OffsetDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
-  simp only [OffsetDateTime.isValid, Bool.and_eq_true] at h
+theorem offsetDateTime_text (dt : OffsetDateTime) : dt.toString = dt.text := by
   unfold OffsetDateTime.toString OffsetDateTime.text
-  rw [← localDate_text dt.date h.1.1, ← localTime_text dt.time h.1.2, ← offsetText_eq]
+  rw [← localDate_text dt.date, ← localTime_text dt.time, ← offsetText_eq]
   rfl
 
-theorem dateTime_text (d : DateTime) (h : d.isValid = true) : d.toString = d.text := by
+theorem dateTime_text (d : DateTime) : d.toString = d.text := by
   cases d with
-  | offsetDateTime dt => exact offsetDateTime_text dt h
-  | localDateTime dt => exact localDateTime_text dt h
-  | localDate d => exact localDate_text d h
-  | localTime t => exact localTime_text t h
+  | offsetDateTime dt => exact offsetDateTime_text dt
+  | localDateTime dt => exact localDateTime_text dt
+  | localDate d => exact localDate_text d
+  | localTime t => exact localTime_text t
 
 namespace DateText
 
@@ -111,7 +142,8 @@ private theorem date_text (d : LocalDate) (h : d.isValid = true) (rest : List Ch
   rw [fixed_pad 2 d.month (by decide) (by omega)]
   simp only [Option.bind_some, lit_cons]
   rw [fixed_pad 2 d.day (by decide) (by omega)]
-  simp [h]
+  simp only [Option.bind_some]
+  rw [dite_eq_left d.valid]
 
 private theorem trailing_zeros (l : List Char) :
     (l.reverse.dropWhile (· = '0')).reverse ++
@@ -166,7 +198,7 @@ private theorem fraction_toList (ns : Nat) :
 private theorem time_text (t : LocalTime) (h : t.isValid = true) (rest : List Char)
     (hrest : ∀ c ∈ rest.head?, c ≠ '.' ∧ c.isDigit = false) :
     time (t.text.toList ++ rest) = some (t, rest) := by
-  obtain ⟨hour, minute, second, ns⟩ := t
+  obtain ⟨hour, minute, second, ns, hvalid⟩ := t
   have hv := h
   simp only [LocalTime.isValid, Bool.and_eq_true, decide_eq_true_eq] at hv
   rw [localTime_text_toList]
@@ -192,7 +224,7 @@ private theorem time_text (t : LocalTime) (h : t.isValid = true) (rest : List Ch
         have := (hrest c rfl).1
         simp [lit, Ne.symm this]
     simp only [ite_true, List.nil_append, hlit]
-    simp [h]
+    rw [dite_eq_left hvalid]
   · obtain ⟨hne, hlen, hdig, hpad⟩ := fraction_digits ns h0 hv.2
     simp only [h0, ite_false, List.cons_append, lit_cons]
     rw [List.takeWhile_append_of_pos hdig, htw, List.append_nil, List.drop_left' rfl, hpad, digits_value, pad_value]
@@ -201,7 +233,8 @@ private theorem time_text (t : LocalTime) (h : t.isValid = true) (rest : List Ch
       simp only [Bool.or_eq_false_iff, List.isEmpty_eq_false_iff, decide_eq_false_iff_not]
       exact ⟨hne, by omega⟩
     rw [hne']
-    simp [h]
+    simp only [Bool.false_eq_true, ite_false]
+    rw [dite_eq_left hvalid]
 
 private theorem offset_text (o : Int) (h : o.natAbs < 24 * 60) : offset (Calendar.offset o).toList = some (o, []) := by
   unfold Calendar.offset
@@ -244,42 +277,6 @@ private theorem offset_text (o : Int) (h : o.natAbs < 24 * 60) : offset (Calenda
     · simp only [h0, hneg, ite_false, String.toList_append, List.append_assoc,
         show "+".toList = ['+'] by rfl, show ":".toList = [':'] by rfl, List.cons_append, List.nil_append]
       exact hsign '+' (Or.inr ⟨rfl, hneg⟩)
-
-private theorem date_valid {cs rest : List Char} {d : LocalDate} (h : date cs = some (d, rest)) :
-    d.isValid = true := by
-  simp only [date, Option.bind_eq_bind, Option.bind_eq_some_iff, Prod.exists, Option.ite_none_right_eq_some,
-    Option.some.injEq, Prod.mk.injEq] at h
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hv, rfl, _⟩ := h
-  exact hv
-
-private theorem time_valid {cs rest : List Char} {t : LocalTime} (h : time cs = some (t, rest)) :
-    t.isValid = true := by
-  simp only [time, Option.bind_eq_bind, Option.bind_eq_some_iff, Prod.exists] at h
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hm⟩ := h
-  split at hm
-  · simp only [Option.bind_some, Option.ite_none_right_eq_some, Option.some.injEq, Prod.mk.injEq] at hm
-    obtain ⟨hv, rfl, _⟩ := hm
-    exact hv
-  · split at hm
-    · simp at hm
-    · simp only [Option.bind_some, Option.ite_none_right_eq_some, Option.some.injEq, Prod.mk.injEq] at hm
-      obtain ⟨hv, rfl, _⟩ := hm
-      exact hv
-
-private theorem offset_valid {cs rest : List Char} {o : Int} (h : offset cs = some (o, rest)) :
-    o.natAbs < 24 * 60 := by
-  unfold offset at h
-  split at h
-  · simp only [Option.some.injEq, Prod.mk.injEq] at h
-    omega
-  · split at h
-    · simp only [Option.bind_eq_bind, Option.bind_eq_some_iff, Prod.exists, Option.ite_none_right_eq_some,
-        Option.some.injEq, Prod.mk.injEq, Bool.and_eq_true, decide_eq_true_eq] at h
-      obtain ⟨hh, _, _, _, _, mm, _, _, ⟨h1, h2⟩, ho, _⟩ := h
-      subst ho
-      split <;> omega
-    · simp at h
-  · simp at h
 
 private theorem fixed_four_none (h : Nat) (hh : h < 10 ^ 2) (rest : List Char) :
     fixed 4 ((Calendar.pad 2 h).toList ++ ':' :: rest) = none := by
@@ -325,7 +322,7 @@ private theorem shape_text (d : DateTime) (h : d.isValid = true) : shape d.text 
     simp only
     rw [← List.append_nil tt.text.toList, time_text tt h.2 [] (by simp)]
   | offsetDateTime dt =>
-    obtain ⟨dd, tt, o⟩ := dt
+    obtain ⟨dd, tt, o, ho⟩ := dt
     simp only [DateTime.isValid, OffsetDateTime.isValid, Bool.and_eq_true, decide_eq_true_eq] at h
     obtain ⟨c, cs, hoff, hhead⟩ := offset_head o
     unfold shape
@@ -336,58 +333,28 @@ private theorem shape_text (d : DateTime) (h : d.isValid = true) : shape d.text 
     rw [time_text tt h.1.2 _ (by rw [hoff]; exact hhead), hoff]
     simp only
     rw [← hoff, offset_text o h.2]
+    simp only
+    rw [dite_eq_left ho]
   | localTime tt =>
     unfold shape
     simp only [DateTime.text]
     rw [← List.append_nil tt.text.toList, date_none_of_time tt h, time_text tt h [] (by simp)]
 
-private theorem shape_valid {s : String} {d : DateTime} (h : shape s = some d) : d.isValid = true := by
-  unfold shape at h
-  simp only at h
-  split at h
-  · rename_i dd heq
-    simp only [Option.some.injEq] at h
-    subst h
-    exact date_valid heq
-  · rename_i dd rest heq
-    split at h
-    · rename_i tt heq2
-      simp only [Option.some.injEq] at h
-      subst h
-      simp [DateTime.isValid, LocalDateTime.isValid, date_valid heq, time_valid heq2]
-    · rename_i tt rest2 _ heq2
-      split at h
-      · rename_i o heq3
-        simp only [Option.some.injEq] at h
-        subst h
-        simp [DateTime.isValid, OffsetDateTime.isValid, date_valid heq, time_valid heq2, offset_valid heq3]
-      · cases h
-    · cases h
-  · cases h
-  · split at h
-    · rename_i tt heq
-      simp only [Option.some.injEq] at h
-      subst h
-      exact time_valid heq
-    · cases h
-
 end DateText
 
-theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.isValid = true ∧ d.text = s := by
+theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.text = s := by
   unfold DateTime.parse?
   rw [Option.filter_eq_some_iff]
   constructor
-  · rintro ⟨hs, he⟩
-    have hv := DateText.shape_valid hs
-    refine ⟨hv, ?_⟩
-    rw [← dateTime_text d hv]
+  · rintro ⟨_, he⟩
+    rw [← dateTime_text d]
     simpa using he
-  · rintro ⟨hv, rfl⟩
-    refine ⟨DateText.shape_text d hv, ?_⟩
-    simp [dateTime_text d hv]
+  · rintro rfl
+    refine ⟨DateText.shape_text d d.isValid_true, ?_⟩
+    simp [dateTime_text d]
 
 private theorem fromValue_dateTime (w : Value) (d : DateTime) :
-    (fromValue? w : Except String DateTime) = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+    (fromValue? w : Except String DateTime) = .ok d ↔ w = .string d.text := by
   cases w with
   | string s =>
     show (match DateTime.parse? s with
@@ -396,10 +363,10 @@ private theorem fromValue_dateTime (w : Value) (d : DateTime) :
     rw [Value.string.injEq]
     cases hp : DateTime.parse? s with
     | none =>
-      simp only [typeMismatch, reduceCtorEq, false_iff, not_and]
-      intro hv he
+      simp only [typeMismatch, reduceCtorEq, false_iff]
+      intro he
       subst he
-      rw [(dateTime_parse d.text d).mpr ⟨hv, rfl⟩] at hp
+      rw [(dateTime_parse d.text d).mpr rfl] at hp
       cases hp
     | some dt =>
       have := dateTime_parse s dt
@@ -407,15 +374,15 @@ private theorem fromValue_dateTime (w : Value) (d : DateTime) :
       simp only [pure, Except.pure, Except.ok.injEq]
       constructor
       · rintro rfl
-        exact ⟨(this.mp rfl).1, (this.mp rfl).2.symm⟩
-      · rintro ⟨hv, rfl⟩
-        have := (dateTime_parse d.text d).mpr ⟨hv, rfl⟩
+        exact (this.mp rfl).symm
+      · rintro rfl
+        have := (dateTime_parse d.text d).mpr rfl
         rw [hp] at this
         exact Option.some.inj this
   | _ => simp [fromValue?, typeMismatch]
 
 theorem codec_dateTime (d : DateTime) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text :=
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
   ⟨rfl, fun w => fromValue_dateTime w d⟩
 
 private theorem fromValue_localDate (w : Value) (d : LocalDate) :
@@ -431,7 +398,7 @@ private theorem fromValue_localDate (w : Value) (d : LocalDate) :
   | ok dt => cases dt <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localDate (d : LocalDate) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text :=
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
   ⟨rfl, fun w => (fromValue_localDate w d).trans (fromValue_dateTime w (.localDate d))⟩
 
 private theorem fromValue_localTime (w : Value) (t : LocalTime) :
@@ -447,7 +414,7 @@ private theorem fromValue_localTime (w : Value) (t : LocalTime) :
   | ok dt => cases dt <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localTime (t : LocalTime) :
-    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ t.isValid = true ∧ w = .string t.text :=
+    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ w = .string t.text :=
   ⟨rfl, fun w => (fromValue_localTime w t).trans (fromValue_dateTime w (.localTime t))⟩
 
 private theorem fromValue_localDateTime (w : Value) (dt : LocalDateTime) :
@@ -463,7 +430,7 @@ private theorem fromValue_localDateTime (w : Value) (dt : LocalDateTime) :
   | ok d => cases d <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localDateTime (dt : LocalDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text :=
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
   ⟨rfl, fun w => (fromValue_localDateTime w dt).trans (fromValue_dateTime w (.localDateTime dt))⟩
 
 private theorem fromValue_offsetDateTime (w : Value) (dt : OffsetDateTime) :
@@ -479,7 +446,7 @@ private theorem fromValue_offsetDateTime (w : Value) (dt : OffsetDateTime) :
   | ok d => cases d <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_offsetDateTime (dt : OffsetDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text :=
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
   ⟨rfl, fun w => (fromValue_offsetDateTime w dt).trans (fromValue_dateTime w (.offsetDateTime dt))⟩
 
 private theorem empty_ne_localDate_text (d : LocalDate) : "" ≠ d.text := by
@@ -502,63 +469,62 @@ private theorem empty_ne_append {s t : String} (h : "" ≠ s) : "" ≠ s ++ t :=
   exact h (String.length_eq_zero_iff.mp hs).symm
 
 theorem localDate_text_rejects_empty :
-    ¬ ∀ (d : LocalDate), d.isValid = true → (fun (_ : LocalDate) => "") d = d.text := by
+    ¬ ∀ (d : LocalDate), (fun (_ : LocalDate) => "") d = d.text := by
   intro h
-  exact empty_ne_localDate_text _ (h ⟨1970, 1, 1⟩ (by decide))
+  exact empty_ne_localDate_text _ (h default)
 
 theorem localTime_text_rejects_empty :
-    ¬ ∀ (t : LocalTime), t.isValid = true → (fun (_ : LocalTime) => "") t = t.text := by
+    ¬ ∀ (t : LocalTime), (fun (_ : LocalTime) => "") t = t.text := by
   intro h
-  exact empty_ne_localTime_text _ (h ⟨0, 0, 0, 0⟩ (by decide))
+  exact empty_ne_localTime_text _ (h default)
 
 theorem localDateTime_text_rejects_empty :
-    ¬ ∀ (dt : LocalDateTime), dt.isValid = true → (fun (_ : LocalDateTime) => "") dt = dt.text := by
+    ¬ ∀ (dt : LocalDateTime), (fun (_ : LocalDateTime) => "") dt = dt.text := by
   intro h
-  exact empty_ne_append (empty_ne_append (empty_ne_localDate_text _)) (h ⟨⟨1970, 1, 1⟩, ⟨0, 0, 0, 0⟩⟩ (by decide))
+  exact empty_ne_append (empty_ne_append (empty_ne_localDate_text _)) (h default)
 
 theorem offsetDateTime_text_rejects_empty :
-    ¬ ∀ (dt : OffsetDateTime), dt.isValid = true → (fun (_ : OffsetDateTime) => "") dt = dt.text := by
+    ¬ ∀ (dt : OffsetDateTime), (fun (_ : OffsetDateTime) => "") dt = dt.text := by
   intro h
-  exact empty_ne_append (empty_ne_append (empty_ne_append (empty_ne_localDate_text _)))
-    (h ⟨⟨1970, 1, 1⟩, ⟨0, 0, 0, 0⟩, 0⟩ (by decide))
+  exact empty_ne_append (empty_ne_append (empty_ne_append (empty_ne_localDate_text _))) (h default)
 
 theorem dateTime_text_rejects_empty :
-    ¬ ∀ (d : DateTime), d.isValid = true → (fun (_ : DateTime) => "") d = d.text := by
+    ¬ ∀ (d : DateTime), (fun (_ : DateTime) => "") d = d.text := by
   intro h
-  exact empty_ne_localDate_text _ (h (.localDate ⟨1970, 1, 1⟩) (by decide))
+  exact empty_ne_localDate_text _ (h (.localDate default))
 
 theorem dateTime_parse_rejects_none :
-    ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.isValid = true ∧ d.text = s := by
+    ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.text = s := by
   intro h
-  cases (h (DateTime.localDate ⟨1970, 1, 1⟩).text (.localDate ⟨1970, 1, 1⟩)).mpr ⟨by decide, rfl⟩
+  cases (h (DateTime.localDate default).text (.localDate default)).mpr rfl
 
 theorem codec_localDate_rejects_null :
     ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string ((fun (_ : LocalDate) => "") d) ∧
-      ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+      ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_localTime_rejects_null :
     ¬ ∀ (t : LocalTime), @toValue LocalTime ⟨fun _ => .null⟩ t = .string ((fun (_ : LocalTime) => "") t) ∧
-      ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ t.isValid = true ∧ w = .string t.text := by
+      ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ w = .string t.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_localDateTime_rejects_null :
     ¬ ∀ (dt : LocalDateTime), @toValue LocalDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : LocalDateTime) => "") dt) ∧
-      ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+      ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_offsetDateTime_rejects_null :
     ¬ ∀ (dt : OffsetDateTime), @toValue OffsetDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : OffsetDateTime) => "") dt) ∧
-      ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+      ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_dateTime_rejects_null :
     ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string ((fun (_ : DateTime) => "") d) ∧
-      ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+      ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   intro h
   nomatch (h default).1
 

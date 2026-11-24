@@ -6,59 +6,63 @@ public import ExactJSON.Value
 
 namespace ExactJSON
 
-structure LocalDate where
-  year : Nat
-  month : Nat
-  day : Nat
-  deriving DecidableEq, Ord, Repr, Inhabited
-
-structure LocalTime where
-  hour : Nat
-  minute : Nat
-  second : Nat
-  nanosecond : Nat := 0
-  deriving DecidableEq, Ord, Repr, Inhabited
-
-structure LocalDateTime where
-  date : LocalDate
-  time : LocalTime
-  deriving DecidableEq, Ord, Repr, Inhabited
-
-structure OffsetDateTime where
-  date : LocalDate
-  time : LocalTime
-  offsetMinutes : Int := 0
-  deriving DecidableEq, Repr, Inhabited
-
-inductive DateTime where
-  | offsetDateTime (dt : OffsetDateTime)
-  | localDateTime (dt : LocalDateTime)
-  | localDate (d : LocalDate)
-  | localTime (t : LocalTime)
-  deriving DecidableEq, Repr, Inhabited
-
 def isLeapYear (y : Nat) : Bool := y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
 
 def daysInMonth (y m : Nat) : Nat :=
   if m == 2 then (if isLeapYear y then 29 else 28)
   else if m == 4 || m == 6 || m == 9 || m == 11 then 30 else 31
 
-def LocalDate.isValid (d : LocalDate) : Bool :=
-  d.year ≤ 9999 && 1 ≤ d.month && d.month ≤ 12 && 1 ≤ d.day && d.day ≤ daysInMonth d.year d.month
+def LocalDate.Valid (year month day : Nat) : Prop :=
+  year ≤ 9999 ∧ 1 ≤ month ∧ month ≤ 12 ∧ 1 ≤ day ∧ day ≤ daysInMonth year month
 
-def LocalTime.isValid (t : LocalTime) : Bool :=
-  t.hour ≤ 23 && t.minute ≤ 59 && t.second ≤ 60 && t.nanosecond < 1000000000
+instance (year month day : Nat) : Decidable (LocalDate.Valid year month day) :=
+  inferInstanceAs (Decidable (_ ∧ _))
 
-def LocalDateTime.isValid (dt : LocalDateTime) : Bool := dt.date.isValid && dt.time.isValid
+def LocalTime.Valid (hour minute second nanosecond : Nat) : Prop :=
+  hour ≤ 23 ∧ minute ≤ 59 ∧ second ≤ 60 ∧ nanosecond < 1000000000
 
-def OffsetDateTime.isValid (dt : OffsetDateTime) : Bool :=
-  dt.date.isValid && dt.time.isValid && dt.offsetMinutes.natAbs < 24 * 60
+instance (hour minute second nanosecond : Nat) : Decidable (LocalTime.Valid hour minute second nanosecond) :=
+  inferInstanceAs (Decidable (_ ∧ _))
 
-def DateTime.isValid : DateTime → Bool
-  | .offsetDateTime dt => dt.isValid
-  | .localDateTime dt => dt.isValid
-  | .localDate d => d.isValid
-  | .localTime t => t.isValid
+structure LocalDate where
+  year : Nat
+  month : Nat
+  day : Nat
+  valid : LocalDate.Valid year month day := by decide
+  deriving DecidableEq, Repr
+
+structure LocalTime where
+  hour : Nat
+  minute : Nat
+  second : Nat
+  nanosecond : Nat := 0
+  valid : LocalTime.Valid hour minute second nanosecond := by decide
+  deriving DecidableEq, Repr
+
+structure LocalDateTime where
+  date : LocalDate
+  time : LocalTime
+  deriving DecidableEq, Repr
+
+structure OffsetDateTime where
+  date : LocalDate
+  time : LocalTime
+  offsetMinutes : Int := 0
+  valid : offsetMinutes.natAbs < 24 * 60 := by decide
+  deriving DecidableEq, Repr
+
+inductive DateTime where
+  | offsetDateTime (dt : OffsetDateTime)
+  | localDateTime (dt : LocalDateTime)
+  | localDate (d : LocalDate)
+  | localTime (t : LocalTime)
+  deriving DecidableEq, Repr
+
+instance : Inhabited LocalDate := ⟨{ year := 1970, month := 1, day := 1 }⟩
+instance : Inhabited LocalTime := ⟨{ hour := 0, minute := 0, second := 0 }⟩
+instance : Inhabited LocalDateTime := ⟨{ date := default, time := default }⟩
+instance : Inhabited OffsetDateTime := ⟨{ date := default, time := default }⟩
+instance : Inhabited DateTime := ⟨.localDate default⟩
 
 namespace Calendar
 

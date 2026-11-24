@@ -56,8 +56,7 @@ def date (cs : List Char) : Option (LocalDate × List Char) := do
   let (month, cs) ← fixed 2 cs
   let cs ← lit '-' cs
   let (day, cs) ← fixed 2 cs
-  let d : LocalDate := { year, month, day }
-  if d.isValid then some (d, cs) else none
+  if h : LocalDate.Valid year month day then some (⟨year, month, day, h⟩, cs) else none
 
 def time (cs : List Char) : Option (LocalTime × List Char) := do
   let (hour, cs) ← fixed 2 cs
@@ -73,8 +72,8 @@ def time (cs : List Char) : Option (LocalTime × List Char) := do
       if ds.isEmpty || ds.length > 9 then none
       some ((ds ++ List.replicate (9 - ds.length) '0').foldl (fun acc c => acc * 10 + (c.toNat - 48)) 0,
         cs.drop ds.length)
-  let t : LocalTime := { hour, minute, second, nanosecond }
-  if t.isValid then some (t, cs) else none
+  if h : LocalTime.Valid hour minute second nanosecond then some (⟨hour, minute, second, nanosecond, h⟩, cs)
+  else none
 
 def offset (cs : List Char) : Option (Int × List Char) :=
   match cs with
@@ -99,7 +98,7 @@ def shape (s : String) : Option DateTime :=
     | some (t, []) => some (.localDateTime { date := d, time := t })
     | some (t, rest) =>
       match offset rest with
-      | some (o, []) => some (.offsetDateTime { date := d, time := t, offsetMinutes := o })
+      | some (o, []) => if h : o.natAbs < 24 * 60 then some (.offsetDateTime ⟨d, t, o, h⟩) else none
       | _ => none
     | none => none
   | some _ => none

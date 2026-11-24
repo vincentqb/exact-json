@@ -103,4 +103,24 @@ Hint: Type class instance resolution failures can be inspected with the `set_opt
 #guard_msgs in
 deriving instance LawfulValue for Raw
 
+/--
+error: could not synthesize default value for field 'valid' of 'ExactJSON.LocalTime' using tactics
+---
+error: Tactic `decide` proved that the proposition
+  LocalTime.Valid 0 0 0 1000000000
+is false
+-/
+#guard_msgs in
+example : LocalTime := { hour := 0, minute := 0, second := 0, nanosecond := 1000000000 }
+
+/--
+error: could not synthesize default value for field 'valid' of 'ExactJSON.LocalDate' using tactics
+---
+error: Tactic `decide` proved that the proposition
+  LocalDate.Valid 2023 2 29
+is false
+-/
+#guard_msgs in
+example : LocalDate := { year := 2023, month := 2, day := 29 }
+
 #check_failure (encode (some (none : Option Nat)))
