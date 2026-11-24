@@ -10,6 +10,7 @@ public import ExactJSON.Write
 public import ExactJSON.CodecLaws
 public import ExactJSON.LeanJsonLaws
 public import ExactJSON.DateTimeLaws
+public import ExactJSON.ShortestLaws
 
 public section
 

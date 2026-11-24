@@ -4,7 +4,6 @@ public import ExactJSON.ShortestCore
 public import ExactJSON.ReadBackExact
 public import ExactJSON.RenderInjective
 public import ExactJSON.LeanJson
-import all ExactJSON.LeanJson
 
 public section
 
