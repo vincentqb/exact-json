@@ -5,23 +5,19 @@ public import ExactJSON.Calendar
 public import Std.Time.DateTime.Timestamp
 import Std.Time.Zoned
 
-public section
+@[expose] public section
 
 namespace ExactJSON
 
-private def pad (width n : Nat) : String :=
-  let ds := Nat.toDigits 10 n
-  String.ofList (List.replicate (width - ds.length) '0' ++ ds)
-
 protected def LocalDate.toString (d : LocalDate) : String :=
-  s!"{pad 4 d.year}-{pad 2 d.month}-{pad 2 d.day}"
+  s!"{Calendar.pad 4 d.year}-{Calendar.pad 2 d.month}-{Calendar.pad 2 d.day}"
 
 protected def LocalTime.toString (t : LocalTime) : String :=
-  let base := s!"{pad 2 t.hour}:{pad 2 t.minute}:{pad 2 t.second}"
+  let base := s!"{Calendar.pad 2 t.hour}:{Calendar.pad 2 t.minute}:{Calendar.pad 2 t.second}"
   if t.nanosecond == 0 then base
   else if t.nanosecond ≥ 1000000000 then s!"{base} (nanosecond {t.nanosecond} out of range)"
   else
-    let digits := (pad 9 t.nanosecond).toList.reverse.dropWhile (· == '0') |>.reverse
+    let digits := (Calendar.pad 9 t.nanosecond).toList.reverse.dropWhile (· == '0') |>.reverse
     base ++ "." ++ String.ofList digits
 
 protected def LocalDateTime.toString (dt : LocalDateTime) : String :=
@@ -32,7 +28,7 @@ def offsetText (minutes : Int) : String :=
   else
     let sign := if minutes < 0 then "-" else "+"
     let m := minutes.natAbs
-    s!"{sign}{pad 2 (m / 60)}:{pad 2 (m % 60)}"
+    s!"{sign}{Calendar.pad 2 (m / 60)}:{Calendar.pad 2 (m % 60)}"
 
 protected def OffsetDateTime.toString (dt : OffsetDateTime) : String :=
   s!"{dt.date.toString}T{dt.time.toString}{offsetText dt.offsetMinutes}"
@@ -51,17 +47,17 @@ instance : ToString DateTime := ⟨DateTime.toString⟩
 
 namespace DateText
 
-private def fixed (n : Nat) (cs : List Char) : Option (Nat × List Char) :=
+def fixed (n : Nat) (cs : List Char) : Option (Nat × List Char) :=
   let ds := cs.take n
   if ds.length == n && ds.all Char.isDigit then
     some (ds.foldl (fun acc c => acc * 10 + (c.toNat - 48)) 0, cs.drop n)
   else none
 
-private def lit (c : Char) : List Char → Option (List Char)
+def lit (c : Char) : List Char → Option (List Char)
   | d :: rest => if c == d then some rest else none
   | [] => none
 
-private def date (cs : List Char) : Option (LocalDate × List Char) := do
+def date (cs : List Char) : Option (LocalDate × List Char) := do
   let (year, cs) ← fixed 4 cs
   let cs ← lit '-' cs
   let (month, cs) ← fixed 2 cs
@@ -70,7 +66,7 @@ private def date (cs : List Char) : Option (LocalDate × List Char) := do
   let d : LocalDate := { year, month, day }
   if d.isValid then some (d, cs) else none
 
-private def time (cs : List Char) : Option (LocalTime × List Char) := do
+def time (cs : List Char) : Option (LocalTime × List Char) := do
   let (hour, cs) ← fixed 2 cs
   let cs ← lit ':' cs
   let (minute, cs) ← fixed 2 cs
@@ -87,7 +83,7 @@ private def time (cs : List Char) : Option (LocalTime × List Char) := do
   let t : LocalTime := { hour, minute, second, nanosecond }
   if t.isValid then some (t, cs) else none
 
-private def offset (cs : List Char) : Option (Int × List Char) :=
+def offset (cs : List Char) : Option (Int × List Char) :=
   match cs with
   | 'Z' :: rest => some (0, rest)
   | s :: rest =>
@@ -101,7 +97,7 @@ private def offset (cs : List Char) : Option (Int × List Char) :=
     else none
   | [] => none
 
-private def shape (s : String) : Option DateTime :=
+def shape (s : String) : Option DateTime :=
   let cs := s.toList
   match date cs with
   | some (d, []) => some (.localDate d)
