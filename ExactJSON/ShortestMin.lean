@@ -118,8 +118,6 @@ theorem scale_rat (e k : Int) :
   rw [h2, h10]
   grind
 
-theorem scale_fst_pos' (e k : Int) : 0 < (scale e k).1 := scale_fst_pos e k
-
 theorem two_zpow_pos (e : Int) : (0 : Rat) < (2 : Rat) ^ e := Rat.zpow_pos (by decide)
 
 theorem ten_zpow_pos (e : Int) : (0 : Rat) < (10 : Rat) ^ e := Rat.zpow_pos (by decide)
@@ -440,14 +438,6 @@ theorem digits_ge (m : Nat) (hm : m ≠ 0) : 10 ^ ((Nat.toDigits 10 m).length - 
 
 theorem digits_length_le_iff (m n : Nat) (hn : 0 < n) : (Nat.toDigits 10 m).length ≤ n ↔ m < 10 ^ n :=
   Nat.length_toDigits_le_iff (by decide) hn
-
-theorem digits_length_eq (m n : Nat) (hn : 1 ≤ n) (h1 : 10 ^ (n - 1) ≤ m) (h2 : m < 10 ^ n) :
-    (Nat.toDigits 10 m).length = n := by
-  have a := (digits_length_le_iff m n (by omega)).mpr h2
-  by_cases hn1 : n = 1
-  · subst hn1; have := digits_length_pos m; omega
-  · have b := mt (digits_length_le_iff m (n - 1) (by omega)).mp (by omega)
-    omega
 
 theorem ten_zpow_le {a b : Int} (h : a ≤ b) : (10 : Rat) ^ a ≤ (10 : Rat) ^ b := by
   have hb : b = a + ((b - a).toNat : Nat) := by omega
