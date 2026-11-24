@@ -12,25 +12,20 @@ def usage : String :=
   "       exactjson canon [--lines] < input.json\n" ++
   "  write the canonical text of the JSON text (or of each line)\n"
 
-def readStdin : IO (Except String String) := do
+def readBytes : IO ByteArray := do
   let stdin ← IO.getStdin
   let mut bytes := ByteArray.empty
   repeat
     let chunk ← stdin.read 65536
     if chunk.isEmpty then break
     bytes := bytes ++ chunk
+  return bytes
+
+def readStdin : IO (Except String String) := do
+  let bytes ← readBytes
   match String.fromUTF8? bytes with
   | some s => return .ok s
-  | none =>
-    let mut start := 0
-    let mut line := 1
-    for i in [0:bytes.size + 1] do
-      if i == bytes.size || bytes[i]! == 0x0A then
-        if (String.fromUTF8? (bytes.extract start i)).isNone then
-          return .error s!"line {line}: not UTF-8"
-        start := i + 1
-        line := line + 1
-    return .error "not UTF-8"
+  | none => return .error (Value.utf8Error bytes)
 
 public section
 
@@ -98,12 +93,15 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln s!"exactjson: {e}"
       return 1
   | "check" :: flags =>
-    let some decodeAll := (match flags with
-      | [] => some fun (s : String) => (Value.parseLines s).map Array.size
-      | ["--as", type] => typedCheck type
+    let some checkAll := (match flags with
+      | [] => some fun (b : ByteArray) => (Value.parseLinesUTF8 b).map Array.size
+      | ["--as", type] => (typedCheck type).map fun (decodeAll : String → Except String Nat) (b : ByteArray) =>
+        match String.fromUTF8? b with
+        | some s => decodeAll s
+        | none => .error (Value.utf8Error b)
       | _ => none)
       | do IO.eprint usage; return 2
-    match (← readStdin) >>= decodeAll with
+    match checkAll (← readBytes) with
     | .ok count =>
       IO.eprintln s!"exactjson: {count} canonical lines"
       return 0

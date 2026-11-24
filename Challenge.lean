@@ -20,14 +20,15 @@ float is the shortest decimal that reads back as it, the nearest of those, ties 
 digit, laid out by `Decimal.toFloatText`; and an invalid value's text is not read. Every valid
 value's text is JSON that holds that value; no text holds a control character (below U+0020, or
 U+007F to U+009F) or a line or paragraph separator (U+2028, U+2029); reading JSON in any spelling
-holds what RFC 8259 reads in it; JSON Lines is one canonical text a line; typed decoding reads
-exactly what typed encoding writes, for any type whose instances are lawful (`LawfulValue`: they
-read back what they write, as valid values); each of the library's instances writes the value its
-codec law states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`)
-reads back what it writes; derived instances write the shapes their examples state, and are
-lawful; dates and times are written in one RFC 3339 form each and read in that form only; and the
-steps the reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear
-in the text's length.
+holds what RFC 8259 reads in it; JSON Lines is one canonical text a line, and reading bytes takes
+exactly the UTF-8 encoding of such lines, with no byte-order mark; typed decoding reads exactly
+what typed encoding writes, for any type whose instances are lawful (`LawfulValue`: they read back
+what they write, as valid values); each of the library's instances writes the value its codec law
+states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads back
+what it writes; derived instances write the shapes their examples state, and are lawful; dates and
+times are written in one RFC 3339 form each and read in that form only; and the steps the reader
+counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's
+length.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names, and the command line tool beyond the functions it calls; nor that
 the steps are the work done: the reader counts them itself, so the law bounds its count, not its
@@ -53,6 +54,8 @@ def decode {α : Type u} [ToValue α] [FromValue α] : String → Except String 
 def Value.renderLines : Array Value → String := sorry
 
 def Value.parseLines : String → Except String (Array Value) := sorry
+
+def Value.parseLinesUTF8 : ByteArray → Except String (Array Value) := sorry
 
 def encodeLines {α : Type u} [ToValue α] : Array α → String := sorry
 
@@ -312,6 +315,10 @@ theorem parseLines_fixed (s : String) (vs : Array Value) :
     Value.parseLines s = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ Value.renderLines vs = s := by
   sorry
 
+theorem parseLinesUTF8_bytes (b : ByteArray) (vs : Array Value) :
+    Value.parseLinesUTF8 b = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
+  sorry
+
 theorem encodeLines_eq {α : Type u} [ToValue α] (as : Array α) :
     encodeLines as = Value.renderLines (as.map toValue) := by
   sorry
@@ -567,6 +574,12 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
     ¬ ∀ (s : String) (vs : Array Value),
       (fun (_ : String) => (Except.ok #[] : Except String (Array Value))) s = .ok vs ↔
         (∀ v ∈ vs.toList, v.Valid) ∧ (fun (_ : Array Value) => "") vs = s := by
+  sorry
+
+@[kills parseLinesUTF8_bytes] theorem parseLinesUTF8_bytes_rejects_failure :
+    ¬ ∀ (b : ByteArray) (vs : Array Value),
+      (fun (_ : ByteArray) => (Except.error "" : Except String (Array Value))) b = .ok vs ↔
+        (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
   sorry
 
 @[kills encodeLines_eq] theorem encodeLines_eq_rejects_constant :

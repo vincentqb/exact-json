@@ -337,6 +337,47 @@ theorem renderLines_eq_rejects_empty :
   have := congrArg String.toList (h #[.null])
   simp at this
 
+theorem fromUTF8?_eq_some {b : ByteArray} {s : String} : String.fromUTF8? b = some s ↔ b = s.toByteArray := by
+  unfold String.fromUTF8?
+  constructor
+  · intro h
+    split at h
+    · cases h
+      rfl
+    · cases h
+  · rintro rfl
+    rw [dite_eq_left s.isValidUTF8]
+    rfl
+
+theorem parseLinesUTF8_bytes (b : ByteArray) (vs : Array Value) :
+    Value.parseLinesUTF8 b = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
+  unfold Value.parseLinesUTF8
+  cases hb : String.fromUTF8? b with
+  | none =>
+    simp only [reduceCtorEq, false_iff, not_and]
+    intro _ he
+    have hs : String.fromUTF8? (Value.renderLines vs).toByteArray = some (Value.renderLines vs) :=
+      fromUTF8?_eq_some.mpr rfl
+    rw [he, hs] at hb
+    cases hb
+  | some s =>
+    have hs := fromUTF8?_eq_some.mp hb
+    subst hs
+    simp only
+    rw [parseLines_fixed]
+    constructor
+    · rintro ⟨hv, he⟩
+      exact ⟨hv, by rw [he]⟩
+    · rintro ⟨hv, he⟩
+      exact ⟨hv, (String.toByteArray_inj.mp he).symm⟩
+
+theorem parseLinesUTF8_bytes_rejects_failure :
+    ¬ ∀ (b : ByteArray) (vs : Array Value),
+      (fun (_ : ByteArray) => (Except.error "" : Except String (Array Value))) b = .ok vs ↔
+        (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
+  intro h
+  cases (h (Value.renderLines #[]).toByteArray #[]).mpr ⟨by simp, rfl⟩
+
 theorem parseLines_fixed_rejects_empty :
     ¬ ∀ (s : String) (vs : Array Value),
       (fun (_ : String) => (Except.ok #[] : Except String (Array Value))) s = .ok vs ↔

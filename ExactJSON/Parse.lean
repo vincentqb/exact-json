@@ -264,6 +264,22 @@ def readJson (s : String) : Except String Value :=
 
 def parseLines (s : String) : Except String (Array Value) := readLines parse 0 #[] (s.splitOn "\n")
 
+def utf8Error (bytes : ByteArray) : String := Id.run do
+  let mut start := 0
+  let mut line := 1
+  for i in [0:bytes.size + 1] do
+    if i == bytes.size || bytes[i]! == 0x0A then
+      if (String.fromUTF8? (bytes.extract start i)).isNone then
+        return s!"line {line}: not UTF-8"
+      start := i + 1
+      line := line + 1
+  return "not UTF-8"
+
+def parseLinesUTF8 (bytes : ByteArray) : Except String (Array Value) :=
+  match String.fromUTF8? bytes with
+  | some s => parseLines s
+  | none => .error (utf8Error bytes)
+
 end Value
 
 end ExactJSON
