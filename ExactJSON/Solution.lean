@@ -12,6 +12,10 @@ public import ExactJSON.LeanJsonLaws
 public import ExactJSON.DateTimeLaws
 public import ExactJSON.ShortestLaws
 public import ExactJSON.ShapesCodec
+public import ExactJSON.LinesLaws
+public import ExactJSON.ApiLaws
+public import ExactJSON.LiteralExamples
+public import ExactJSON.CanonLaws
 
 public section
 

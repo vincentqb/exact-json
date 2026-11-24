@@ -4,6 +4,7 @@ public import ExactJSON.Codec
 public import ExactJSON.LeanJson
 public import ExactJSON.DateTime
 public import ExactJSON.ShapesDerived
+public import ExactJSON.LiteralExamples
 
 open ExactJSON
 
@@ -58,7 +59,8 @@ where
 end ExactJSON
 
 def version : Value :=
-  .table #[("name", Coe.coe "exactjson"), ("strict", Coe.coe true), ("version", (1 : Value))]
+  .table #[("examples", .array #[literalExample, literalSplice 1 "exactjson"]), ("name", Coe.coe "exactjson"),
+    ("strict", Coe.coe true), ("version", (1 : Value))]
 
 def getAll (key : String) (input : String) : Except String String := do
   let values ← Value.parseLines input
