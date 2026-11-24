@@ -2,11 +2,14 @@ module
 
 public import ExactJSON.Codec
 public import ExactJSON.LeanJson
+public import ExactJSON.DateTime
 
 open ExactJSON
 
 def usage : String :=
   "usage: exactjson version\n" ++
+  "       exactjson now\n" ++
+  "  write the time now in each date-time form, with its days and nanoseconds since 1970\n" ++
   "       exactjson lean-json < input.json\n" ++
   "  write the JSON text as Lean.Json compresses it, then its canonical text read back from Lean.Json\n" ++
   "       exactjson get KEY < input.jsonl\n" ++
@@ -62,6 +65,18 @@ def getAll (key : String) (input : String) : Except String String := do
   let values ← Value.parseLines input
   return encodeLines (values.map fun v => (v.get? key).getD .null)
 
+def nowInfo (dt : OffsetDateTime) : Value :=
+  let ldt : LocalDateTime := { date := dt.date, time := dt.time }
+  .table #[("date", .string (toString dt.date)),
+    ("dateTime", .string (toString (DateTime.offsetDateTime dt))),
+    ("day", toValue (LocalDate.ofDaysSinceEpoch? dt.date.toDaysSinceEpoch)),
+    ("days", .integer dt.date.toDaysSinceEpoch),
+    ("local", .string (toString ldt)),
+    ("nanos", .integer dt.toUnixNanos),
+    ("offset", .string (toString dt)),
+    ("time", .string (toString dt.time)),
+    ("value", toValue dt)]
+
 def leanJsonOf : Value → Lean.Json
   | .float x => ExactFloat.exactToJsonFloat.toJson x
   | v => v.toJson
@@ -93,6 +108,11 @@ def typedCheck : String → Option (String → Except String Nat)
   | "Option Nat" => some fun (s : String) => (decodeLines (α := Option Nat) s).map (·.size)
   | "TreeMap String Nat" => some fun (s : String) => (decodeLines (α := Std.TreeMap String Nat) s).map (·.size)
   | "HashMap String Nat" => some fun (s : String) => (decodeLines (α := Std.HashMap String Nat) s).map (·.size)
+  | "LocalDate" => some fun (s : String) => (decodeLines (α := LocalDate) s).map (·.size)
+  | "LocalTime" => some fun (s : String) => (decodeLines (α := LocalTime) s).map (·.size)
+  | "LocalDateTime" => some fun (s : String) => (decodeLines (α := LocalDateTime) s).map (·.size)
+  | "OffsetDateTime" => some fun (s : String) => (decodeLines (α := OffsetDateTime) s).map (·.size)
+  | "DateTime" => some fun (s : String) => (decodeLines (α := DateTime) s).map (·.size)
   | _ => none
 
 def main (args : List String) : IO UInt32 := do
@@ -117,6 +137,9 @@ def main (args : List String) : IO UInt32 := do
     | .error e =>
       IO.eprintln s!"exactjson: {e}"
       return 1
+  | ["now"] =>
+    IO.println (nowInfo (← OffsetDateTime.now)).render
+    return 0
   | ["version"] =>
     IO.println (toString version)
     return 0
