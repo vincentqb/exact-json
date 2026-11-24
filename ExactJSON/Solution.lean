@@ -11,6 +11,7 @@ public import ExactJSON.CodecLaws
 public import ExactJSON.LeanJsonLaws
 public import ExactJSON.DateTimeLaws
 public import ExactJSON.ShortestLaws
+public import ExactJSON.ShapesCodec
 
 public section
 

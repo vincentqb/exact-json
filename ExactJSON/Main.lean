@@ -3,6 +3,7 @@ module
 public import ExactJSON.Codec
 public import ExactJSON.LeanJson
 public import ExactJSON.DateTime
+public import ExactJSON.ShapesDerived
 
 open ExactJSON
 
@@ -113,6 +114,9 @@ def typedCheck : String → Option (String → Except String Nat)
   | "LocalDateTime" => some fun (s : String) => (decodeLines (α := LocalDateTime) s).map (·.size)
   | "OffsetDateTime" => some fun (s : String) => (decodeLines (α := OffsetDateTime) s).map (·.size)
   | "DateTime" => some fun (s : String) => (decodeLines (α := DateTime) s).map (·.size)
+  | "Example.Point" => some fun (s : String) => (decodeLines (α := Example.Point) s).map (·.size)
+  | "Example.Shape" => some fun (s : String) => (decodeLines (α := Example.Shape) s).map (·.size)
+  | "Example.Envelope" => some fun (s : String) => (decodeLines (α := Example.Envelope) s).map (·.size)
   | _ => none
 
 def main (args : List String) : IO UInt32 := do
