@@ -1,5 +1,8 @@
 module
 
+public import Std.Data.HashMap
+public import Std.Data.TreeMap
+
 public section
 
 namespace ExactJSON
@@ -59,5 +62,26 @@ class FromValue (α : Type u) where
 
 export ToValue (toValue)
 export FromValue (fromValue?)
+
+class NotNull (α : Type u) : Prop
+instance : NotNull String := ⟨⟩
+instance : NotNull Bool := ⟨⟩
+instance : NotNull Int := ⟨⟩
+instance : NotNull Nat := ⟨⟩
+instance : NotNull UInt8 := ⟨⟩
+instance : NotNull UInt16 := ⟨⟩
+instance : NotNull UInt32 := ⟨⟩
+instance : NotNull UInt64 := ⟨⟩
+instance : NotNull Int8 := ⟨⟩
+instance : NotNull Int16 := ⟨⟩
+instance : NotNull Int32 := ⟨⟩
+instance : NotNull Int64 := ⟨⟩
+instance : NotNull Float := ⟨⟩
+instance : NotNull Char := ⟨⟩
+instance {α : Type u} : NotNull (Array α) := ⟨⟩
+instance {α : Type u} : NotNull (List α) := ⟨⟩
+instance {α : Type u} {β : Type u} : NotNull (α × β) := ⟨⟩
+instance {α : Type u} : NotNull (Std.TreeMap String α) := ⟨⟩
+instance {α : Type u} : NotNull (Std.HashMap String α) := ⟨⟩
 
 end ExactJSON

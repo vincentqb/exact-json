@@ -42,6 +42,90 @@ def encode {α : Type u} [ToValue α] : α → String := sorry
 
 def decode {α : Type u} [ToValue α] [FromValue α] : String → Except String α := sorry
 
+instance instToValueValue : ToValue Value := sorry
+
+instance instFromValueValue : FromValue Value := sorry
+
+instance instToValueString : ToValue String := sorry
+
+instance instFromValueString : FromValue String := sorry
+
+instance instToValueBool : ToValue Bool := sorry
+
+instance instFromValueBool : FromValue Bool := sorry
+
+instance instToValueInt : ToValue Int := sorry
+
+instance instFromValueInt : FromValue Int := sorry
+
+instance instToValueNat : ToValue Nat := sorry
+
+instance instFromValueNat : FromValue Nat := sorry
+
+instance instToValueUInt8 : ToValue UInt8 := sorry
+
+instance instFromValueUInt8 : FromValue UInt8 := sorry
+
+instance instToValueUInt16 : ToValue UInt16 := sorry
+
+instance instFromValueUInt16 : FromValue UInt16 := sorry
+
+instance instToValueUInt32 : ToValue UInt32 := sorry
+
+instance instFromValueUInt32 : FromValue UInt32 := sorry
+
+instance instToValueUInt64 : ToValue UInt64 := sorry
+
+instance instFromValueUInt64 : FromValue UInt64 := sorry
+
+instance instToValueInt8 : ToValue Int8 := sorry
+
+instance instFromValueInt8 : FromValue Int8 := sorry
+
+instance instToValueInt16 : ToValue Int16 := sorry
+
+instance instFromValueInt16 : FromValue Int16 := sorry
+
+instance instToValueInt32 : ToValue Int32 := sorry
+
+instance instFromValueInt32 : FromValue Int32 := sorry
+
+instance instToValueInt64 : ToValue Int64 := sorry
+
+instance instFromValueInt64 : FromValue Int64 := sorry
+
+instance instToValueChar : ToValue Char := sorry
+
+instance instFromValueChar : FromValue Char := sorry
+
+instance instToValueFloat : ToValue Float := sorry
+
+instance instFromValueFloat : FromValue Float := sorry
+
+instance instToValueArray {α : Type u} [ToValue α] : ToValue (Array α) := sorry
+
+instance instFromValueArray {α : Type u} [FromValue α] : FromValue (Array α) := sorry
+
+instance instToValueList {α : Type u} [ToValue α] : ToValue (List α) := sorry
+
+instance instFromValueList {α : Type u} [FromValue α] : FromValue (List α) := sorry
+
+instance instToValueProd {α β : Type u} [ToValue α] [ToValue β] : ToValue (α × β) := sorry
+
+instance instFromValueProd {α β : Type u} [FromValue α] [FromValue β] : FromValue (α × β) := sorry
+
+instance instToValueOptionOfNotNull {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) := sorry
+
+instance instFromValueOptionOfNotNull {α : Type u} [FromValue α] [NotNull α] : FromValue (Option α) := sorry
+
+instance instToValueTreeMapString {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) := sorry
+
+instance instFromValueTreeMapString {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) := sorry
+
+instance instToValueHashMapString {α : Type u} [ToValue α] : ToValue (Std.HashMap String α) := sorry
+
+instance instFromValueHashMapString {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) := sorry
+
 theorem parse_fixed (s : String) (v : Value) :
     Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
   sorry
@@ -88,6 +172,104 @@ theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
   sorry
 
 theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none := by
+  sorry
+
+theorem codec_value (v : Value) :
+    toValue v = (v : Value) ∧ ∀ w : Value, fromValue? w = .ok v ↔ w = (v : Value) := by
+  sorry
+
+theorem codec_string (s : String) :
+    toValue s = (.string s : Value) ∧ ∀ w : Value, fromValue? w = .ok s ↔ w = (.string s : Value) := by
+  sorry
+
+theorem codec_bool (b : Bool) :
+    toValue b = (.boolean b : Value) ∧ ∀ w : Value, fromValue? w = .ok b ↔ w = (.boolean b : Value) := by
+  sorry
+
+theorem codec_int (n : Int) :
+    toValue n = (.integer n : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n : Value) := by
+  sorry
+
+theorem codec_nat (n : Nat) :
+    toValue n = (.integer n : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n : Value) := by
+  sorry
+
+theorem codec_uInt8 (n : UInt8) :
+    toValue n = (.integer n.toNat : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+theorem codec_uInt16 (n : UInt16) :
+    toValue n = (.integer n.toNat : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+theorem codec_uInt32 (n : UInt32) :
+    toValue n = (.integer n.toNat : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+theorem codec_uInt64 (n : UInt64) :
+    toValue n = (.integer n.toNat : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+theorem codec_int8 (n : Int8) :
+    toValue n = (.integer n.toInt : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+theorem codec_int16 (n : Int16) :
+    toValue n = (.integer n.toInt : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+theorem codec_int32 (n : Int32) :
+    toValue n = (.integer n.toInt : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+theorem codec_int64 (n : Int64) :
+    toValue n = (.integer n.toInt : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+theorem codec_char (c : Char) :
+    toValue c = (.string (String.singleton c) : Value) ∧ ∀ w : Value, fromValue? w = .ok c ↔ w = (.string (String.singleton c) : Value) := by
+  sorry
+
+theorem codec_float (x : Float) :
+    toValue x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
+      ∀ w : Value, fromValue? w = .ok x ↔
+        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
+        (w = .string "-Infinity" ∧ x = -Float.inf) := by
+  sorry
+
+theorem codec_array {α : Type u} [ToValue α] [FromValue α] (xs : Array α) :
+    toValue xs = .array (xs.map toValue) ∧
+      ∀ w : Value, fromValue? w = .ok xs ↔ ∃ vs : Array Value, w = .array vs ∧ vs.toList.mapM fromValue? = .ok xs.toList := by
+  sorry
+
+theorem codec_list {α : Type u} [ToValue α] [FromValue α] (xs : List α) :
+    toValue xs = .array (xs.map toValue).toArray ∧
+      ∀ w : Value, fromValue? w = .ok xs ↔ ∃ vs : Array Value, w = .array vs ∧ vs.toList.mapM fromValue? = .ok xs := by
+  sorry
+
+theorem codec_prod {α β : Type u} [ToValue α] [ToValue β] [FromValue α] [FromValue β] (a : α) (b : β) :
+    toValue (a, b) = .array #[toValue a, toValue b] ∧
+      ∀ w : Value, fromValue? w = .ok (a, b) ↔
+        ∃ va vb : Value, w = .array #[va, vb] ∧ fromValue? va = .ok a ∧ fromValue? vb = .ok b := by
+  sorry
+
+theorem codec_option {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o : Option α) :
+    toValue o = (match o with | none => .null | some a => toValue a) ∧
+      ∀ w : Value, fromValue? w = .ok o ↔
+        (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
+  sorry
+
+theorem codec_treeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α) :
+    toValue m = .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
+      ((∀ a : α, fromValue? (toValue a) = .ok a) →
+        ∃ m' : Std.TreeMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList = m.toList) := by
+  sorry
+
+theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α) :
+    (∃ l : List (String × Value), toValue m = .table ⟨l⟩ ∧ keysIncrease (l.map (·.1)) = true ∧
+      l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
+      ((∀ a : α, fromValue? (toValue a) = .ok a) →
+        ∃ m' : Std.HashMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList.Perm m.toList) := by
   sorry
 
 @[kills parse_fixed] theorem parse_fixed_rejects_constant :
@@ -156,6 +338,138 @@ theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.rende
 @[kills parse_render_invalid] theorem parse_render_invalid_rejects_null :
     ¬ ∀ (v : Value), ¬ v.Valid →
       ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
+  sorry
+
+@[kills codec_value] theorem codec_value_rejects_null :
+    ¬ ∀ (v : Value), @toValue Value ⟨fun _ => .null⟩ v = (v : Value) ∧
+      ∀ w : Value, @fromValue? Value ⟨fun _ => .error ""⟩ w = .ok v ↔ w = (v : Value) := by
+  sorry
+
+@[kills codec_string] theorem codec_string_rejects_null :
+    ¬ ∀ (s : String), @toValue String ⟨fun _ => .null⟩ s = (.string s : Value) ∧
+      ∀ w : Value, @fromValue? String ⟨fun _ => .error ""⟩ w = .ok s ↔ w = (.string s : Value) := by
+  sorry
+
+@[kills codec_bool] theorem codec_bool_rejects_null :
+    ¬ ∀ (b : Bool), @toValue Bool ⟨fun _ => .null⟩ b = (.boolean b : Value) ∧
+      ∀ w : Value, @fromValue? Bool ⟨fun _ => .error ""⟩ w = .ok b ↔ w = (.boolean b : Value) := by
+  sorry
+
+@[kills codec_int] theorem codec_int_rejects_null :
+    ¬ ∀ (n : Int), @toValue Int ⟨fun _ => .null⟩ n = (.integer n : Value) ∧
+      ∀ w : Value, @fromValue? Int ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n : Value) := by
+  sorry
+
+@[kills codec_nat] theorem codec_nat_rejects_null :
+    ¬ ∀ (n : Nat), @toValue Nat ⟨fun _ => .null⟩ n = (.integer n : Value) ∧
+      ∀ w : Value, @fromValue? Nat ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n : Value) := by
+  sorry
+
+@[kills codec_uInt8] theorem codec_uInt8_rejects_null :
+    ¬ ∀ (n : UInt8), @toValue UInt8 ⟨fun _ => .null⟩ n = (.integer n.toNat : Value) ∧
+      ∀ w : Value, @fromValue? UInt8 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+@[kills codec_uInt16] theorem codec_uInt16_rejects_null :
+    ¬ ∀ (n : UInt16), @toValue UInt16 ⟨fun _ => .null⟩ n = (.integer n.toNat : Value) ∧
+      ∀ w : Value, @fromValue? UInt16 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+@[kills codec_uInt32] theorem codec_uInt32_rejects_null :
+    ¬ ∀ (n : UInt32), @toValue UInt32 ⟨fun _ => .null⟩ n = (.integer n.toNat : Value) ∧
+      ∀ w : Value, @fromValue? UInt32 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+@[kills codec_uInt64] theorem codec_uInt64_rejects_null :
+    ¬ ∀ (n : UInt64), @toValue UInt64 ⟨fun _ => .null⟩ n = (.integer n.toNat : Value) ∧
+      ∀ w : Value, @fromValue? UInt64 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toNat : Value) := by
+  sorry
+
+@[kills codec_int8] theorem codec_int8_rejects_null :
+    ¬ ∀ (n : Int8), @toValue Int8 ⟨fun _ => .null⟩ n = (.integer n.toInt : Value) ∧
+      ∀ w : Value, @fromValue? Int8 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+@[kills codec_int16] theorem codec_int16_rejects_null :
+    ¬ ∀ (n : Int16), @toValue Int16 ⟨fun _ => .null⟩ n = (.integer n.toInt : Value) ∧
+      ∀ w : Value, @fromValue? Int16 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+@[kills codec_int32] theorem codec_int32_rejects_null :
+    ¬ ∀ (n : Int32), @toValue Int32 ⟨fun _ => .null⟩ n = (.integer n.toInt : Value) ∧
+      ∀ w : Value, @fromValue? Int32 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+@[kills codec_int64] theorem codec_int64_rejects_null :
+    ¬ ∀ (n : Int64), @toValue Int64 ⟨fun _ => .null⟩ n = (.integer n.toInt : Value) ∧
+      ∀ w : Value, @fromValue? Int64 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+@[kills codec_char] theorem codec_char_rejects_null :
+    ¬ ∀ (c : Char), @toValue Char ⟨fun _ => .null⟩ c = (.string (String.singleton c) : Value) ∧
+      ∀ w : Value, @fromValue? Char ⟨fun _ => .error ""⟩ w = .ok c ↔ w = (.string (String.singleton c) : Value) := by
+  sorry
+
+@[kills codec_float] theorem codec_float_rejects_null :
+    ¬ ∀ (x : Float), @toValue Float ⟨fun _ => .null⟩ x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
+      ∀ w : Value, @fromValue? Float ⟨fun _ => .error ""⟩ w = .ok x ↔
+        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
+        (w = .string "-Infinity" ∧ x = -Float.inf) := by
+  sorry
+
+@[kills codec_array] theorem codec_array_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (xs : Array α),
+      @toValue (Array α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Array β))) (β := α)) xs =
+          .array (xs.map toValue) ∧
+        ∀ w : Value, @fromValue? (Array α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Array β))) (β := α)) w = .ok xs ↔
+          ∃ vs : Array Value, w = .array vs ∧ vs.toList.mapM fromValue? = .ok xs.toList := by
+  sorry
+
+@[kills codec_list] theorem codec_list_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (xs : List α),
+      @toValue (List α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (List β))) (β := α)) xs =
+          .array (xs.map toValue).toArray ∧
+        ∀ w : Value, @fromValue? (List α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (List β))) (β := α)) w = .ok xs ↔
+          ∃ vs : Array Value, w = .array vs ∧ vs.toList.mapM fromValue? = .ok xs := by
+  sorry
+
+@[kills codec_prod] theorem codec_prod_rejects_null :
+    ¬ ∀ {α β : Type u} [ToValue α] [ToValue β] [FromValue α] [FromValue β] (a : α) (b : β),
+      @toValue (α × β) ((fun {γ δ : Type u} [ToValue γ] [ToValue δ] => (⟨fun _ => .null⟩ : ToValue (γ × δ))) (γ := α) (δ := β)) (a, b) =
+          .array #[toValue a, toValue b] ∧
+        ∀ w : Value, @fromValue? (α × β) ((fun {γ δ : Type u} [FromValue γ] [FromValue δ] => (⟨fun _ => .error ""⟩ : FromValue (γ × δ))) (γ := α) (δ := β)) w = .ok (a, b) ↔
+          ∃ va vb : Value, w = .array #[va, vb] ∧ fromValue? va = .ok a ∧ fromValue? vb = .ok b := by
+  sorry
+
+@[kills codec_option] theorem codec_option_rejects_constant :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o : Option α),
+      @toValue (Option α) ((fun {β : Type u} [ToValue β] [NotNull β] => (⟨fun _ => .null⟩ : ToValue (Option β))) (β := α)) o =
+          (match o with | none => .null | some a => toValue a) ∧
+        ∀ w : Value, @fromValue? (Option α) ((fun {β : Type u} [FromValue β] [NotNull β] => (⟨fun _ => .ok none⟩ : FromValue (Option β))) (β := α)) w = .ok o ↔
+          (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
+  sorry
+
+@[kills codec_treeMap] theorem codec_treeMap_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α),
+      @toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m =
+          .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
+        ((∀ a : α, fromValue? (toValue a) = .ok a) →
+          ∃ m' : Std.TreeMap String α,
+            @fromValue? (Std.TreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.TreeMap String β))) (β := α))
+              (@toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m) = .ok m' ∧
+            m'.toList = m.toList) := by
+  sorry
+
+@[kills codec_hashMap] theorem codec_hashMap_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α),
+      (∃ l : List (String × Value),
+        @toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m = .table ⟨l⟩ ∧
+          keysIncrease (l.map (·.1)) = true ∧ l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
+        ((∀ a : α, fromValue? (toValue a) = .ok a) →
+          ∃ m' : Std.HashMap String α,
+            @fromValue? (Std.HashMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.HashMap String β))) (β := α))
+              (@toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m) = .ok m' ∧
+            m'.toList.Perm m.toList) := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :

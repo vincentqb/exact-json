@@ -61,7 +61,6 @@ instance {n : Nat} : OfNat Value n := ⟨.integer n⟩
 
 end Value
 
-class NotNull (α : Type u) : Prop
 
 def withContext {α : Type u} (context : String) (x : Except String α) : Except String α :=
   x.mapError fun e => s!"{context}: {e}"
@@ -74,22 +73,18 @@ instance : FromValue Value := ⟨pure⟩
 
 instance : ToValue String := ⟨.string⟩
 instance : FromValue String := ⟨fun | .string s => pure s | v => typeMismatch "a string" v⟩
-instance : NotNull String := ⟨⟩
 
 instance : ToValue Bool := ⟨.boolean⟩
 instance : FromValue Bool := ⟨fun | .boolean b => pure b | v => typeMismatch "a boolean" v⟩
-instance : NotNull Bool := ⟨⟩
 
 instance : ToValue Int := ⟨.integer⟩
 instance : FromValue Int := ⟨fun | .integer n => pure n | v => typeMismatch "an integer" v⟩
-instance : NotNull Int := ⟨⟩
 
 instance : ToValue Nat := ⟨fun n => .integer n⟩
 instance : FromValue Nat where
   fromValue?
     | .integer n => if 0 ≤ n then pure n.toNat else typeMismatch "a natural number" (.integer n)
     | v => typeMismatch "a natural number" v
-instance : NotNull Nat := ⟨⟩
 
 def Value.intInRange (lo hi : Int) (name : String) : Value → Except String Int
   | .integer n => if lo ≤ n && n ≤ hi then pure n else typeMismatch s!"an integer in {name}'s range" (.integer n)
@@ -97,28 +92,20 @@ def Value.intInRange (lo hi : Int) (name : String) : Value → Except String Int
 
 instance : ToValue UInt8 := ⟨fun n => .integer n.toNat⟩
 instance : FromValue UInt8 := ⟨fun v => (Value.intInRange 0 (2 ^ 8 - 1) "UInt8" v).map (·.toNat.toUInt8)⟩
-instance : NotNull UInt8 := ⟨⟩
 instance : ToValue UInt16 := ⟨fun n => .integer n.toNat⟩
 instance : FromValue UInt16 := ⟨fun v => (Value.intInRange 0 (2 ^ 16 - 1) "UInt16" v).map (·.toNat.toUInt16)⟩
-instance : NotNull UInt16 := ⟨⟩
 instance : ToValue UInt32 := ⟨fun n => .integer n.toNat⟩
 instance : FromValue UInt32 := ⟨fun v => (Value.intInRange 0 (2 ^ 32 - 1) "UInt32" v).map (·.toNat.toUInt32)⟩
-instance : NotNull UInt32 := ⟨⟩
 instance : ToValue UInt64 := ⟨fun n => .integer n.toNat⟩
 instance : FromValue UInt64 := ⟨fun v => (Value.intInRange 0 (2 ^ 64 - 1) "UInt64" v).map (·.toNat.toUInt64)⟩
-instance : NotNull UInt64 := ⟨⟩
 instance : ToValue Int8 := ⟨fun n => .integer n.toInt⟩
 instance : FromValue Int8 := ⟨fun v => (Value.intInRange (-2 ^ 7) (2 ^ 7 - 1) "Int8" v).map Int8.ofInt⟩
-instance : NotNull Int8 := ⟨⟩
 instance : ToValue Int16 := ⟨fun n => .integer n.toInt⟩
 instance : FromValue Int16 := ⟨fun v => (Value.intInRange (-2 ^ 15) (2 ^ 15 - 1) "Int16" v).map Int16.ofInt⟩
-instance : NotNull Int16 := ⟨⟩
 instance : ToValue Int32 := ⟨fun n => .integer n.toInt⟩
 instance : FromValue Int32 := ⟨fun v => (Value.intInRange (-2 ^ 31) (2 ^ 31 - 1) "Int32" v).map Int32.ofInt⟩
-instance : NotNull Int32 := ⟨⟩
 instance : ToValue Int64 := ⟨fun n => .integer n.toInt⟩
 instance : FromValue Int64 := ⟨fun v => (Value.intInRange (-2 ^ 63) (2 ^ 63 - 1) "Int64" v).map Int64.ofInt⟩
-instance : NotNull Int64 := ⟨⟩
 
 instance : ToValue Float where
   toValue x :=
@@ -132,7 +119,6 @@ instance : FromValue Float where
     | .string "Infinity" => pure (1.0 / 0.0)
     | .string "-Infinity" => pure (-1.0 / 0.0)
     | v => typeMismatch "a float" v
-instance : NotNull Float := ⟨⟩
 
 instance : ToValue Char := ⟨fun c => .string (String.singleton c)⟩
 instance : FromValue Char where
@@ -141,19 +127,16 @@ instance : FromValue Char where
       | [c] => pure c
       | _ => typeMismatch "a one-character string" (.string s)
     | v => typeMismatch "a one-character string" v
-instance : NotNull Char := ⟨⟩
 
 instance {α : Type u} [ToValue α] : ToValue (Array α) := ⟨fun xs => .array (xs.map toValue)⟩
 instance {α : Type u} [FromValue α] : FromValue (Array α) where
   fromValue?
     | .array items => items.mapIdxM fun i v => withContext s!"[{i}]" (fromValue? v)
     | v => typeMismatch "an array" v
-instance {α : Type u} : NotNull (Array α) := ⟨⟩
 
 instance {α : Type u} [ToValue α] : ToValue (List α) := ⟨fun xs => toValue xs.toArray⟩
 instance {α : Type u} [FromValue α] : FromValue (List α) :=
   ⟨fun v => Array.toList <$> (fromValue? v : Except String (Array α))⟩
-instance {α : Type u} : NotNull (List α) := ⟨⟩
 
 instance {α : Type u} {β : Type u} [ToValue α] [ToValue β] : ToValue (α × β) :=
   ⟨fun (a, b) => .array #[toValue a, toValue b]⟩
@@ -161,7 +144,6 @@ instance {α : Type u} {β : Type u} [FromValue α] [FromValue β] : FromValue (
   fromValue?
     | .array #[a, b] => return (← withContext "[0]" (fromValue? a), ← withContext "[1]" (fromValue? b))
     | v => typeMismatch "an array of two items" v
-instance {α : Type u} {β : Type u} : NotNull (α × β) := ⟨⟩
 
 instance {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) :=
   ⟨fun | none => .null | some a => toValue a⟩
@@ -175,7 +157,6 @@ instance {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) where
     | .table members => members.foldlM (init := {}) fun m (k, v) => do
       return m.insert k (← withContext k (fromValue? v))
     | v => typeMismatch "a table" v
-instance {α : Type u} : NotNull (Std.TreeMap String α) := ⟨⟩
 
 instance {α : Type u} [ToValue α] : ToValue (Std.HashMap String α) :=
   ⟨fun m => Value.tableOfDistinct (m.toArray.map fun (k, v) => (k, toValue v))⟩
@@ -184,7 +165,6 @@ instance {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) where
     | .table members => members.foldlM (init := {}) fun m (k, v) => do
       return m.insert k (← withContext k (fromValue? v))
     | v => typeMismatch "a table" v
-instance {α : Type u} : NotNull (Std.HashMap String α) := ⟨⟩
 
 class ToField (α : Type u) where
   pushField : Array (String × Value) → String → α → Array (String × Value)
