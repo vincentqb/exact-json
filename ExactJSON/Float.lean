@@ -1,38 +1,10 @@
 module
 
-public import ExactJSON.Rfc8259
+public import ExactJSON.Canonical
 
 @[expose] public section
 
 namespace ExactJSON
-
-structure Decimal where
-  negative : Bool
-  digits : Nat
-  exponent : Int
-  deriving DecidableEq, Repr, Inhabited
-
-namespace Decimal
-
-def zeros (n : Nat) : List Char := List.replicate n '0'
-
-def toFloatText (d : Decimal) : String :=
-  let sign : List Char := if d.negative then ['-'] else []
-  if d.digits = 0 then String.ofList (sign ++ "0.0".toList)
-  else
-    let ds := Nat.toDigits 10 d.digits
-    let n := ds.length
-    let sci : Int := d.exponent + n - 1
-    let body : List Char :=
-      if -4 ≤ sci ∧ sci < 16 then
-        if sci ≥ n - 1 then ds ++ zeros (sci - (n - 1) : Int).toNat ++ ['.', '0']
-        else if 0 ≤ sci then ds.take (sci.toNat + 1) ++ ['.'] ++ ds.drop (sci.toNat + 1)
-        else ['0', '.'] ++ zeros ((-sci).toNat - 1) ++ ds
-      else
-        ds.take 1 ++ ['.'] ++ (if n = 1 then ['0'] else ds.drop 1) ++ ['e'] ++ (toString sci).toList
-    String.ofList (sign ++ body)
-
-end Decimal
 
 namespace FloatText
 

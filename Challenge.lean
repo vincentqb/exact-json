@@ -2,6 +2,7 @@ module
 
 public import ExactJSON.Value
 public import ExactJSON.Rfc8259
+public import ExactJSON.Canonical
 meta import SoftwareChallenge
 
 public section
@@ -11,12 +12,15 @@ public section
 
 A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it
 holds gives back: reading takes exactly those texts, and holds what any JSON reader reads in
-them. Every valid value's text is JSON that holds that value; no text holds a character below
-U+0020, so no line feed or carriage return, and every text is one line of JSON Lines; reading
-JSON in any spelling holds what RFC 8259 reads in it; typed decoding reads exactly what typed
-encoding writes, for any type whose instances read back what they write; and the steps the reader
-counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's
-length.
+them. A value's text is `write` of its parts: minimal escapes in strings, an integer in decimal,
+keys as they come; a finite float is the shortest decimal that reads back as it, the nearest of
+those, ties to an even last digit, laid out by `Decimal.toFloatText`; a float that is not finite
+is `NaN`, `Infinity` or `-Infinity`; and an invalid value's text is not read. Every valid value's
+text is JSON that holds that value; no text holds a character below U+0020, so no line feed or
+carriage return, and every text is one line of JSON Lines; reading JSON in any spelling holds
+what RFC 8259 reads in it; typed decoding reads exactly what typed encoding writes, for any type
+whose instances read back what they write; and the steps the reader counts as it reads
+(`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's length.
 Not claimed: anything about the date-time types, deriving, `exactjson%`, `Lean.Json`, or the
 readers' error messages; nor that the steps are the work done: the reader counts them itself, so
 the law bounds its count, not its running time.
@@ -66,6 +70,26 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
     decode (encode a) = .ok a := by
   sorry
 
+theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v := by
+  sorry
+
+theorem render_float (x : Float) (hx : finiteFloat x = true) :
+    ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.ReadsBack x ∧
+      ∀ d' : Decimal, d'.ReadsBack x →
+        d.digitCount < d'.digitCount ∨
+          (d.digitCount = d'.digitCount ∧
+            ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
+              ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
+                (d' = d ∨ d.digits % 2 = 0)))) := by
+  sorry
+
+theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
+    (Value.float x).render = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
+  sorry
+
+theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none := by
+  sorry
+
 @[kills parse_fixed] theorem parse_fixed_rejects_constant :
     ¬ ∀ (s : String) (v : Value),
       (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
@@ -107,6 +131,31 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
       (∀ a : α, (toValue a).Valid) → ∀ (a : α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "wrong" : Except String β))
           ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
+  sorry
+
+@[kills render_composes] theorem render_composes_rejects_null :
+    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write (fun x => (fun (_ : Value) => "null") (.float x)) v := by
+  sorry
+
+@[kills render_float] theorem render_float_rejects_empty :
+    ¬ ∀ (x : Float), finiteFloat x = true →
+      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.ReadsBack x ∧
+        ∀ d' : Decimal, d'.ReadsBack x →
+          d.digitCount < d'.digitCount ∨
+            (d.digitCount = d'.digitCount ∧
+              ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
+                ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
+                  (d' = d ∨ d.digits % 2 = 0)))) := by
+  sorry
+
+@[kills render_nonfinite] theorem render_nonfinite_rejects_zero :
+    ¬ ∀ (x : Float), finiteFloat x = false →
+      (fun (_ : Value) => "0.0") (.float x) = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
+  sorry
+
+@[kills parse_render_invalid] theorem parse_render_invalid_rejects_null :
+    ¬ ∀ (v : Value), ¬ v.Valid →
+      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :

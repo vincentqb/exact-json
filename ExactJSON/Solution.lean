@@ -6,6 +6,7 @@ public import ExactJSON.Sound
 public import ExactJSON.Cost
 public import ExactJSON.Fixed
 public import ExactJSON.OfScientific
+public import ExactJSON.Write
 
 public section
 
@@ -54,6 +55,52 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
     (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
     decode (encode a) = .ok a :=
   decode_encode_of_rounds ofScientificRounds lawful valid a
+
+theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v :=
+  Value.render_eq_write v
+
+theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
+    (Value.float x).render = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
+  simp [Value.render, Value.renderTo, floatText, Float.toCanonical?, FloatText.shortest, hx]
+
+theorem render_composes_rejects_null :
+    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write (fun x => (fun (_ : Value) => "null") (.float x)) v := by
+  intro h
+  have := h (.boolean true)
+  simp [write] at this
+
+theorem render_float_rejects_empty :
+    ¬ ∀ (x : Float), finiteFloat x = true →
+      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.ReadsBack x ∧
+        ∀ d' : Decimal, d'.ReadsBack x →
+          d.digitCount < d'.digitCount ∨
+            (d.digitCount = d'.digitCount ∧
+              ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
+                ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
+                  (d' = d ∨ d.digits % 2 = 0)))) := by
+  intro h
+  obtain ⟨d, hd, -⟩ := h 0.0 (by decide +kernel)
+  have := toFloatText_toList_ne_nil d
+  rw [← hd] at this
+  exact this rfl
+
+theorem render_nonfinite_rejects_zero :
+    ¬ ∀ (x : Float), finiteFloat x = false →
+      (fun (_ : Value) => "0.0") (.float x) = if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity" := by
+  intro h
+  have := h Float.nan (by decide +kernel)
+  rw [show Float.nan.isNaN = true by decide +kernel] at this
+  simp at this
+
+theorem parse_render_invalid_rejects_null :
+    ¬ ∀ (v : Value), ¬ v.Valid →
+      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
+  intro h
+  have := h (.float Float.nan) (by
+    show ¬ (finiteFloat Float.nan = true)
+    rw [show finiteFloat Float.nan = false by decide +kernel]
+    decide)
+  simp [Except.toOption] at this
 
 theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
