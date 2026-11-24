@@ -11,7 +11,7 @@ a Lean type is written as a value and read back. `Costed` is a result with the s
 compute it, as the computation counts them.
 -/
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -69,4 +69,4 @@ class FromValue (α : Type u) where
 export ToValue (toValue)
 export FromValue (fromValue?)
 
-end TomlJson
+end ExactJSON

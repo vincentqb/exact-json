@@ -1,7 +1,7 @@
-# lean-toml-json
+# ExactJSON
 
-Canonical, strictly typed JSON for Lean. A value is written as one line of ordinary JSON, which any
-JSON reader parses, and Lean reads it back under one law:
+Exact JSON: canonical, strictly typed JSON for Lean. A value is written as one line of ordinary
+JSON, which any JSON reader parses, and Lean reads it back under one law:
 
 ```
 decode s = .ok a   ↔   encode a = s
@@ -14,8 +14,8 @@ are RFC 3339 strings. The format is specified in [`SPEC.md`](SPEC.md), and its l
 as theorems in [`Challenge.lean`](Challenge.lean) (see [The laws](#the-laws)).
 
 ```lean
-import TomlJson
-open TomlJson
+import ExactJSON
+open ExactJSON
 
 structure Bench where
   name : String
@@ -70,7 +70,7 @@ nearest float otherwise; no repeated key; no lone surrogate). `parse_fixed` says
 texts are exactly the JSON texts that reading and writing back leaves unchanged, so the format is
 a consistent subset of JSON, and `canon s := render <$> readJson s` brings any JSON text to its
 canonical form. The two headlines not yet proved both follow from one lemma about floats, that
-every finite float's canonical text reads back as it (`FloatsReadBack` in `TomlJson/Fixed.lean`,
+every finite float's canonical text reads back as it (`FloatsReadBack` in `ExactJSON/Fixed.lean`,
 with `read_render_of_floats` and `decode_encode_of_floats`); the tests and the Python
 cross-checks stand for it meanwhile.
 
@@ -85,11 +85,11 @@ the arithmetic on numbers and the wording of error messages are not counted.
 | file | who writes it | holds |
 |------|---------------|-------|
 | `Challenge.lean` | owner | the holes (`Value.render`, `Value.parse`, `Value.parseCosted`, `Value.readJson`, `encode`, `decode`), the headlines, kills and witnesses |
-| `TomlJson/Value.lean`, `TomlJson/Rfc8259.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue`, `Costed`, and the RFC 8259 reference reader `Rfc8259.read?` |
-| `TomlJson/{Float,Render,Parse,Codec}.lean` | agent | the code the holes compute through: plain, total Lean |
-| `TomlJson/{Text,Printable,NumberValid,NumberText,Reread,Sound,Cost,SpecValid,Fixed,Solution}.lean` | agent | the proofs: the renderer's text, no character below U+0020, the reader's soundness, its steps, what RFC 8259 reads in a canonical text, the fixed points |
-| `TomlJson/Main.lean` | agent | `tomljson check` and `tomljson canon`, whose `main` reaches every hole |
-| `TomlJson/{DateTime,Derive,Literal,LeanJson}.lean`, `TomlJson/Tests/` | agent | what the challenge does not cover |
+| `ExactJSON/Value.lean`, `ExactJSON/Rfc8259.lean` | owner | what the headlines are stated in: `Value`, `Value.Valid`, `ToValue`, `FromValue`, `Costed`, and the RFC 8259 reference reader `Rfc8259.read?` |
+| `ExactJSON/{Float,Render,Parse,Codec}.lean` | agent | the code the holes compute through: plain, total Lean |
+| `ExactJSON/{Text,Printable,NumberValid,NumberText,Reread,Sound,Cost,SpecValid,Fixed,Solution}.lean` | agent | the proofs: the renderer's text, no character below U+0020, the reader's soundness, its steps, what RFC 8259 reads in a canonical text, the fixed points |
+| `ExactJSON/Main.lean` | agent | `exactjson check` and `exactjson canon`, whose `main` reaches every hole |
+| `ExactJSON/{DateTime,Derive,Literal,LeanJson}.lean`, `ExactJSON/Tests/` | agent | what the challenge does not cover |
 
 ```sh
 lake build        # the library, the CLI, and the statement's checks (a kill and witness for each headline)
@@ -105,20 +105,20 @@ lake comparator   # the kernel replays the proofs against Challenge.lean
 * `Value` (`null`, `boolean`, `integer`, `float`, `string`, `array`, `table`): `render`, `parse`,
   `renderLines`, `parseLines`, `isValid`, `get?`; `readJson` for JSON in any spelling (RFC 8259,
   as `Rfc8259.read?` reads it), whose result `render` writes canonically.
-* `tomljson% { … }`: a `Value` written as JSON in Lean source, where `1` is an integer and `1.0` a
+* `exactjson% { … }`: a `Value` written as JSON in Lean source, where `1` is an integer and `1.0` a
   float, `$(e)` is `toValue e`, and a repeated key is a compile error. It is Lean syntax; what it
   builds is written as ordinary JSON.
 * Date-times: `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`, `DateTime`,
   `DateTime.parse?`, `isValid`, `OffsetDateTime.now`, `ofUnixNanos?`, `toUnixNanos`.
 * `Lean.Json`: `Value.toJson`, `Value.ofJson?` (a `JsonNumber` with exponent 0 is an integer, one
-  with a positive exponent a float), `floatToJson`, and `open scoped TomlJson.ExactFloat`, which
+  with a positive exponent a float), `floatToJson`, and `open scoped ExactJSON.ExactFloat`, which
   makes Lean's own `ToJson Float` (and `deriving ToJson`) exact in its scope.
 
 Use it from another package with
 
 ```toml
 [[require]]
-name = "tomljson"
+name = "exactjson"
 git = "<this repository>"
 ```
 
@@ -139,17 +139,17 @@ writes floats with six decimals and `00:00:00.05` as `00:00:00.500`, and its rea
 
 ## Tools and tests
 
-`tomljson check < records.jsonl` exits 1 at the first line that is not canonical, with its number
-and the character where it departs. `tomljson canon < any.json` writes the canonical text of a JSON
+`exactjson check < records.jsonl` exits 1 at the first line that is not canonical, with its number
+and the character where it departs. `exactjson canon < any.json` writes the canonical text of a JSON
 text in any spelling (`--lines` for one text a line), and exits 1, saying why and where, at one
 that RFC 8259 does not read or that holds what a value cannot (a repeated key, a lone surrogate, a
-float beyond binary64). [`python/tomljson.py`](python/tomljson.py) is a second writer, in
+float beyond binary64). [`python/exactjson.py`](python/exactjson.py) is a second writer, in
 standard-library Python.
 
-`TomlJson/Tests/` holds examples of every rule and rejection (`Examples.lean`), randomized checks
+`ExactJSON/Tests/` holds examples of every rule and rejection (`Examples.lean`), randomized checks
 of the laws over values, their other spellings, invalid values, typed records and schema evolution
 (`Properties.lean`), and compile-time errors (`DeriveErrors.lean`); they run as they build. `python3 python/crosscheck.py` checks that the Python writer and Lean
-agree byte for byte on random data, and that `tomljson canon` reads Python's `json.dumps` of it
+agree byte for byte on random data, and that `exactjson canon` reads Python's `json.dumps` of it
 (spaces, ASCII escapes, keys in any order) as the same values, and `python3 python/crosscheck.py --floats 300000` checks the
 float printer against CPython's `repr` on every power of two and of ten, their neighbours and
 random doubles.

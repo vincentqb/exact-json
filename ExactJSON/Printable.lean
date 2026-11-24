@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Render
+public import ExactJSON.Render
 
 /-! # A text holds no control character
 
@@ -11,7 +11,7 @@ alike. -/
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- Every character is at U+0020 or above. -/
 abbrev Printable (cs : List Char) : Prop := ∀ c ∈ cs, 0x20 ≤ c.toNat
@@ -174,4 +174,4 @@ end
 theorem printable_render (v : Value) : Printable v.render.toList :=
   printable_renderTo (by decide) v
 
-end TomlJson
+end ExactJSON

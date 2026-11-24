@@ -1,8 +1,8 @@
 module
 
-import TomlJson.Tests.Examples
-import TomlJson.Tests.Properties
-import TomlJson.Tests.DeriveErrors
+import ExactJSON.Tests.Examples
+import ExactJSON.Tests.Properties
+import ExactJSON.Tests.DeriveErrors
 import SoftwareChallenge.Tests
 meta import SoftwareChallenge
 

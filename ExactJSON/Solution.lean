@@ -1,16 +1,16 @@
 module
 
-public import TomlJson.Codec
-public import TomlJson.Printable
-public import TomlJson.Sound
-public import TomlJson.Cost
-public import TomlJson.Fixed
+public import ExactJSON.Codec
+public import ExactJSON.Printable
+public import ExactJSON.Sound
+public import ExactJSON.Cost
+public import ExactJSON.Fixed
 
 /-! # Proofs of the challenge's headlines, kills and witnesses -/
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -118,4 +118,4 @@ theorem decode_text_applies :
     ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (a : α), decode s = .ok a :=
   ⟨PUnit, ⟨fun _ => .null⟩, ⟨fun _ => .ok ⟨⟩⟩, "null", ⟨⟩, by rfl⟩
 
-end TomlJson
+end ExactJSON

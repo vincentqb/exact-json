@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Render
+public import ExactJSON.Render
 
 /-! # The characters of a text
 
@@ -12,7 +12,7 @@ these lists.
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- The escaped characters of a string's contents, as `pushChar` writes each one. -/
 def escapeList (cs : List Char) : List Char := cs.flatMap fun c => (pushChar "" c).toList
@@ -153,4 +153,4 @@ theorem membersText_cons (key : String) (v : Value) (m : String × Value) (rest 
 
 end Value
 
-end TomlJson
+end ExactJSON

@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Codec
+public import ExactJSON.Codec
 public meta import Lean.Elab.Deriving.Basic
 public meta import Lean.Elab.Deriving.Util
 
@@ -26,7 +26,7 @@ The handler is adapted from Lean's own `ToJson`/`FromJson` handler
 
 public section
 
-namespace TomlJson.Derive
+namespace ExactJSON.Derive
 
 universe u
 
@@ -80,13 +80,13 @@ def fieldWith {α : Type u} (read : Value → Except String α) (v : Value) (key
   | some item => withContext key (read item)
   | none => .error s!"missing key {pushString "" key}"
 
-end TomlJson.Derive
+end ExactJSON.Derive
 
 end
 
 public meta section
 
-namespace TomlJson.Derive
+namespace ExactJSON.Derive
 open Lean Elab Command Term Meta Parser.Term Lean.Elab.Deriving
 
 /-- The key a field or argument named `n` is written under: its name, less a trailing `?`. -/
@@ -146,8 +146,8 @@ def mkToValueStruct (header : Header) (indName : Name) : TermElabM Term := do
   let mut members ← `(#[])
   for (field, key) in sorted do
     let key := Syntax.mkStrLit key
-    members ← `(TomlJson.ToField.pushField $members $key ($target).$(mkIdent field))
-  `(TomlJson.Derive.table $members)
+    members ← `(ExactJSON.ToField.pushField $members $key ($target).$(mkIdent field))
+  `(ExactJSON.Derive.table $members)
 
 /-- The body of `toValue` for an inductive type, by constructor. -/
 def mkToValueInduct (ctx : Deriving.Context) (header : Header) (indName : Name) : TermElabM Term := do
@@ -155,16 +155,16 @@ def mkToValueInduct (ctx : Deriving.Context) (header : Header) (indName : Name) 
   let auxFun := mkIdent ctx.auxFunNames[0]!
   -- An argument of the type being derived is written by the function being defined.
   let write (x : Ident) (type : Expr) : TermElabM Term :=
-    if type.isAppOf indVal.name then `($auxFun:ident $x:ident) else `(TomlJson.toValue $x:ident)
+    if type.isAppOf indVal.name then `($auxFun:ident $x:ident) else `(ExactJSON.toValue $x:ident)
   let discrs ← mkDiscrs header indVal
   let alts ← mkAlts indVal fun ctor args userNames => do
     let name := Syntax.mkStrLit ctor.name.eraseMacroScopes.getString!
     match args, userNames with
-    | #[], _ => `(TomlJson.Value.string $name)
-    | #[(x, t)], none => `(TomlJson.Derive.ctor $name $(← write x t))
+    | #[], _ => `(ExactJSON.Value.string $name)
+    | #[(x, t)], none => `(ExactJSON.Derive.ctor $name $(← write x t))
     | xs, none =>
       let xs ← xs.mapM fun (x, t) => write x t
-      `(TomlJson.Derive.ctor $name (TomlJson.Value.array #[$[$xs],*]))
+      `(ExactJSON.Derive.ctor $name (ExactJSON.Value.array #[$[$xs],*]))
     | xs, some names =>
       let keys ← fieldKeys names
       let sorted := (xs.zip keys).qsort (·.2 < ·.2)
@@ -174,8 +174,8 @@ def mkToValueInduct (ctx : Deriving.Context) (header : Header) (indName : Name) 
         if t.isAppOf indVal.name then
           members ← `(Array.push $members ($key, $auxFun:ident $x:ident))
         else
-          members ← `(TomlJson.ToField.pushField $members $key $x:ident)
-      `(TomlJson.Derive.ctor $name (TomlJson.Derive.table $members))
+          members ← `(ExactJSON.ToField.pushField $members $key $x:ident)
+      `(ExactJSON.Derive.ctor $name (ExactJSON.Derive.table $members))
   `(match $[$discrs],* with $alts:matchAlt*)
 
 /-- The body of `fromValue?` for a structure: each field from the table. -/
@@ -183,13 +183,13 @@ def mkFromValueStruct (indName : Name) (v : Ident) : TermElabM Term := do
   let fields := getStructureFieldsFlattened (← getEnv) indName (includeSubobjectFields := false)
   let keys ← fieldKeys fields
   let getters ← keys.mapM fun key => do
-    `(doElem| TomlJson.FromField.getField? $v $(Syntax.mkStrLit key))
+    `(doElem| ExactJSON.FromField.getField? $v $(Syntax.mkStrLit key))
   let fieldIds := fields.map mkIdent
   let typeName := Syntax.mkStrLit (privateToUserName indName.eraseMacroScopes).toString
   let keyLits := keys.map Syntax.mkStrLit
   `(do
-    TomlJson.Derive.expectTable $typeName $v
-    TomlJson.Derive.onlyKeys $typeName #[$[$keyLits],*] $v
+    ExactJSON.Derive.expectTable $typeName $v
+    ExactJSON.Derive.onlyKeys $typeName #[$[$keyLits],*] $v
     $[let $fieldIds:ident ← $getters]*
     return { $[$fieldIds:ident := $(id fieldIds)],* })
 
@@ -215,30 +215,30 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
       let ids := binders.map (·.1)
       -- An argument of the type being derived is read by the function being defined.
       let read (type : Expr) : TermElabM Term :=
-        if type.isAppOf indVal.name then `($auxFun:ident) else `(TomlJson.fromValue?)
+        if type.isAppOf indVal.name then `($auxFun:ident) else `(ExactJSON.fromValue?)
       if binders.isEmpty then
-        `(do TomlJson.Derive.noPayload $name payload; return $(mkIdent ctorName):ident)
+        `(do ExactJSON.Derive.noPayload $name payload; return $(mkIdent ctorName):ident)
       else if userNames.size == binders.size then
         let keys ← fieldKeys userNames
         let mut getters := #[]
         for (_, t) in binders, key in keys do
           let key := Syntax.mkStrLit key
           if t.isAppOf indVal.name then
-            getters := getters.push (← `(doElem| TomlJson.Derive.fieldWith $auxFun:ident p $key))
+            getters := getters.push (← `(doElem| ExactJSON.Derive.fieldWith $auxFun:ident p $key))
           else
-            getters := getters.push (← `(doElem| TomlJson.FromField.getField? p $key))
+            getters := getters.push (← `(doElem| ExactJSON.FromField.getField? p $key))
         let keyLits := keys.map Syntax.mkStrLit
         `(do
-          let p ← TomlJson.Derive.payload $name payload
-          TomlJson.Derive.expectTable $name p
-          TomlJson.Derive.onlyKeys $name #[$[$keyLits],*] p
+          let p ← ExactJSON.Derive.payload $name payload
+          ExactJSON.Derive.expectTable $name p
+          ExactJSON.Derive.onlyKeys $name #[$[$keyLits],*] p
           $[let $ids:ident ← $getters]*
           return $(mkIdent ctorName):ident $ids*)
       else if h : binders.size = 1 then
         let r ← read binders[0].2
         let arg ← `($r p)
         `(do
-          let p ← TomlJson.Derive.payload $name payload
+          let p ← ExactJSON.Derive.payload $name payload
           let $(ids[0]!):ident ← $arg:term
           return $(mkIdent ctorName):ident $ids*)
       else
@@ -247,20 +247,20 @@ def mkFromValueInduct (ctx : Deriving.Context) (indName : Name) (v : Ident) : Te
           let r ← read t
           let arg ← `($r ps[$(quote i)]!)
           let place := Syntax.mkStrLit s!"{nameStr}[{i}]"
-          getters := getters.push (← `(doElem| TomlJson.withContext $place $arg))
+          getters := getters.push (← `(doElem| ExactJSON.withContext $place $arg))
         `(do
-          let p ← TomlJson.Derive.payload $name payload
-          let ps ← TomlJson.Derive.items $(quote binders.size) p
+          let p ← ExactJSON.Derive.payload $name payload
+          let ps ← ExactJSON.Derive.items $(quote binders.size) p
           $[let $ids:ident ← $getters]*
           return $(mkIdent ctorName):ident $ids*)
     names := names.push name
-    rhss := rhss.push (← `(TomlJson.withContext $name $rhs))
-  `(match TomlJson.Derive.tag? $v with
+    rhss := rhss.push (← `(ExactJSON.withContext $name $rhs))
+  `(match ExactJSON.Derive.tag? $v with
     | .error e => .error e
     | .ok (tag, payload) =>
       match tag with
       $[| $names => $rhss]*
-      | other => .error s!"unknown constructor {TomlJson.pushString "" other}")
+      | other => .error s!"unknown constructor {ExactJSON.pushString "" other}")
 
 open TSyntax.Compat in
 /-- Lean's `mkHeader`, with instance binders for the field class `field` too: a field whose type is
@@ -308,9 +308,9 @@ def mkToValueFuns (ctx : Deriving.Context) : TermElabM Command := do
     if ctx.usePartial then
       let letDecls ← mkLocalInstanceLetDecls ctx ``ToValue header.argNames
       let body ← mkLet letDecls body
-      defs := defs.push (← `(partial def $auxFun:ident $header.binders:bracketedBinder* : TomlJson.Value := $body:term))
+      defs := defs.push (← `(partial def $auxFun:ident $header.binders:bracketedBinder* : ExactJSON.Value := $body:term))
     else
-      defs := defs.push (← `(def $auxFun:ident $header.binders:bracketedBinder* : TomlJson.Value := $body:term))
+      defs := defs.push (← `(def $auxFun:ident $header.binders:bracketedBinder* : ExactJSON.Value := $body:term))
   `(mutual $defs:command* end)
 
 /-- The `fromValue?` function of each type in the mutual block. -/
@@ -321,7 +321,7 @@ def mkFromValueFuns (ctx : Deriving.Context) : TermElabM Command := do
     let header ← mkHeaderWithField ``FromValue ``FromField 0 indVal
     -- A fresh name: a field may be called `value`.
     let v := mkIdent (← mkFreshUserName `value)
-    let binders := header.binders.push (← `(bracketedBinderF|($v : TomlJson.Value)))
+    let binders := header.binders.push (← `(bracketedBinderF|($v : ExactJSON.Value)))
     let auxFun := mkIdent ctx.auxFunNames[i]!
     let body ← Term.elabBinders binders fun _ => do
       let type ← Term.elabTerm header.targetType none
@@ -344,7 +344,7 @@ def mkNotNullInstance (declName : Name) : TermElabM Command := do
   let argNames ← mkInductArgNames indVal
   let binders ← mkImplicitBinders argNames
   let indType ← mkInductiveApp indVal argNames
-  `(instance $binders:implicitBinder* : TomlJson.NotNull $indType := ⟨⟩)
+  `(instance $binders:implicitBinder* : ExactJSON.NotNull $indType := ⟨⟩)
 
 /-- The handler for `deriving ToValue`. -/
 def mkToValueHandler (declNames : Array Name) : CommandElabM Bool := do
@@ -371,6 +371,6 @@ initialize
   registerDerivingHandler ``ToValue mkToValueHandler
   registerDerivingHandler ``FromValue mkFromValueHandler
 
-end TomlJson.Derive
+end ExactJSON.Derive
 
 end

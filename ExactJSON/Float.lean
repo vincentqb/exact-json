@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Rfc8259
+public import ExactJSON.Rfc8259
 
 /-! # Exact conversions between `Float` and decimal text
 
@@ -19,7 +19,7 @@ arithmetic on a number's digits is still quadratic in how many there are.
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- A decimal number `(-1)^negative × digits × 10^exponent`. The canonical form of a nonzero
 value has no trailing zero in `digits`; zero is `digits = 0, exponent = 0`. -/
@@ -174,4 +174,4 @@ infinity. -/
 def Float.toCanonical? (x : Float) : Option String :=
   (FloatText.shortest x).map Decimal.toFloatText
 
-end TomlJson
+end ExactJSON

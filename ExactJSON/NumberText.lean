@@ -1,7 +1,7 @@
 module
 
-public import TomlJson.Rfc8259
-public import TomlJson.Render
+public import ExactJSON.Rfc8259
+public import ExactJSON.Render
 
 /-! # The text of a number is an RFC 8259 number
 
@@ -13,7 +13,7 @@ reference reader's sorting of a table's members leaves members already in key or
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -192,4 +192,4 @@ theorem neighboursDistinct_of_keysIncrease (l : List (String × Value)) (h : key
     Rfc8259.neighboursDistinct l = true :=
   neighboursDistinct_of_pairwise (List.pairwise_map.mp (pairwise_of_keysIncrease h))
 
-end TomlJson
+end ExactJSON

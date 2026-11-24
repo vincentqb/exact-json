@@ -1,9 +1,9 @@
 module
 
-public import TomlJson.Text
-public import TomlJson.Codec
-public import TomlJson.NumberValid
-public import TomlJson.Reread
+public import ExactJSON.Text
+public import ExactJSON.Codec
+public import ExactJSON.NumberValid
+public import ExactJSON.Reread
 
 /-! # The reader is sound
 
@@ -14,7 +14,7 @@ check of what it read, and `decode` only compares values (`Value.beq a b = true 
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 theorem keysIncreaseFrom_append (p : String) (l : List String) (k : String) :
     keysIncreaseFrom p (l ++ [k]) = true ↔ keysIncreaseFrom p l = true ∧ l.getLast?.getD p < k := by
@@ -405,4 +405,4 @@ theorem beq_eq_true_iff (a b : Value) : Value.beq a b = true ↔ a = b :=
 
 end Value
 
-end TomlJson
+end ExactJSON

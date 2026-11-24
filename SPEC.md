@@ -1,4 +1,4 @@
-# Canonical, strictly typed JSON
+# Exact JSON: canonical, strictly typed JSON
 
 Version 0.3. One line of ordinary JSON per value, which any JSON reader parses, and which Lean
 writes and reads back under one law. For a Lean type `α` with `ToValue` and `FromValue`
@@ -22,7 +22,7 @@ value it is, and any JSON text can be brought to its canonical form.
 
 The integer/float split and the date-time types follow TOML's data model; nothing else in the
 format depends on TOML. The reference implementation is the Lean library in this repository;
-`python/tomljson.py` is a second writer, used as an oracle in the tests.
+`python/exactjson.py` is a second writer, used as an oracle in the tests.
 
 ## 1. Untyped values
 
@@ -178,7 +178,7 @@ only after that when it is not canonical, while a long exponent costs no arithme
 
 ## 6. Reading any JSON
 
-`Rfc8259.read? s` (in `TomlJson/Rfc8259.lean`, part of the statement) is the value an RFC 8259
+`Rfc8259.read? s` (in `ExactJSON/Rfc8259.lean`, part of the statement) is the value an RFC 8259
 JSON text holds: the RFC's grammar exactly (whitespace only where it has `ws`, numbers without
 leading zeros, its escapes, no comments, no trailing commas, no `NaN`), with this format's
 reading of what it holds:
@@ -192,7 +192,7 @@ reading of what it holds:
   repeats is not read.
 
 `Value.readJson` reads exactly what `Rfc8259.read?` reads (`readJson_spec`), with a message and a
-position when it does not, and `tomljson canon` writes what it reads canonically. The canonical
+position when it does not, and `exactjson canon` writes what it reads canonically. The canonical
 texts are then exactly the fixed points of reading and writing (`parse_fixed`):
 
 ```
@@ -221,7 +221,7 @@ states one law about the functions it names (`Value.render`, `Value.parse`,
 each has a kill (a proof that a wrong implementation fails it) and, when it assumes something of
 those functions, a witness that the assumption can hold. `Value.parseCosted` is `Value.parse`
 with the steps it counts as it reads. The reader counts them itself, so `parse_linear` bounds that
-count and not a running time: a reader that counted nothing would satisfy it as well. `TomlJson/Solution.lean` proves them
+count and not a running time: a reader that counted nothing would satisfy it as well. `ExactJSON/Solution.lean` proves them
 about the code that runs, which is plain total Lean (no `partial`, `@[extern]` or
 `@[implemented_by]`), and `lake comparator` replays the proofs through the kernel.
 
@@ -239,10 +239,10 @@ about the code that runs, which is plain total Lean (no `partial`, `@[extern]` o
 `parse_fixed` gives the rest of the bijection: whatever `parse` reads is valid and its own
 canonical text, and every valid value whose floats read back is read back from its text. The two
 not yet proved both come down to one lemma about floats, `FloatsReadBack` in
-`TomlJson/Fixed.lean`: RFC 8259 reads every finite float's canonical text back as that float (the
+`ExactJSON/Fixed.lean`: RFC 8259 reads every finite float's canonical text back as that float (the
 shortest digits round to it). `read_render_of_floats` and `decode_encode_of_floats` derive the
 two headlines from it. Meanwhile it is tested: by every power of two and of ten, their neighbours
 and random doubles against CPython's `repr` (`python/crosscheck.py --floats`), by the randomized
 laws over values, their other spellings (rejected by `parse`, read by `readJson` as the value),
-typed records and schema evolution (`TomlJson/Tests/`), and by byte-for-byte agreement with
+typed records and schema evolution (`ExactJSON/Tests/`), and by byte-for-byte agreement with
 Python's writer and with Python's `json` on random data (`python/crosscheck.py`).

@@ -1,13 +1,13 @@
 module
 
-import TomlJson.Codec
+import ExactJSON.Codec
 
-/-! # `tomljson check` and `tomljson canon`
+/-! # `exactjson check` and `exactjson canon`
 
 ```
-tomljson check < records.jsonl
-tomljson canon < any.json
-tomljson canon --lines < any.jsonl
+exactjson check < records.jsonl
+exactjson canon < any.json
+exactjson canon --lines < any.jsonl
 ```
 
 `check` exits 0 when every line is a canonical text (see `SPEC.md`), each ended by a line feed, and
@@ -18,13 +18,13 @@ text of the value it holds, and a line feed; with `--lines`, it does so for each
 at the first text that is not read, saying why and where.
 -/
 
-open TomlJson
+open ExactJSON
 
 /-- Usage text. -/
 def usage : String :=
-  "usage: tomljson check < input.jsonl\n" ++
+  "usage: exactjson check < input.jsonl\n" ++
   "  exit 1 at the first line that is not canonical JSON Lines\n" ++
-  "       tomljson canon [--lines] < input.json\n" ++
+  "       exactjson canon [--lines] < input.json\n" ++
   "  write the canonical text of the JSON text (or of each line)\n"
 
 /-- Standard input, as UTF-8 text, or the first line that is not UTF-8. -/
@@ -82,15 +82,15 @@ def main (args : List String) : IO UInt32 := do
       IO.print text
       return 0
     | .error e =>
-      IO.eprintln s!"tomljson: {e}"
+      IO.eprintln s!"exactjson: {e}"
       return 1
   | ["check"] =>
     match (← readStdin) >>= (decodeLines (α := Value) ·) with
     | .ok values =>
-      IO.eprintln s!"tomljson: {values.size} canonical lines"
+      IO.eprintln s!"exactjson: {values.size} canonical lines"
       return 0
     | .error e =>
-      IO.eprintln s!"tomljson: {e}"
+      IO.eprintln s!"exactjson: {e}"
       return 1
   | _ =>
     IO.eprint usage

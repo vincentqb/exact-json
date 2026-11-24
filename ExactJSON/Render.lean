@@ -1,7 +1,7 @@
 module
 
-public import TomlJson.Value
-public import TomlJson.Float
+public import ExactJSON.Value
+public import ExactJSON.Float
 
 /-! # Writing canonical text
 
@@ -13,7 +13,7 @@ an invalid one (see `Value.isValid`) a text that `Value.parse` rejects.
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- The lowercase hexadecimal digit of `n < 16`. -/
 def hexDigit (n : Nat) : Char :=
@@ -84,4 +84,4 @@ instance : ToString Value := ⟨render⟩
 
 end Value
 
-end TomlJson
+end ExactJSON

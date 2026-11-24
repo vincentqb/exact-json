@@ -1,12 +1,12 @@
 module
 
-public import TomlJson.Rfc8259
+public import ExactJSON.Rfc8259
 
 /-! # What an RFC 8259 number holds is valid -/
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- The float of a decimal, when there is one, is finite. -/
 theorem Rfc8259.floatOf?_finite (negative : Bool) (m : Nat) (q : Int) (x : Float)
@@ -30,4 +30,4 @@ theorem Rfc8259.numberValue_valid (token : List Char) (v : Value) (h : Rfc8259.n
     | rfl
     | (simp only [Value.isValid]; exact Rfc8259.floatOf?_finite _ _ _ _ (by assumption))
 
-end TomlJson
+end ExactJSON

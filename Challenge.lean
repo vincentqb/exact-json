@@ -1,7 +1,7 @@
 module
 
-public import TomlJson.Value
-public import TomlJson.Rfc8259
+public import ExactJSON.Value
+public import ExactJSON.Rfc8259
 meta import SoftwareChallenge
 
 public section
@@ -17,12 +17,12 @@ JSON in any spelling holds what RFC 8259 reads in it; typed decoding reads exact
 encoding writes, for any type whose instances read back what they write; and the steps the reader
 counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's
 length.
-Not claimed: anything about the date-time types, deriving, `tomljson%`, `Lean.Json`, or the
+Not claimed: anything about the date-time types, deriving, `exactjson%`, `Lean.Json`, or the
 readers' error messages; nor that the steps are the work done: the reader counts them itself, so
 the law bounds its count, not its running time.
 -/
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -117,4 +117,4 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
     ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (a : α), decode s = .ok a := by
   sorry
 
-end TomlJson
+end ExactJSON

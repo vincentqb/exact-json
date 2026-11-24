@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Render
+public import ExactJSON.Render
 
 /-! # Reading canonical text
 
@@ -26,7 +26,7 @@ of an error's message.
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 namespace Parser
 
@@ -343,4 +343,4 @@ def parseLines (s : String) : Except String (Array Value) := do
 
 end Value
 
-end TomlJson
+end ExactJSON

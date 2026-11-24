@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Parse
+public import ExactJSON.Parse
 public import Std.Data.HashMap
 public import Std.Data.TreeMap
 
@@ -22,7 +22,7 @@ anywhere else. `Option α` can be written as a value only when `α` never writes
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -293,4 +293,4 @@ def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except 
     if last then throw s!"line {number}: no line feed at its end"
   return out
 
-end TomlJson
+end ExactJSON

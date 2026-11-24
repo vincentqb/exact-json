@@ -1,7 +1,7 @@
 module
 
-public import TomlJson.Rfc8259
-public import TomlJson.Render
+public import ExactJSON.Rfc8259
+public import ExactJSON.Render
 
 /-! # Reading floats back
 
@@ -13,7 +13,7 @@ read back from its text comes down to every finite float being read back from it
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 namespace Value
 
@@ -55,4 +55,4 @@ end
 
 end Value
 
-end TomlJson
+end ExactJSON

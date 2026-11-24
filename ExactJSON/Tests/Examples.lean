@@ -1,12 +1,12 @@
 module
 
-import TomlJson
-meta import TomlJson
+import ExactJSON
+meta import ExactJSON
 
 /-! Examples of the format, checked when this module is built (`lake test`). The examples in
 `SPEC.md` and `README.md` are among them. -/
 
-open TomlJson
+open ExactJSON
 
 /-- `ok` if `s` is canonical (and reads back to itself), else the reader's error. -/
 def check (s : String) : String :=
@@ -146,14 +146,14 @@ def canon (s : String) : String :=
 #guard errorOf (Value.parseLines "1\n\n2\n") == "line 2, at character 0: expected a value, found the end of the text"
 #guard errorOf (Value.parseLines "1\r\n") == "line 1, at character 1: text after the value (canonical text has no whitespace)"
 
-/-! ## The `tomljson%` literal -/
+/-! ## The `exactjson%` literal -/
 
-#guard (tomljson% {"b": 1, "a": 1.0, c: [-2, -0.5, "x", true, null], "d": {}}).render ==
+#guard (exactjson% {"b": 1, "a": 1.0, c: [-2, -0.5, "x", true, null], "d": {}}).render ==
   "{\"a\":1.0,\"b\":1,\"c\":[-2,-0.5,\"x\",true,null],\"d\":{}}"
-#guard (tomljson% {"n": $(3 + 4), "s": $("a" ++ "b")}).render == "{\"n\":7,\"s\":\"ab\"}"
-#guard (tomljson% {«a b»: 1, «1»: 2}).render == "{\"1\":2,\"a b\":1}"
-/-- `tomljson%` inside a macro: hygiene must not reach the keys. -/
-macro "keysInMacro" : term => `(tomljson% {foo: 1, "bar": 2})
+#guard (exactjson% {"n": $(3 + 4), "s": $("a" ++ "b")}).render == "{\"n\":7,\"s\":\"ab\"}"
+#guard (exactjson% {«a b»: 1, «1»: 2}).render == "{\"1\":2,\"a b\":1}"
+/-- `exactjson%` inside a macro: hygiene must not reach the keys. -/
+macro "keysInMacro" : term => `(exactjson% {foo: 1, "bar": 2})
 #guard (keysInMacro).render == "{\"bar\":2,\"foo\":1}"
 
 /-! ## Typed values -/
@@ -305,9 +305,9 @@ inductive Cmd where
 #guard (floatToJson 1e-7).compress == "0.0000001"
 #guard (floatToJson 0.1234567).compress == "0.1234567"
 
--- `open scoped TomlJson.ExactFloat` makes Lean's own `ToJson` exact, derived instances included
+-- `open scoped ExactJSON.ExactFloat` makes Lean's own `ToJson` exact, derived instances included
 section
-open scoped TomlJson.ExactFloat
+open scoped ExactJSON.ExactFloat
 
 /-- A record with Lean's own JSON instances. -/
 structure Timing where
@@ -340,7 +340,7 @@ structure Bench where
 /-- info: Except.error "missing key \"day\"" -/
 #guard_msgs in
 #eval (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench)
-#guard (tomljson% {"name": "fast", "iters": 100, "time": 2.0, "sizes": [1, 2],
+#guard (exactjson% {"name": "fast", "iters": 100, "time": 2.0, "sizes": [1, 2],
   "day": $(LocalDate.mk 2024 2 29)}).render ==
   "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\",\"sizes\":[1,2],\"time\":2.0}"
 #guard (decode "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\"}" : Except String Bench).isOk

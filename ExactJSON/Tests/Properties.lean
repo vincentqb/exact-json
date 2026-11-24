@@ -1,7 +1,7 @@
 module
 
-import TomlJson
-meta import TomlJson
+import ExactJSON
+meta import ExactJSON
 
 /-! Randomized checks of the format's law, run when this module is built (`lake test`), with
 fixed seeds so that a failure reproduces. The law is `parse s = .ok v ↔ (v.isValid ∧ render v = s)`
@@ -16,7 +16,7 @@ and, typed, `decode s = .ok a ↔ encode a = s`:
 6. `Value.ofJson? v.toJson = v` (for values without `-0.0`).
 -/
 
-open TomlJson
+open ExactJSON
 
 /-! ## Randomness -/
 

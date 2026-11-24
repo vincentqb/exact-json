@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Sound
+public import ExactJSON.Sound
 
 /-! # The reader's steps are linear in the text's length
 
@@ -14,7 +14,7 @@ the steps itself, so this bounds its count, not its running time.
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 theorem utf8ByteSize_ofList_le (l : List Char) : (String.ofList l).utf8ByteSize ≤ 4 * l.length := by
   induction l with
@@ -282,4 +282,4 @@ theorem parseCosted_steps (s : String) : (Value.parseCosted s).steps ≤ 22 * (s
     simp only [Parser.failAt]
     omega
 
-end TomlJson
+end ExactJSON

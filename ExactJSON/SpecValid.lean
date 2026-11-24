@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.NumberValid
+public import ExactJSON.NumberValid
 
 /-! # What RFC 8259 reads is a valid value
 
@@ -10,7 +10,7 @@ The reference reader `Rfc8259.read?` only gives valid values: tables with keys s
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 namespace Rfc8259
 
@@ -189,4 +189,4 @@ theorem read?_valid (s : String) (v : Value) (h : read? s = some v) : v.isValid 
 
 end Rfc8259
 
-end TomlJson
+end ExactJSON

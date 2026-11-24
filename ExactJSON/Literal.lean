@@ -1,12 +1,12 @@
 module
 
-public import TomlJson.Codec
+public import ExactJSON.Codec
 public meta import Lean.Syntax
 
-/-! # `tomljson%`: values written as JSON in Lean source
+/-! # `exactjson%`: values written as JSON in Lean source
 
 ```lean
-#eval (tomljson% {
+#eval (exactjson% {
   "name": "run 1",
   "iters": 100,          -- an integer
   "time": 1.0,           -- a float: it keeps its point
@@ -24,32 +24,32 @@ put in order; a repeated key, or a float literal too large for binary64, is a co
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
-/-- The syntax of a `tomljson%` value. -/
-declare_syntax_cat tomljson (behavior := symbol)
+/-- The syntax of a `exactjson%` value. -/
+declare_syntax_cat exactjson (behavior := symbol)
 /-- `null`. -/
-syntax "null" : tomljson
+syntax "null" : exactjson
 /-- `true`. -/
-syntax "true" : tomljson
+syntax "true" : exactjson
 /-- `false`. -/
-syntax "false" : tomljson
+syntax "false" : exactjson
 /-- A string. -/
-syntax str : tomljson
+syntax str : exactjson
 /-- An integer, perhaps negative. -/
-syntax "-"? num : tomljson
+syntax "-"? num : exactjson
 /-- A float, perhaps negative. -/
-syntax "-"? scientific : tomljson
+syntax "-"? scientific : exactjson
 /-- An array. -/
-syntax "[" tomljson,* "]" : tomljson
+syntax "[" exactjson,* "]" : exactjson
 /-- A table key. -/
-syntax tomljsonKey := ident <|> str
+syntax exactjsonKey := ident <|> str
 /-- A table member. -/
-syntax tomljsonMember := tomljsonKey ": " tomljson
+syntax exactjsonMember := exactjsonKey ": " exactjson
 /-- A table. -/
-syntax "{" tomljsonMember,* "}" : tomljson
+syntax "{" exactjsonMember,* "}" : exactjson
 /-- A `Value` written as JSON (see the module docstring). -/
-syntax "tomljson% " tomljson : term
+syntax "exactjson% " exactjson : term
 
 open Lean in
 /-- Fail unless the float literal `x` is finite. -/
@@ -62,34 +62,34 @@ meta def checkFinite (x : TSyntax `scientific) : MacroM Unit := do
 
 open Lean in
 macro_rules
-  | `(tomljson% null) => `(TomlJson.Value.null)
-  | `(tomljson% true) => `(TomlJson.Value.boolean Bool.true)
-  | `(tomljson% false) => `(TomlJson.Value.boolean Bool.false)
-  | `(tomljson% $s:str) => `(TomlJson.Value.string $s)
-  | `(tomljson% $n:num) => `(TomlJson.Value.integer $n)
-  | `(tomljson% -$n:num) => `(TomlJson.Value.integer (-$n))
-  | `(tomljson% $x:scientific) => do
+  | `(exactjson% null) => `(ExactJSON.Value.null)
+  | `(exactjson% true) => `(ExactJSON.Value.boolean Bool.true)
+  | `(exactjson% false) => `(ExactJSON.Value.boolean Bool.false)
+  | `(exactjson% $s:str) => `(ExactJSON.Value.string $s)
+  | `(exactjson% $n:num) => `(ExactJSON.Value.integer $n)
+  | `(exactjson% -$n:num) => `(ExactJSON.Value.integer (-$n))
+  | `(exactjson% $x:scientific) => do
     checkFinite x
-    `(TomlJson.Value.float $x)
-  | `(tomljson% -$x:scientific) => do
+    `(ExactJSON.Value.float $x)
+  | `(exactjson% -$x:scientific) => do
     checkFinite x
-    `(TomlJson.Value.float (-$x))
-  | `(tomljson% [$[$xs],*]) => `(TomlJson.Value.array #[$[tomljson% $xs],*])
-  | `(tomljson% {$[$ks:tomljsonKey : $vs:tomljson],*}) => do
+    `(ExactJSON.Value.float (-$x))
+  | `(exactjson% [$[$xs],*]) => `(ExactJSON.Value.array #[$[exactjson% $xs],*])
+  | `(exactjson% {$[$ks:exactjsonKey : $vs:exactjson],*}) => do
     let keys : Array String ← ks.mapM fun
       -- the name as written: no macro scopes, no `«»`
-      | `(tomljsonKey| $k:ident) => pure (k.getId.eraseMacroScopes.toString (escape := false))
-      | `(tomljsonKey| $k:str) => pure k.getString
+      | `(exactjsonKey| $k:ident) => pure (k.getId.eraseMacroScopes.toString (escape := false))
+      | `(exactjsonKey| $k:str) => pure k.getString
       | _ => Macro.throwUnsupported
     for i in [0:keys.size] do
       for j in [i + 1:keys.size] do
         if keys[i]! == keys[j]! then Macro.throwErrorAt ks[j]! s!"duplicate key {repr keys[j]!}"
-    let members ← ((keys.zip vs).qsort (·.1 < ·.1)).mapM fun (k, v) => `(($(quote k), tomljson% $v))
-    `(TomlJson.Value.table #[$[$members],*])
-  | `(tomljson% $stx) =>
+    let members ← ((keys.zip vs).qsort (·.1 < ·.1)).mapM fun (k, v) => `(($(quote k), exactjson% $v))
+    `(ExactJSON.Value.table #[$[$members],*])
+  | `(exactjson% $stx) =>
     if stx.raw.isAntiquot then
       let stx := ⟨stx.raw.getAntiquotTerm⟩
-      `(TomlJson.toValue $stx)
+      `(ExactJSON.toValue $stx)
     else Macro.throwUnsupported
 
-end TomlJson
+end ExactJSON

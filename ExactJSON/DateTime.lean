@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Codec
+public import ExactJSON.Codec
 public import Std.Time.DateTime.Timestamp
 import Std.Time.Zoned
 
@@ -27,7 +27,7 @@ as some other date-time.
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 /-- A calendar date, proleptic Gregorian, years 0 to 9999. -/
 structure LocalDate where
@@ -341,4 +341,4 @@ def OffsetDateTime.now : IO OffsetDateTime := do
   | some dt => return dt
   | none => throw (IO.userError s!"the clock reads {ns} ns after 1970, outside the years 0 to 9999")
 
-end TomlJson
+end ExactJSON

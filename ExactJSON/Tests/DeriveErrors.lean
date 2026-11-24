@@ -1,11 +1,11 @@
 module
 
-import TomlJson
-meta import TomlJson
+import ExactJSON
+meta import ExactJSON
 
 /-! Types the handler must refuse. -/
 
-open TomlJson
+open ExactJSON
 
 /--
 error: `x` and `x?` would both be written under the key "x"
@@ -29,13 +29,13 @@ inductive TwiceArgs where
 
 /-- error: duplicate key "a" -/
 #guard_msgs in
-example : Value := tomljson% {"a": 1, b: 2, a: 3}
+example : Value := exactjson% {"a": 1, b: 2, a: 3}
 
 /--
 error: this float is beyond the range of binary64, which has no infinity in JSON
 -/
 #guard_msgs in
-example : Value := tomljson% [1.0e400]
+example : Value := exactjson% [1.0e400]
 
 -- `none` and `some none` would both be `null`: `Option (Option α)` is no value (only a field)
 #check_failure (encode (some (none : Option Nat)))

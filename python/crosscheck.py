@@ -1,15 +1,15 @@
 """Cross-check the Lean reader against an independent Python writer.
 
-    lake build tomljson && python3 python/crosscheck.py [--count N] [--seed S]
+    lake build exactjson && python3 python/crosscheck.py [--count N] [--seed S]
     python3 python/crosscheck.py --floats N
 
-1. Random Python values, written by ``tomljson.dumps``, are canonical to ``tomljson check``, which
+1. Random Python values, written by ``exactjson.dumps``, are canonical to ``exactjson check``, which
    accepts a line only if it is exactly how Lean writes that value: so the two writers agree byte
    for byte.
 2. ``json.loads`` reads every such line back as the same value, with integers from tokens without
    a point and floats from tokens with one.
 3. Other spellings of the same values (``json.dumps``'s spaces and ASCII escapes) are rejected.
-4. ``tomljson canon`` reads any JSON spelling of them (``json.dumps`` with spaces, ASCII escapes
+4. ``exactjson canon`` reads any JSON spelling of them (``json.dumps`` with spaces, ASCII escapes
    and keys in any order) and writes each one's canonical text, byte for byte as Python's writer.
 
 With ``--floats N``: every power of two and of ten, their neighbours, the smallest subnormals and N
@@ -26,9 +26,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from tomljson import dumps, dumps_float  # noqa: E402
+from exactjson import dumps, dumps_float  # noqa: E402
 
-EXE = Path(__file__).resolve().parent.parent / ".lake" / "build" / "bin" / "tomljson"
+EXE = Path(__file__).resolve().parent.parent / ".lake" / "build" / "bin" / "exactjson"
 
 SPECIAL = ['"', "\\", "/", "\n", "\t", "\r", "\b", "\f", "\x00", "\x1f", "\x7f", "\x85", "\x9f",
            "\xa0", "\u2028", "\u2029", "\ufeff", "\uffff", "\U00010000", "\U0010ffff", "\u00e9", "\u4e2d",
@@ -84,13 +84,13 @@ def rand_value(r, depth):
 
 
 def check(text):
-    """Whether ``tomljson check`` accepts the JSON Lines ``text``, and its message."""
+    """Whether ``exactjson check`` accepts the JSON Lines ``text``, and its message."""
     p = subprocess.run([str(EXE), "check"], input=text.encode(), capture_output=True)
     return p.returncode == 0, p.stderr.decode().strip()
 
 
 def canon_lines(text):
-    """``tomljson canon --lines`` of the JSON Lines ``text``: its exit code, output and message."""
+    """``exactjson canon --lines`` of the JSON Lines ``text``: its exit code, output and message."""
     p = subprocess.run([str(EXE), "canon", "--lines"], input=text.encode(), capture_output=True)
     return p.returncode, p.stdout.decode(), p.stderr.decode().strip()
 

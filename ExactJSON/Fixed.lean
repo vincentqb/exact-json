@@ -1,8 +1,8 @@
 module
 
-public import TomlJson.Sound
-public import TomlJson.NumberText
-public import TomlJson.SpecValid
+public import ExactJSON.Sound
+public import ExactJSON.NumberText
+public import ExactJSON.SpecValid
 
 /-! # Canonical texts are the fixed points of reading JSON
 
@@ -13,7 +13,7 @@ with soundness, which says the strict reader only reads such texts, this gives `
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 universe u
 
@@ -1211,4 +1211,4 @@ theorem decode_encode_of_floats (floats : FloatsReadBack) {α : Type u} [ToValue
 
 end Floats
 
-end TomlJson
+end ExactJSON

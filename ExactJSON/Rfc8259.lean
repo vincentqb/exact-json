@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Value
+public import ExactJSON.Value
 
 /-!
 # JSON as RFC 8259 writes it, and the value it holds
@@ -27,7 +27,7 @@ size in bytes and two more, which no text uses up, since each unit spent reads a
 
 @[expose] public section
 
-namespace TomlJson
+namespace ExactJSON
 
 namespace Rfc8259
 
@@ -268,4 +268,4 @@ def read? (s : String) : Option Value := (read s).toOption
 
 end Rfc8259
 
-end TomlJson
+end ExactJSON

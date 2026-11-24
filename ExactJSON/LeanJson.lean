@@ -1,6 +1,6 @@
 module
 
-public import TomlJson.Codec
+public import ExactJSON.Codec
 public import Lean.Data.Json.FromToJson
 
 /-! # Between `Value` and `Lean.Json`
@@ -14,13 +14,13 @@ public import Lean.Data.Json.FromToJson
 binary64's range. These convert between two in-memory forms; neither reads text.
 
 Lean's own `ToJson Float` prints through `Float.toString`, six fixed decimals, so `toJson 1e-7`
-is `0` and `toJson 0.1234567` is `0.123457`. `open scoped TomlJson.ExactFloat` replaces it, in the
+is `0` and `toJson 0.1234567` is `0.123457`. `open scoped ExactJSON.ExactFloat` replaces it, in the
 scope that opens it (`deriving ToJson` included), by `floatToJson`, which is exact.
 -/
 
 public section
 
-namespace TomlJson
+namespace ExactJSON
 
 open Lean (Json JsonNumber)
 
@@ -66,9 +66,9 @@ end Value
 
 namespace ExactFloat
 
-/-- An exact `ToJson Float` (`floatToJson`), in force where `TomlJson.ExactFloat` is opened. -/
+/-- An exact `ToJson Float` (`floatToJson`), in force where `ExactJSON.ExactFloat` is opened. -/
 scoped instance (priority := high) exactToJsonFloat : Lean.ToJson Float := ⟨floatToJson⟩
 
 end ExactFloat
 
-end TomlJson
+end ExactJSON

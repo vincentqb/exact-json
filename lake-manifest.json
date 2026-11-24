@@ -11,6 +11,6 @@
    "inputRev": "main",
    "inherited": false,
    "configFile": "lakefile.lean"}],
- "name": "tomljson",
+ "name": "exactjson",
  "lakeDir": ".lake",
  "fixedToolchain": false}
