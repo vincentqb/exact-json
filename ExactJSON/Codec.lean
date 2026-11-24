@@ -205,18 +205,7 @@ def decode {α : Type u} [ToValue α] [FromValue α] (s : String) : Except Strin
 def encodeLines {α : Type u} [ToValue α] (as : Array α) : String :=
   as.foldl (fun out a => (Value.renderTo out (toValue a)).push '\n') ""
 
-def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String (Array α) := do
-  let parts := s.splitOn "\n"
-  let mut out : Array α := #[]
-  let mut number : Nat := 0
-  for line in parts, k in [0:parts.length] do
-    let last := k + 1 == parts.length
-    if last && line.isEmpty then break
-    number := number + 1
-    match decode line with
-    | .ok a => out := out.push a
-    | .error e => throw s!"line {number}, {e}"
-    if last then throw s!"line {number}: no line feed at its end"
-  return out
+def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String (Array α) :=
+  readLines decode 0 #[] (s.splitOn "\n")
 
 end ExactJSON
