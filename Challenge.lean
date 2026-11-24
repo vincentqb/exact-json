@@ -3,6 +3,7 @@ module
 public import ExactJSON.Value
 public import ExactJSON.Rfc8259
 public import ExactJSON.Canonical
+public import Lean.Data.Json.FromToJson
 meta import SoftwareChallenge
 
 public section
@@ -41,6 +42,40 @@ def Value.readJson : String → Except String Value := sorry
 def encode {α : Type u} [ToValue α] : α → String := sorry
 
 def decode {α : Type u} [ToValue α] [FromValue α] : String → Except String α := sorry
+
+def Value.renderLines : Array Value → String := sorry
+
+def Value.parseLines : String → Except String (Array Value) := sorry
+
+def encodeLines {α : Type u} [ToValue α] : Array α → String := sorry
+
+def decodeLines {α : Type u} [ToValue α] [FromValue α] : String → Except String (Array α) := sorry
+
+instance Value.instBEq : BEq Value := sorry
+
+def Value.get? : Value → String → Option Value := sorry
+
+instance Value.instCoeString : Coe String Value := sorry
+
+instance Value.instCoeBool : Coe Bool Value := sorry
+
+instance Value.instOfNat {n : Nat} : OfNat Value n := sorry
+
+instance Value.instToString : ToString Value := sorry
+
+def literalExample : Value := sorry
+
+def literalSplice (n : Nat) (s : String) : Value := sorry
+
+def floatToJson : Float → Lean.Json := sorry
+
+def Value.toJson : Value → Lean.Json := sorry
+
+def Value.ofJson? : Lean.Json → Except String Value := sorry
+
+def ExactFloat.exactToJsonFloat : Lean.ToJson Float := sorry
+
+def canon : Bool → String → Except String String := sorry
 
 instance instToValueValue : ToValue Value := sorry
 
@@ -158,13 +193,7 @@ theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x)
   sorry
 
 theorem render_float (x : Float) (hx : finiteFloat x = true) :
-    ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.ReadsBack x ∧
-      ∀ d' : Decimal, d'.ReadsBack x →
-        d.digitCount < d'.digitCount ∨
-          (d.digitCount = d'.digitCount ∧
-            ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
-              ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
-                (d' = d ∨ d.digits % 2 = 0)))) := by
+    ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.IsShortest x := by
   sorry
 
 theorem render_nonfinite (x : Float) (hx : finiteFloat x = false) :
@@ -272,6 +301,95 @@ theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap
         ∃ m' : Std.HashMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList.Perm m.toList) := by
   sorry
 
+theorem renderLines_eq (vs : Array Value) :
+    Value.renderLines vs = String.join (vs.toList.map fun v => v.render ++ "\n") := by
+  sorry
+
+theorem parseLines_fixed (s : String) (vs : Array Value) :
+    Value.parseLines s = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ Value.renderLines vs = s := by
+  sorry
+
+theorem encodeLines_eq {α : Type u} [ToValue α] (as : Array α) :
+    encodeLines as = Value.renderLines (as.map toValue) := by
+  sorry
+
+theorem decodeLines_text {α : Type u} [ToValue α] [FromValue α] (s : String) (as : Array α)
+    (h : decodeLines s = .ok as) : encodeLines as = s := by
+  sorry
+
+theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α]
+    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (as : Array α) :
+    decodeLines (encodeLines as) = .ok as := by
+  sorry
+
+theorem beq_iff (v w : Value) : (v == w) = true ↔ v = w := by
+  sorry
+
+theorem get?_eq (v : Value) (k : String) :
+    v.get? k = (match v with | .table ms => (ms.toList.find? fun m => m.1 == k).map (·.2) | _ => none) := by
+  sorry
+
+theorem coe_eq (s : String) (b : Bool) (n : Nat) (v : Value) :
+    (Coe.coe s : Value) = .string s ∧ (Coe.coe b : Value) = .boolean b ∧ (OfNat.ofNat n : Value) = .integer n ∧
+      toString v = v.render := by
+  sorry
+
+theorem literalExample_eq :
+    literalExample = .table #[("a", .integer 1), ("b", .float 2.5),
+      ("c", .array #[.null, .boolean true, .string "x"]), ("d", .integer (-3))] := by
+  sorry
+
+theorem literalSplice_eq (n : Nat) (s : String) :
+    literalSplice n s = .table #[("count", toValue n), ("name", toValue s)] := by
+  sorry
+
+theorem floatToJson_finite (x : Float) (d : Decimal) (h : d.IsShortest x) :
+    floatToJson x = .num d.toJsonNumber := by
+  sorry
+
+theorem floatToJson_nonfinite (x : Float) (hx : finiteFloat x = false) :
+    floatToJson x = .str (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity") := by
+  sorry
+
+theorem toJson_eq (v : Value) :
+    v.toJson = match v with
+      | .null => .null
+      | .string s => .str s
+      | .integer n => .num ⟨n, 0⟩
+      | .float x => floatToJson x
+      | .boolean b => .bool b
+      | .array items => .arr (items.map Value.toJson)
+      | .table members => Lean.Json.mkObj (members.toList.map fun (k, w) => (k, w.toJson)) := by
+  sorry
+
+theorem ofJson_eq (j : Lean.Json) :
+    (Value.ofJson? j).toOption = match j with
+      | .null => some .null
+      | .bool b => some (.boolean b)
+      | .str s => some (.string s)
+      | .num n =>
+        if n.exponent = 0 then some (.integer n.mantissa)
+        else (Rfc8259.floatOf? (decide (n.mantissa < 0)) n.mantissa.natAbs (-(n.exponent : Int))).map .float
+      | .arr items => (items.toList.mapM fun i => (Value.ofJson? i).toOption).map fun (l : List Value) => .array l.toArray
+      | .obj kvs =>
+        ((kvs.toList : List (String × Lean.Json)).mapM fun (p : String × Lean.Json) => (Value.ofJson? p.2).toOption.map (p.1, ·)).map
+          fun (l : List (String × Value)) => .table l.toArray := by
+  sorry
+
+theorem ofJson_toJson (v : Value) (h : v.Valid) (hz : v.noNegativeZero = true) : Value.ofJson? v.toJson = .ok v := by
+  sorry
+
+theorem exactToJsonFloat_eq (x : Float) : ExactFloat.exactToJsonFloat.toJson x = floatToJson x := by
+  sorry
+
+theorem canon_text (s : String) : canon false s = (Value.readJson s).map fun v => v.render ++ "\n" := by
+  sorry
+
+theorem canon_lines (s : String) :
+    (canon true s).toOption =
+      ((jsonLines s).mapM fun l => (Value.readJson l).toOption).map fun vs => Value.renderLines vs.toArray := by
+  sorry
+
 @[kills parse_fixed] theorem parse_fixed_rejects_constant :
     ¬ ∀ (s : String) (v : Value),
       (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
@@ -321,13 +439,7 @@ theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap
 
 @[kills render_float] theorem render_float_rejects_empty :
     ¬ ∀ (x : Float), finiteFloat x = true →
-      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.ReadsBack x ∧
-        ∀ d' : Decimal, d'.ReadsBack x →
-          d.digitCount < d'.digitCount ∨
-            (d.digitCount = d'.digitCount ∧
-              ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
-                ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
-                  (d' = d ∨ d.digits % 2 = 0)))) := by
+      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.IsShortest x := by
   sorry
 
 @[kills render_nonfinite] theorem render_nonfinite_rejects_zero :
@@ -470,6 +582,124 @@ theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap
             @fromValue? (Std.HashMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.HashMap String β))) (β := α))
               (@toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m) = .ok m' ∧
             m'.toList.Perm m.toList) := by
+  sorry
+
+@[kills renderLines_eq] theorem renderLines_eq_rejects_empty :
+    ¬ ∀ (vs : Array Value), (fun (_ : Array Value) => "") vs = String.join (vs.toList.map fun v => v.render ++ "\n") := by
+  sorry
+
+@[kills parseLines_fixed] theorem parseLines_fixed_rejects_empty :
+    ¬ ∀ (s : String) (vs : Array Value),
+      (fun (_ : String) => (Except.ok #[] : Except String (Array Value))) s = .ok vs ↔
+        (∀ v ∈ vs.toList, v.Valid) ∧ (fun (_ : Array Value) => "") vs = s := by
+  sorry
+
+@[kills encodeLines_eq] theorem encodeLines_eq_rejects_constant :
+    ¬ ∀ {α : Type u} [ToValue α] (as : Array α),
+      (fun {β : Type u} [ToValue β] (_ : Array β) => "x") as = (fun (_ : Array Value) => "") (as.map toValue) := by
+  sorry
+
+@[kills decodeLines_text] theorem decodeLines_text_rejects_empty :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (s : String) (as : Array α),
+      (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.ok #[] : Except String (Array β))) s = .ok as →
+        (fun {β : Type u} [ToValue β] (_ : Array β) => "x") as = s := by
+  sorry
+
+@[kills decodeLines_encode] theorem decodeLines_encode_rejects_failure :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α], (∀ a : α, fromValue? (toValue a) = .ok a) →
+      (∀ a : α, (toValue a).Valid) → ∀ (as : Array α),
+        (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "" : Except String (Array β)))
+          ((fun {β : Type u} [ToValue β] (_ : Array β) => "") as) = .ok as := by
+  sorry
+
+@[kills beq_iff] theorem beq_iff_rejects_true :
+    ¬ ∀ (v w : Value), @BEq.beq Value ⟨fun _ _ => true⟩ v w = true ↔ v = w := by
+  sorry
+
+@[kills get?_eq] theorem get?_eq_rejects_none :
+    ¬ ∀ (v : Value) (k : String), (fun (_ : Value) (_ : String) => (none : Option Value)) v k =
+      (match v with | .table ms => (ms.toList.find? fun m => m.1 == k).map (·.2) | _ => none) := by
+  sorry
+
+@[kills coe_eq] theorem coe_eq_rejects_null :
+    ¬ ∀ (s : String) (b : Bool) (n : Nat) (v : Value),
+      @Coe.coe String Value ⟨fun _ => .null⟩ s = .string s ∧ @Coe.coe Bool Value ⟨fun _ => .null⟩ b = .boolean b ∧
+        @OfNat.ofNat Value n ((fun {m : Nat} => (⟨.null⟩ : OfNat Value m)) (m := n)) = .integer n ∧
+          @ToString.toString Value ⟨fun _ => ""⟩ v = v.render := by
+  sorry
+
+@[kills literalExample_eq] theorem literalExample_eq_rejects_null :
+    ¬ (Value.null : Value) = .table #[("a", .integer 1), ("b", .float 2.5),
+      ("c", .array #[.null, .boolean true, .string "x"]), ("d", .integer (-3))] := by
+  sorry
+
+@[kills literalSplice_eq] theorem literalSplice_eq_rejects_null :
+    ¬ ∀ (n : Nat) (s : String), (fun (_ : Nat) (_ : String) => Value.null) n s =
+      .table #[("count", toValue n), ("name", toValue s)] := by
+  sorry
+
+@[kills floatToJson_finite] theorem floatToJson_finite_rejects_null :
+    ¬ ∀ (x : Float) (d : Decimal), d.IsShortest x → (fun (_ : Float) => Lean.Json.null) x = .num d.toJsonNumber := by
+  sorry
+
+@[kills floatToJson_nonfinite] theorem floatToJson_nonfinite_rejects_null :
+    ¬ ∀ (x : Float), finiteFloat x = false →
+      (fun (_ : Float) => Lean.Json.null) x = .str (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity") := by
+  sorry
+
+@[kills toJson_eq] theorem toJson_eq_rejects_null :
+    ¬ ∀ (v : Value),
+      (fun (_ : Value) => Lean.Json.null) v = match v with
+        | .null => .null
+        | .string s => .str s
+        | .integer n => .num ⟨n, 0⟩
+        | .float x => (fun (_ : Float) => Lean.Json.null) x
+        | .boolean b => .bool b
+        | .array items => .arr (items.map (fun (_ : Value) => Lean.Json.null))
+        | .table members => Lean.Json.mkObj (members.toList.map fun (k, w) => (k, (fun (_ : Value) => Lean.Json.null) w)) := by
+  sorry
+
+@[kills ofJson_eq] theorem ofJson_eq_rejects_error :
+    ¬ ∀ (j : Lean.Json),
+      ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) j).toOption = match j with
+        | .null => some .null
+        | .bool b => some (.boolean b)
+        | .str s => some (.string s)
+        | .num n =>
+          if n.exponent = 0 then some (.integer n.mantissa)
+          else (Rfc8259.floatOf? (decide (n.mantissa < 0)) n.mantissa.natAbs (-(n.exponent : Int))).map .float
+        | .arr items =>
+          (items.toList.mapM fun i => ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) i).toOption).map
+            fun (l : List Value) => .array l.toArray
+        | .obj kvs =>
+          ((kvs.toList : List (String × Lean.Json)).mapM fun (p : String × Lean.Json) =>
+            ((fun (_ : Lean.Json) => (Except.error "" : Except String Value)) p.2).toOption.map (p.1, ·)).map
+              fun (l : List (String × Value)) => .table l.toArray := by
+  sorry
+
+@[kills ofJson_toJson] theorem ofJson_toJson_rejects_error :
+    ¬ ∀ (v : Value), v.Valid → v.noNegativeZero = true →
+      (fun (_ : Lean.Json) => (Except.error "" : Except String Value)) ((fun (_ : Value) => Lean.Json.null) v) = .ok v := by
+  sorry
+
+@[kills exactToJsonFloat_eq] theorem exactToJsonFloat_eq_rejects_null :
+    ¬ ∀ (x : Float), (⟨fun _ => Lean.Json.null⟩ : Lean.ToJson Float).toJson x = (fun (_ : Float) => Lean.Json.str "") x := by
+  sorry
+
+@[kills canon_text] theorem canon_text_rejects_empty :
+    ¬ ∀ (s : String), (fun (_ : Bool) (_ : String) => (Except.ok "" : Except String String)) false s =
+      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) s).map fun v => (fun (_ : Value) => "null") v ++ "\n" := by
+  sorry
+
+@[kills canon_lines] theorem canon_lines_rejects_error :
+    ¬ ∀ (s : String),
+      ((fun (_ : Bool) (_ : String) => (Except.error "" : Except String String)) true s).toOption =
+        ((jsonLines s).mapM fun l => ((fun (_ : String) => (Except.ok Value.null : Except String Value)) l).toOption).map
+          fun vs => (fun (_ : Array Value) => "") vs.toArray := by
+  sorry
+
+@[witness decodeLines_text] theorem decodeLines_text_applies :
+    ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (as : Array α), decodeLines s = .ok as := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :
