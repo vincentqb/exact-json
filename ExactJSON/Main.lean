@@ -35,6 +35,23 @@ def readStdin : IO (Except String String) := do
 
 public section
 
+namespace ExactJSON
+
+def canon (lines : Bool) (input : String) : Except String String := do
+  if !lines then
+    let v ← Value.readJson input
+    return v.render.push '\n'
+  let parts := input.splitOn "\n"
+  let mut out := #[]
+  for line in parts, k in [0:parts.length] do
+    if k + 1 == parts.length && line.isEmpty then break
+    match Value.readJson line with
+    | .ok v => out := out.push v
+    | .error e => throw s!"line {k + 1}, {e}"
+  return Value.renderLines out
+
+end ExactJSON
+
 def version : Value :=
   .table #[("name", Coe.coe "exactjson"), ("strict", Coe.coe true), ("version", (1 : Value))]
 
@@ -65,19 +82,6 @@ def typedCheck : String → Option (String → Except String Nat)
   | "TreeMap String Nat" => some fun (s : String) => (decodeLines (α := Std.TreeMap String Nat) s).map (·.size)
   | "HashMap String Nat" => some fun (s : String) => (decodeLines (α := Std.HashMap String Nat) s).map (·.size)
   | _ => none
-
-def canon (lines : Bool) (input : String) : Except String String := do
-  if !lines then
-    let v ← Value.readJson input
-    return v.render.push '\n'
-  let parts := input.splitOn "\n"
-  let mut out := #[]
-  for line in parts, k in [0:parts.length] do
-    if k + 1 == parts.length && line.isEmpty then break
-    match Value.readJson line with
-    | .ok v => out := out.push v
-    | .error e => throw s!"line {k + 1}, {e}"
-  return Value.renderLines out
 
 def main (args : List String) : IO UInt32 := do
   match args with
