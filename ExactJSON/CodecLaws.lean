@@ -2,7 +2,6 @@ module
 
 public import ExactJSON.Codec
 public import ExactJSON.FloatBits
-import all Init.Data.Array.QSort.Basic
 
 public section
 
@@ -135,336 +134,36 @@ private theorem foldlM_map_eq_ok {M γ : Type u} {δ : Type} (step : M → δ �
     rw [List.map_cons, List.foldlM_cons, hstep]
     exact foldlM_map_eq_ok step f g hstep l (g init c)
 
-private theorem treeMap_ofList_toList {α : Type u} (m : Std.TreeMap String α) :
-    (Std.TreeMap.ofList m.toList compare).Equiv m := by
-  apply Std.TreeMap.Equiv.of_forall_constGet?_eq
+private theorem extTreeMap_foldl_toList {α : Type u} (m : Std.ExtTreeMap String α) :
+    m.toList.foldl (fun acc p => acc.insert p.1 p.2) ∅ = m := by
+  rw [← Std.ExtTreeMap.ofList_eq_foldl]
+  apply Std.ExtTreeMap.ext_getElem?
   intro k
   cases h : m[k]? with
   | some v =>
-    exact Std.TreeMap.getElem?_ofList_of_mem Std.ReflCmp.compare_self Std.TreeMap.distinct_keys_toList
-      (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr h)
+    exact Std.ExtTreeMap.getElem?_ofList_of_mem Std.ReflCmp.compare_self Std.ExtTreeMap.distinct_keys_toList
+      (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr h)
   | none =>
-    apply Std.TreeMap.getElem?_ofList_of_contains_eq_false
+    apply Std.ExtTreeMap.getElem?_ofList_of_contains_eq_false
     cases hc : (m.toList.map Prod.fst).contains k with
     | false => rfl
     | true =>
       exfalso
       obtain ⟨p, hp, hpk⟩ := List.mem_map.mp (List.contains_iff_mem.mp hc)
       subst hpk
-      rw [Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp hp] at h
+      rw [Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mp hp] at h
       cases h
 
-private def Rearranges {α : Type u} {n : Nat} (lo hi : Nat) (v v' : Vector α n) : Prop :=
-  (∀ j (hj : j < n), (j < lo ∨ hi < j) → v'[j] = v[j]) ∧
-    ∀ j (hj : j < n), lo ≤ j → j ≤ hi → ∃ (j' : Nat) (hj' : j' < n), lo ≤ j' ∧ j' ≤ hi ∧ v'[j] = v[j']
-
-private theorem rearranges_refl {α : Type u} {n : Nat} (lo hi : Nat) (v : Vector α n) : Rearranges lo hi v v :=
-  ⟨fun _ _ _ => rfl, fun j hj h1 h2 => ⟨j, hj, h1, h2, rfl⟩⟩
-
-private theorem rearranges_trans {α : Type u} {n : Nat} {lo hi : Nat} {v v' v'' : Vector α n}
-    (h : Rearranges lo hi v v') (h' : Rearranges lo hi v' v'') : Rearranges lo hi v v'' := by
-  refine ⟨fun j hj hout => (h'.1 j hj hout).trans (h.1 j hj hout), fun j hj h1 h2 => ?_⟩
-  obtain ⟨j', hj', h1', h2', e'⟩ := h'.2 j hj h1 h2
-  obtain ⟨j'', hj'', h1'', h2'', e''⟩ := h.2 j' hj' h1' h2'
-  exact ⟨j'', hj'', h1'', h2'', e'.trans e''⟩
-
-private theorem rearranges_mono {α : Type u} {n : Nat} {lo hi lo' hi' : Nat} {v v' : Vector α n}
-    (h : Rearranges lo' hi' v v') (hlo : lo ≤ lo') (hhi : hi' ≤ hi) : Rearranges lo hi v v' := by
-  refine ⟨fun j hj hout => h.1 j hj (by omega), fun j hj h1 h2 => ?_⟩
-  by_cases hin : lo' ≤ j ∧ j ≤ hi'
-  · obtain ⟨j', hj', h1', h2', e⟩ := h.2 j hj hin.1 hin.2
-    exact ⟨j', hj', by omega, by omega, e⟩
-  · exact ⟨j, hj, h1, h2, h.1 j hj (by omega)⟩
-
-private theorem rearranges_swap {α : Type u} {n : Nat} {lo hi : Nat} (v : Vector α n) (i k : Nat)
-    (hi' : i < n) (hk : k < n) (h1 : lo ≤ i) (h2 : i ≤ hi) (h3 : lo ≤ k) (h4 : k ≤ hi) :
-    Rearranges lo hi v (v.swap i k hi' hk) := by
-  refine ⟨fun j hj hout => ?_, fun j hj h5 h6 => ?_⟩
-  · rw [Vector.getElem_swap]
-    split
-    · omega
-    · split
-      · omega
-      · rfl
-  · rw [Vector.getElem_swap]
-    split
-    · exact ⟨k, hk, h3, h4, rfl⟩
-    · split
-      · exact ⟨i, hi', h1, h2, rfl⟩
-      · exact ⟨j, hj, h5, h6, rfl⟩
-
-private theorem rearranges_ite_swap {α : Type u} {n : Nat} {lo hi : Nat} (c : Bool) (v : Vector α n) (i k : Nat)
-    (hi' : i < n) (hk : k < n) (h1 : lo ≤ i) (h2 : i ≤ hi) (h3 : lo ≤ k) (h4 : k ≤ hi) :
-    Rearranges lo hi v (if c = true then v.swap i k hi' hk else v) := by
-  split
-  · exact rearranges_swap v i k hi' hk h1 h2 h3 h4
-  · exact rearranges_refl lo hi v
-
-private theorem perm_ite_swap {α : Type u} {n : Nat} (c : Bool) (v : Vector α n) (i k : Nat)
-    (hi' : i < n) (hk : k < n) : (if c = true then v.swap i k hi' hk else v).Perm v := by
-  split
-  · exact Vector.swap_perm hi' hk
-  · exact Vector.Perm.refl v
-
-private theorem ite_swap_ordered {α : Type u} (lt : α → α → Bool)
-    (asymm : ∀ a b, lt a b = true → lt b a = false) {n : Nat} (v : Vector α n) (i k : Nat)
-    (hi' : i < n) (hk : k < n) :
-    lt (if lt v[i] v[k] = true then v.swap i k hi' hk else v)[i] (if lt v[i] v[k] = true then v.swap i k hi' hk else v)[k] = false := by
-  split
-  · rename_i h
-    rw [Vector.getElem_swap_left, Vector.getElem_swap_right]
-    exact asymm _ _ h
-  · rename_i h
-    simpa using h
-
-private theorem qpartition_loop_spec {α : Type u} (lt : α → α → Bool) {n : Nat} (lo hi : Nat) (hhi : hi < n) (p : α)
-    (v₀ : Vector α n) (hp : v₀[hi] = p) (mid : Nat) (hmid : mid < hi)
-    (hmidv : lt (v₀[mid]'(by omega)) p = false) :
-    ∀ (d : Nat) (u : Vector α n) (i k : Nat) (ilo : lo ≤ i) (ik : i ≤ k) (w : k ≤ hi), hi - k = d →
-      (∀ j (hj : j < n), (j < lo ∨ k ≤ j) → u[j] = v₀[j]) →
-      Rearranges lo hi v₀ u → u.Perm v₀ →
-      (∀ j (hj : j < n), lo ≤ j → j < i → lt u[j] p = true) →
-      (∀ j (hj : j < n), i ≤ j → j < k → lt u[j] p = false) →
-      (mid < k → i < k) →
-      ∀ (m : Nat) (hm : lo ≤ m ∧ m ≤ hi) (u' : Vector α n),
-        Array.qpartition.loop lt lo hi hhi p u i k ilo ik w = (⟨m, hm⟩, u') →
-        Rearranges lo hi v₀ u' ∧ u'.Perm v₀ ∧
-        (∀ j (hj : j < n), lo ≤ j → j < m → lt u'[j] (u'[m]'(Nat.lt_of_le_of_lt hm.2 hhi)) = true) ∧
-        (∀ j (hj : j < n), m < j → j ≤ hi → lt u'[j] (u'[m]'(Nat.lt_of_le_of_lt hm.2 hhi)) = false) ∧
-        m < hi := by
-  intro d
-  induction d with
-  | zero =>
-    intro u i k ilo ik w hd hout hwin hperm hlow hhigh hmk m hm u' heq
-    rw [Array.qpartition.loop.eq_def, dite_eq_right (by omega)] at heq
-    simp only [Prod.mk.injEq, Subtype.mk.injEq] at heq
-    obtain ⟨rfl, rfl⟩ := heq
-    have hik : i < hi := by have := hmk (by omega); omega
-    have hpiv : u[hi] = p := by rw [hout hi hhi (Or.inr (by omega)), hp]
-    refine ⟨rearranges_trans hwin (rearranges_swap u i hi _ hhi ilo (by omega) (by omega) (Nat.le_refl _)),
-      (Vector.swap_perm _ _).trans hperm, fun j hj h1 h2 => ?_, fun j hj h1 h2 => ?_, hik⟩
-    · rw [Vector.getElem_swap_left, Vector.getElem_swap_of_ne (by omega) (by omega), hpiv]
-      exact hlow j hj h1 h2
-    · rw [Vector.getElem_swap_left, hpiv]
-      by_cases hj' : j = hi
-      · subst hj'
-        rw [Vector.getElem_swap_right]
-        exact hhigh i (by omega) (Nat.le_refl _) (by omega)
-      · rw [Vector.getElem_swap_of_ne (by omega) hj']
-        exact hhigh j hj (by omega) (by omega)
-  | succ d ih =>
-    intro u i k ilo ik w hd hout hwin hperm hlow hhigh hmk m hm u' heq
-    have hk : k < hi := by omega
-    rw [Array.qpartition.loop.eq_def, dite_eq_left hk] at heq
-    split at heq
-    · rename_i hlt
-      refine ih (u.swap i k (by omega) (by omega)) (i + 1) (k + 1) _ _ _ (by omega) ?_
-        (rearranges_trans hwin (rearranges_swap u i k _ _ ilo (by omega) (by omega) (by omega)))
-        ((Vector.swap_perm _ _).trans hperm) ?_ ?_ ?_ m hm u' heq
-      · intro j hj hj'
-        rw [Vector.getElem_swap_of_ne (by omega) (by omega)]
-        exact hout j hj (by omega)
-      · intro j hj h1 h2
-        by_cases hji : j = i
-        · subst hji
-          rw [Vector.getElem_swap_left]
-          exact hlt
-        · rw [Vector.getElem_swap_of_ne hji (by omega)]
-          exact hlow j hj h1 (by omega)
-      · intro j hj h1 h2
-        by_cases hjk : j = k
-        · subst hjk
-          rw [Vector.getElem_swap_right]
-          exact hhigh i (by omega) (Nat.le_refl _) (by omega)
-        · rw [Vector.getElem_swap_of_ne (by omega) hjk]
-          exact hhigh j hj (by omega) (by omega)
-      · intro h
-        by_cases hmk' : mid = k
-        · subst hmk'
-          rw [hout mid (by omega) (Or.inr (Nat.le_refl _))] at hlt
-          rw [hmidv] at hlt
-          cases hlt
-        · have := hmk (by omega)
-          omega
-    · rename_i hlt
-      refine ih u i (k + 1) ilo (by omega) (by omega) (by omega) ?_ hwin hperm hlow ?_ (fun _ => by omega) m hm u' heq
-      · intro j hj hj'
-        exact hout j hj (by omega)
-      · intro j hj h1 h2
-        by_cases hjk : j = k
-        · subst hjk
-          simpa using hlt
-        · exact hhigh j hj h1 (by omega)
-
-private theorem qpartition_spec {α : Type u} (lt : α → α → Bool)
-    (asymm : ∀ a b, lt a b = true → lt b a = false) {n : Nat} (v : Vector α n) (lo hi : Nat)
-    (w : lo ≤ hi) (hlo : lo < n) (hhi : hi < n) (hlt : lo < hi) :
-    ∀ (m : Nat) (hm : lo ≤ m ∧ m ≤ hi) (v' : Vector α n), Array.qpartition v lt lo hi w hlo hhi = (⟨m, hm⟩, v') →
-      Rearranges lo hi v v' ∧ v'.Perm v ∧
-      (∀ j (hj : j < n), lo ≤ j → j < m → lt v'[j] (v'[m]'(Nat.lt_of_le_of_lt hm.2 hhi)) = true) ∧
-      (∀ j (hj : j < n), m < j → j ≤ hi → lt v'[j] (v'[m]'(Nat.lt_of_le_of_lt hm.2 hhi)) = false) ∧
-      m < hi := by
-  intro m hm v' heq
-  unfold Array.qpartition at heq
-  dsimp only at heq
-  have hmid : (lo + hi) / 2 < hi := by omega
-  have hmid' : (lo + hi) / 2 < n := by omega
-  obtain ⟨h1, h2, h3, h4, h5⟩ := qpartition_loop_spec lt lo hi hhi _ _ rfl ((lo + hi) / 2) hmid
-    (ite_swap_ordered lt asymm _ _ _ hmid' hhi) (hi - lo) _ lo lo (Nat.le_refl _) (Nat.le_refl _) w rfl
-    (fun _ _ _ => rfl) (rearranges_refl _ _ _) (Vector.Perm.refl _) (fun j _ h1 h2 => absurd h2 (by omega))
-    (fun j _ h1 h2 => absurd h2 (by omega)) (fun h => absurd h (by omega)) m hm v' heq
-  refine ⟨rearranges_trans ?_ h1, h2.trans ?_, h3, h4, h5⟩
-  · exact rearranges_trans (rearranges_trans (rearranges_ite_swap _ _ _ _ _ _ (Nat.le_refl _) w (by omega) (by omega))
-      (rearranges_ite_swap _ _ _ _ _ _ (Nat.le_refl _) w w (Nat.le_refl _)))
-      (rearranges_ite_swap _ _ _ _ _ _ (by omega) (by omega) w (Nat.le_refl _))
-  · exact (perm_ite_swap _ _ _ _ _ _).trans ((perm_ite_swap _ _ _ _ _ _).trans (perm_ite_swap _ _ _ _ _ _))
-
-private def SortedOn {α : Type u} (lt : α → α → Bool) {n : Nat} (lo hi : Nat) (v : Vector α n) : Prop :=
-  ∀ (j₁ j₂ : Nat) (h₁ : j₁ < n) (h₂ : j₂ < n), lo ≤ j₁ → j₁ < j₂ → j₂ ≤ hi → lt v[j₂] v[j₁] = false
-
-private theorem qsort_sort_spec {α : Type u} (lt : α → α → Bool) (irrefl : ∀ a, lt a a = false)
-    (trans : ∀ a b c, lt a b = true → lt b c = true → lt a c = true)
-    (ntrans : ∀ a b c, lt a c = true → lt a b = true ∨ lt b c = true) {n : Nat} :
-    ∀ (B : Nat) (v : Vector α n) (lo hi : Nat) (w : lo ≤ hi) (hlo : lo < n) (hhi : hi < n), hi - lo < B →
-      Rearranges lo hi v (Array.qsort.sort lt v lo hi w hlo hhi) ∧ (Array.qsort.sort lt v lo hi w hlo hhi).Perm v ∧
-        SortedOn lt lo hi (Array.qsort.sort lt v lo hi w hlo hhi) := by
-  have asymm : ∀ a b, lt a b = true → lt b a = false := fun a b h => by
-    cases h' : lt b a
-    · rfl
-    · have := trans a b a h h'
-      rw [irrefl] at this
-      cases this
-  intro B
-  induction B with
-  | zero =>
-    intro v lo hi w hlo hhi hB
-    omega
-  | succ B ih =>
-    intro v lo hi w hlo hhi hB
-    rw [Array.qsort.sort.eq_def]
-    split
-    · rename_i hlt
-      split
-      rename_i mid hmid v' heq
-      obtain ⟨p1, p2, p3, p4, p5⟩ := qpartition_spec lt asymm v lo hi w hlo hhi hlt mid hmid v' heq
-      rw [dite_eq_right (by omega)]
-      obtain ⟨q1, q2, q3⟩ := ih v' lo mid hmid.1 hlo (by omega) (by omega)
-      obtain ⟨r1, r2, r3⟩ := ih (Array.qsort.sort lt v' lo mid hmid.1 hlo (by omega)) (mid + 1) hi (by omega)
-        (by omega) hhi (by omega)
-      refine ⟨rearranges_trans p1 (rearranges_trans (rearranges_mono q1 (Nat.le_refl _) (by omega))
-        (rearranges_mono r1 (by omega) (Nat.le_refl _))), r2.trans (q2.trans p2), fun j₁ j₂ h₁ h₂ hl hj hh => ?_⟩
-      by_cases c2 : j₂ ≤ mid
-      · rw [r1.1 j₁ h₁ (Or.inl (by omega)), r1.1 j₂ h₂ (Or.inl (by omega))]
-        exact q3 j₁ j₂ h₁ h₂ hl hj c2
-      · by_cases c1 : mid + 1 ≤ j₁
-        · exact r3 j₁ j₂ h₁ h₂ c1 hj hh
-        · rw [r1.1 j₁ h₁ (Or.inl (by omega))]
-          obtain ⟨j₁', hj₁', a1, a2, e1⟩ := q1.2 j₁ h₁ hl (by omega)
-          obtain ⟨j₂', hj₂', b1, b2, e2⟩ := r1.2 j₂ h₂ (by omega) hh
-          rw [e1, e2, q1.1 j₂' hj₂' (Or.inr (by omega))]
-          have hb := p4 j₂' hj₂' (by omega) b2
-          cases hc : lt v'[j₂'] v'[j₁']
-          · rfl
-          · exfalso
-            rcases ntrans _ (v'[mid]'(by omega)) _ hc with hc' | hc'
-            · rw [hb] at hc'
-              cases hc'
-            · by_cases hj1 : j₁' = mid
-              · subst hj1
-                rw [irrefl] at hc'
-                cases hc'
-              · have := trans _ _ _ hc' (p3 j₁' hj₁' a1 (by omega))
-                rw [irrefl] at this
-                cases this
-    · rename_i hlt
-      exact ⟨rearranges_refl _ _ _, Vector.Perm.refl _, fun j₁ j₂ _ _ h1 h2 h3 => absurd hlt (by omega)⟩
-
-private theorem qsort_spec {α : Type u} (as : Array α) (lt : α → α → Bool) (irrefl : ∀ a, lt a a = false)
-    (trans : ∀ a b c, lt a b = true → lt b c = true → lt a c = true)
-    (ntrans : ∀ a b c, lt a c = true → lt a b = true ∨ lt b c = true) :
-    (as.qsort lt).toList.Perm as.toList ∧ (as.qsort lt).toList.Pairwise (fun a b => lt b a = false) := by
-  unfold Array.qsort
-  split
-  · rename_i h
-    refine ⟨List.Perm.refl _, ?_⟩
-    rw [List.eq_nil_of_length_eq_zero h]
-    exact List.Pairwise.nil
-  · rename_i h
-    dsimp only
-    obtain ⟨-, s2, s3⟩ := qsort_sort_spec lt irrefl trans ntrans (as.size + 1) as.toVector (min 0 (as.size - 1))
-      (max (min 0 (as.size - 1)) (min (as.size - 1) (as.size - 1))) (by omega) (by omega) (by omega) (by omega)
-    refine ⟨s2.toList, List.pairwise_iff_getElem.mpr fun i j hi hj hij => ?_⟩
-    simp only [Array.length_toList, Vector.size_toArray] at hi hj
-    simp only [Array.getElem_toList, Vector.getElem_toArray]
-    exact s3 i j hi hj (by omega) hij (by omega)
-
-private theorem exists_perm_of_perm_map {γ : Type u} {δ : Type} (f : γ → δ) {l₁ l₂ : List δ} (h : l₁.Perm l₂) :
-    ∀ L : List γ, L.map f = l₂ → ∃ L' : List γ, L'.Perm L ∧ L'.map f = l₁ := by
-  induction h with
-  | nil =>
-    intro L hL
-    cases L with
-    | nil => exact ⟨[], List.Perm.refl _, rfl⟩
-    | cons _ _ => cases hL
-  | cons x _ ih =>
-    intro L hL
-    cases L with
-    | nil => cases hL
-    | cons y L₀ =>
-      simp only [List.map_cons, List.cons.injEq] at hL
-      obtain ⟨hy, hL₀⟩ := hL
-      obtain ⟨L', hp, hm⟩ := ih L₀ hL₀
-      exact ⟨y :: L', hp.cons y, by rw [List.map_cons, hm, hy]⟩
-  | swap x y l =>
-    intro L hL
-    match L, hL with
-    | a :: b :: L₀, hL =>
-      simp only [List.map_cons, List.cons.injEq] at hL
-      obtain ⟨ha, hb, hL₀⟩ := hL
-      exact ⟨b :: a :: L₀, List.Perm.swap a b L₀, by simp [ha, hb, hL₀]⟩
-  | trans _ _ ih₁ ih₂ =>
-    intro L hL
-    obtain ⟨L₂, hp₂, hm₂⟩ := ih₂ L hL
-    obtain ⟨L₁, hp₁, hm₁⟩ := ih₁ L₂ hm₂
-    exact ⟨L₁, hp₁.trans hp₂, hm₁⟩
-
-private theorem keysIncreaseFrom_of_pairwise : ∀ (k : String) (l : List String),
+theorem keysIncreaseFrom_of_pairwise : ∀ (k : String) (l : List String),
     (k :: l).Pairwise (· < ·) → keysIncreaseFrom k l = true
   | _, [], _ => rfl
   | k, k' :: l, h => by
     simp only [keysIncreaseFrom, Bool.and_eq_true, decide_eq_true_eq]
     exact ⟨List.rel_of_pairwise_cons h List.mem_cons_self, keysIncreaseFrom_of_pairwise k' l (List.Pairwise.of_cons h)⟩
 
-private theorem keysIncrease_of_pairwise : ∀ l : List String, l.Pairwise (· < ·) → keysIncrease l = true
+theorem keysIncrease_of_pairwise : ∀ l : List String, l.Pairwise (· < ·) → keysIncrease l = true
   | [], _ => rfl
   | k :: l, h => keysIncreaseFrom_of_pairwise k l h
-
-private theorem hashMap_ofList_perm {α : Type u} (m : Std.HashMap String α) (L : List (String × α))
-    (h : L.Perm m.toList) : (Std.HashMap.ofList L).Equiv m := by
-  have hd : L.Pairwise (fun a b => (a.1 == b.1) = false) :=
-    h.symm.pairwise Std.HashMap.distinct_keys_toList (fun hxy => by rw [BEq.comm]; exact hxy)
-  apply Std.HashMap.Equiv.of_forall_getElem?_eq
-  intro k
-  cases hk : m[k]? with
-  | some v =>
-    exact Std.HashMap.getElem?_ofList_of_mem BEq.rfl hd
-      (h.mem_iff.mpr (Std.HashMap.mem_toList_iff_getElem?_eq_some.mpr hk))
-  | none =>
-    apply Std.HashMap.getElem?_ofList_of_contains_eq_false
-    cases hc : (L.map Prod.fst).contains k with
-    | false => rfl
-    | true =>
-      exfalso
-      obtain ⟨p, hp, hpk⟩ := List.mem_map.mp (List.contains_iff_mem.mp hc)
-      subst hpk
-      rw [Std.HashMap.mem_toList_iff_getElem?_eq_some.mp (h.mem_iff.mp hp)] at hk
-      cases hk
-
-theorem codec_value (v : Value) :
-    toValue v = (v : Value) ∧ ∀ w : Value, fromValue? w = .ok v ↔ w = (v : Value) := by
-  refine ⟨rfl, fun w => ?_⟩
-  show (Except.ok w : Except String Value) = .ok v ↔ w = v
-  exact ⟨fun h => by cases h; rfl, fun h => by rw [h]⟩
 
 theorem codec_string (s : String) :
     toValue s = (.string s : Value) ∧ ∀ w : Value, fromValue? w = .ok s ↔ w = (.string s : Value) := by
@@ -711,73 +410,17 @@ theorem codec_option {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o :
         rw [h]
         rfl
 
-theorem codec_treeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α) :
-    toValue m = .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) →
-        ∃ m' : Std.TreeMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList = m.toList) := by
-  refine ⟨rfl, fun lawful => ⟨m.toList.foldl (fun acc p => acc.insert p.1 p.2) ∅, ?_, ?_⟩⟩
-  · simp only [toValue, fromValue?]
-    rw [← Array.foldlM_toList, Array.toList_map, Std.TreeMap.toList_toArray]
-    refine foldlM_map_eq_ok _ _ _ ?_ m.toList ∅
-    rintro acc ⟨k, a⟩
-    show (withContext k (fromValue? (toValue a)) >>= fun r => pure (acc.insert k r)) = _
-    rw [lawful]
-    rfl
-  · exact Std.TreeMap.Equiv.toList_eq (Std.TreeMap.ofList_equiv_foldl.symm.trans (treeMap_ofList_toList m))
-
-theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α) :
-    (∃ l : List (String × Value), toValue m = .table ⟨l⟩ ∧ keysIncrease (l.map (·.1)) = true ∧
-      l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) →
-        ∃ m' : Std.HashMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList.Perm m.toList) := by
-  have irrefl : ∀ a : String × Value, decide (a.1 < a.1) = false := fun a => decide_eq_false Std.lt_irrefl
-  have trans : ∀ a b c : String × Value, decide (a.1 < b.1) = true → decide (b.1 < c.1) = true →
-      decide (a.1 < c.1) = true := fun a b c h1 h2 => by
-    simp only [decide_eq_true_eq] at h1 h2 ⊢
-    exact Std.lt_trans h1 h2
-  have ntrans : ∀ a b c : String × Value, decide (a.1 < c.1) = true →
-      decide (a.1 < b.1) = true ∨ decide (b.1 < c.1) = true := fun a b c h => by
-    simp only [decide_eq_true_eq] at h ⊢
-    rcases Std.lt_trichotomy a.1 b.1 with h' | h' | h'
-    · exact Or.inl h'
-    · exact Or.inr (h' ▸ h)
-    · exact Or.inr (Std.lt_trans h' h)
-  obtain ⟨hperm, hsorted⟩ := qsort_spec (m.toArray.map (fun (k, a) => (k, toValue a) : String × α → String × Value))
-    (fun x y => decide (x.1 < y.1)) irrefl trans ntrans
-  rw [Array.toList_map, Std.HashMap.toList_toArray] at hperm
-  refine ⟨⟨_, rfl, ?_, hperm⟩, fun lawful => ?_⟩
-  · apply keysIncrease_of_pairwise
-    rw [List.pairwise_map]
-    have hd0 : (m.toList.map (fun (k, a) => (k, toValue a) : String × α → String × Value)).Pairwise
-        (fun a b => a.1 ≠ b.1) :=
-      List.pairwise_map.mpr (Std.HashMap.distinct_keys_toList.imp fun h => by simpa using h)
-    have hd := hperm.symm.pairwise hd0 (fun h => Ne.symm h)
-    refine (hsorted.and hd).imp fun {a b} h => ?_
-    obtain ⟨h1, h2⟩ := h
-    rcases Std.lt_trichotomy a.1 b.1 with h' | h' | h'
-    · exact h'
-    · exact absurd h' h2
-    · simp only [decide_eq_false_iff_not] at h1
-      exact absurd h' h1
-  · obtain ⟨L', hL'perm, hL'map⟩ :=
-      exists_perm_of_perm_map (fun (k, a) => (k, toValue a) : String × α → String × Value) hperm m.toList rfl
-    refine ⟨L'.foldl (fun acc p => acc.insert p.1 p.2) ∅, ?_, ?_⟩
-    · show Array.foldlM _ {} ((m.toArray.map (fun (k, a) => (k, toValue a) : String × α → String × Value)).qsort
-        (fun x y => decide (x.1 < y.1))) = _
-      rw [← Array.foldlM_toList, ← hL'map]
-      refine foldlM_map_eq_ok _ _ _ ?_ L' ∅
-      rintro acc ⟨k, a⟩
-      show (withContext k (fromValue? (toValue a)) >>= fun r => pure (acc.insert k r)) = _
-      rw [lawful]
-      rfl
-    · exact Std.HashMap.Equiv.toList_perm
-        (Std.HashMap.ofList_equiv_foldl.symm.trans (hashMap_ofList_perm m L' hL'perm))
-
-theorem codec_value_rejects_null :
-    ¬ ∀ (v : Value), @toValue Value ⟨fun _ => .null⟩ v = (v : Value) ∧
-      ∀ w : Value, @fromValue? Value ⟨fun _ => .error ""⟩ w = .ok v ↔ w = (v : Value) := by
-  intro h
-  cases (h (.integer 0)).1
+theorem codec_extTreeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α) :
+    toValue m = .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
+      ((∀ a : α, fromValue? (toValue a) = .ok a) → fromValue? (toValue m) = .ok m) := by
+  refine ⟨rfl, fun lawful => ?_⟩
+  simp only [toValue, fromValue?]
+  rw [List.foldlM_toArray, foldlM_map_eq_ok _ _ (fun acc p => acc.insert p.1 p.2) ?_ m.toList ∅,
+    extTreeMap_foldl_toList]
+  rintro acc ⟨k, a⟩
+  show (withContext k (fromValue? (toValue a)) >>= fun r => pure (acc.insert k r)) = _
+  rw [lawful]
+  rfl
 
 theorem codec_string_rejects_null :
     ¬ ∀ (s : String), @toValue String ⟨fun _ => .null⟩ s = (.string s : Value) ∧
@@ -907,30 +550,14 @@ theorem codec_option_rejects_constant :
   have := ((@h PUnit ⟨fun _ => .boolean true⟩ ⟨fun _ => .ok ⟨⟩⟩ (@NotNull.mk PUnit ⟨fun _ => .boolean true⟩ fun _ h => nomatch h) none).2 (.integer 0)).mp rfl
   cases this
 
-theorem codec_treeMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α),
-      @toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m =
-          .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
+theorem codec_extTreeMap_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α),
+      @toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m =
+          .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
         ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          ∃ m' : Std.TreeMap String α,
-            @fromValue? (Std.TreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.TreeMap String β))) (β := α))
-              (@toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m) = .ok m' ∧
-            m'.toList = m.toList) := by
+          @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α))
+            (@toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m) = .ok m) := by
   intro h
   cases (@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ ∅).1
-
-theorem codec_hashMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α),
-      (∃ l : List (String × Value),
-        @toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m = .table ⟨l⟩ ∧
-          keysIncrease (l.map (·.1)) = true ∧ l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
-        ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          ∃ m' : Std.HashMap String α,
-            @fromValue? (Std.HashMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.HashMap String β))) (β := α))
-              (@toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m) = .ok m' ∧
-            m'.toList.Perm m.toList) := by
-  intro h
-  obtain ⟨l, hl, -⟩ := (@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ ∅).1
-  cases hl
 
 end ExactJSON

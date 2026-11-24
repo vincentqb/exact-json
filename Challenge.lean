@@ -21,10 +21,11 @@ read. Every valid value's text is JSON that holds that value; no text holds a ch
 U+0020; reading JSON in any spelling holds what RFC 8259 reads in it; JSON Lines is one canonical
 text a line; typed decoding reads exactly what typed encoding writes, for any type whose instances
 are lawful (`LawfulValue`: they read back what they write, as valid values); each of the library's
-instances writes the value its codec law states and reads exactly that; derived instances write
-the shapes their examples state, and are lawful; dates and times are written in one RFC 3339 form
-each and read in that form only; and the steps the reader counts as it reads (`Value.parseCosted`,
-whose value is `Value.parse`) are linear in the text's length.
+instances writes the value its codec law states and reads exactly that, except that a dictionary
+(`Std.ExtTreeMap String α`) reads back what it writes; derived instances write the shapes their
+examples state, and are lawful; dates and times are written in one RFC 3339 form each and read in
+that form only; and the steps the reader counts as it reads (`Value.parseCosted`, whose value is
+`Value.parse`) are linear in the text's length.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names, and the command line tool beyond the functions it calls; nor that
 the steps are the work done: the reader counts them itself, so the law bounds its count, not its
@@ -101,10 +102,6 @@ instance Example.instToValueEnvelope : ToValue Example.Envelope := sorry
 
 instance Example.instFromValueEnvelope : FromValue Example.Envelope := sorry
 
-instance instToValueValue : ToValue Value := sorry
-
-instance instFromValueValue : FromValue Value := sorry
-
 instance instToValueString : ToValue String := sorry
 
 instance instFromValueString : FromValue String := sorry
@@ -177,13 +174,9 @@ instance instToValueOptionOfNotNull {α : Type u} [ToValue α] [NotNull α] : To
 
 instance instFromValueOptionOfNotNull {α : Type u} [ToValue α] [FromValue α] [NotNull α] : FromValue (Option α) := sorry
 
-instance instToValueTreeMapString {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) := sorry
+instance instToValueExtTreeMapString {α : Type u} [ToValue α] : ToValue (Std.ExtTreeMap String α) := sorry
 
-instance instFromValueTreeMapString {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) := sorry
-
-instance instToValueHashMapString {α : Type u} [ToValue α] : ToValue (Std.HashMap String α) := sorry
-
-instance instFromValueHashMapString {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) := sorry
+instance instFromValueExtTreeMapString {α : Type u} [FromValue α] : FromValue (Std.ExtTreeMap String α) := sorry
 
 theorem parse_fixed (s : String) (v : Value) :
     Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
@@ -220,10 +213,6 @@ theorem render_float (x : Float) (hx : finiteFloat x = true) :
   sorry
 
 theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none := by
-  sorry
-
-theorem codec_value (v : Value) :
-    toValue v = (v : Value) ∧ ∀ w : Value, fromValue? w = .ok v ↔ w = (v : Value) := by
   sorry
 
 theorem codec_string (s : String) :
@@ -307,17 +296,9 @@ theorem codec_option {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o :
         (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
   sorry
 
-theorem codec_treeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α) :
-    toValue m = .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) →
-        ∃ m' : Std.TreeMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList = m.toList) := by
-  sorry
-
-theorem codec_hashMap {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α) :
-    (∃ l : List (String × Value), toValue m = .table ⟨l⟩ ∧ keysIncrease (l.map (·.1)) = true ∧
-      l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) →
-        ∃ m' : Std.HashMap String α, fromValue? (toValue m) = .ok m' ∧ m'.toList.Perm m.toList) := by
+theorem codec_extTreeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α) :
+    toValue m = .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
+      ((∀ a : α, fromValue? (toValue a) = .ok a) → fromValue? (toValue m) = .ok m) := by
   sorry
 
 theorem renderLines_eq (vs : Array Value) :
@@ -461,11 +442,6 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
       ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
   sorry
 
-@[kills codec_value] theorem codec_value_rejects_null :
-    ¬ ∀ (v : Value), @toValue Value ⟨fun _ => .null⟩ v = (v : Value) ∧
-      ∀ w : Value, @fromValue? Value ⟨fun _ => .error ""⟩ w = .ok v ↔ w = (v : Value) := by
-  sorry
-
 @[kills codec_string] theorem codec_string_rejects_null :
     ¬ ∀ (s : String), @toValue String ⟨fun _ => .null⟩ s = (.string s : Value) ∧
       ∀ w : Value, @fromValue? String ⟨fun _ => .error ""⟩ w = .ok s ↔ w = (.string s : Value) := by
@@ -570,27 +546,13 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
           (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
   sorry
 
-@[kills codec_treeMap] theorem codec_treeMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.TreeMap String α),
-      @toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m =
-          .table (m.toArray.map fun (k, a) => (k, toValue a)) ∧
+@[kills codec_extTreeMap] theorem codec_extTreeMap_rejects_null :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α),
+      @toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m =
+          .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
         ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          ∃ m' : Std.TreeMap String α,
-            @fromValue? (Std.TreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.TreeMap String β))) (β := α))
-              (@toValue (Std.TreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.TreeMap String β))) (β := α)) m) = .ok m' ∧
-            m'.toList = m.toList) := by
-  sorry
-
-@[kills codec_hashMap] theorem codec_hashMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.HashMap String α),
-      (∃ l : List (String × Value),
-        @toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m = .table ⟨l⟩ ∧
-          keysIncrease (l.map (·.1)) = true ∧ l.Perm (m.toList.map fun (k, a) => (k, toValue a))) ∧
-        ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          ∃ m' : Std.HashMap String α,
-            @fromValue? (Std.HashMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.HashMap String β))) (β := α))
-              (@toValue (Std.HashMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.HashMap String β))) (β := α)) m) = .ok m' ∧
-            m'.toList.Perm m.toList) := by
+          @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α))
+            (@toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m) = .ok m) := by
   sorry
 
 @[kills renderLines_eq] theorem renderLines_eq_rejects_empty :

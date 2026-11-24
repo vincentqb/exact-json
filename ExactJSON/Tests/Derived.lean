@@ -72,6 +72,21 @@ example (w : Wide) : decode (encode w) = .ok w := decode_encode w
 example (ws : Array Wide) : decodeLines (encodeLines ws) = .ok ws := decodeLines_encode ws
 example (e : Empty0) : decode (encode e) = .ok e := decode_encode e
 
+structure Tagged where
+  labels : Std.ExtTreeMap String String
+  counts? : Option (Std.ExtTreeMap String Nat)
+  deriving ToValue, FromValue, LawfulValue
+
+def labels (keys : List String) : Std.ExtTreeMap String String :=
+  keys.foldl (fun m k => m.insert k (k ++ "!")) {}
+
+example (t : Tagged) : decode (encode t) = .ok t := decode_encode t
+example : labels ["a", "b", "c", "d"] = labels ["c", "a", "d", "b"] := by decide
+
+#guard encode ({ labels := labels ["team", "env"], counts? := none } : Tagged) ==
+  "{\"labels\":{\"env\":\"env!\",\"team\":\"team!\"}}"
+#guard !(decode "{\"labels\":{\"b\":\"x\",\"a\":\"y\"}}" : Except String Tagged).isOk
+
 #guard encode ({} : Empty0) == "{}"
 #guard encode ({ fst := 1, snd? := some "s" } : Pair Nat String) == "{\"fst\":1,\"snd\":\"s\"}"
 #guard encode ({ fst := 1, snd? := none } : Pair Nat String) == "{\"fst\":1}"

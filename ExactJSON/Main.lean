@@ -46,39 +46,41 @@ def readEach (number : Nat) (out : Array Value) : List String → Except String 
     | .ok v => readEach (number + 1) (out.push v) rest
 
 def canon (lines : Bool) (input : String) : Except String String :=
-  if lines then (readEach 0 #[] (textLines input)).map (encodeLines (α := Value))
+  if lines then (readEach 0 #[] (textLines input)).map Value.renderLines
   else (Value.readJson input).map fun v => Value.renderLines #[v]
 
+def checkAs (α : Type) [ToValue α] [FromValue α] (s : String) : Except String Nat := do
+  let as ← decodeLines (α := α) s
+  if encodeLines as == s then pure as.size else throw "the decoded lines are written differently"
+
 def typedCheck : String → Option (String → Except String Nat)
-  | "Value" => some fun (s : String) => (decodeLines (α := Value) s).map (·.size)
-  | "String" => some fun (s : String) => (decodeLines (α := String) s).map (·.size)
-  | "Bool" => some fun (s : String) => (decodeLines (α := Bool) s).map (·.size)
-  | "Int" => some fun (s : String) => (decodeLines (α := Int) s).map (·.size)
-  | "Nat" => some fun (s : String) => (decodeLines (α := Nat) s).map (·.size)
-  | "UInt8" => some fun (s : String) => (decodeLines (α := UInt8) s).map (·.size)
-  | "UInt16" => some fun (s : String) => (decodeLines (α := UInt16) s).map (·.size)
-  | "UInt32" => some fun (s : String) => (decodeLines (α := UInt32) s).map (·.size)
-  | "UInt64" => some fun (s : String) => (decodeLines (α := UInt64) s).map (·.size)
-  | "Int8" => some fun (s : String) => (decodeLines (α := Int8) s).map (·.size)
-  | "Int16" => some fun (s : String) => (decodeLines (α := Int16) s).map (·.size)
-  | "Int32" => some fun (s : String) => (decodeLines (α := Int32) s).map (·.size)
-  | "Int64" => some fun (s : String) => (decodeLines (α := Int64) s).map (·.size)
-  | "Float" => some fun (s : String) => (decodeLines (α := Float) s).map (·.size)
-  | "Char" => some fun (s : String) => (decodeLines (α := Char) s).map (·.size)
-  | "Array Nat" => some fun (s : String) => (decodeLines (α := Array Nat) s).map (·.size)
-  | "List Nat" => some fun (s : String) => (decodeLines (α := List Nat) s).map (·.size)
-  | "Nat × String" => some fun (s : String) => (decodeLines (α := Nat × String) s).map (·.size)
-  | "Option Nat" => some fun (s : String) => (decodeLines (α := Option Nat) s).map (·.size)
-  | "TreeMap String Nat" => some fun (s : String) => (decodeLines (α := Std.TreeMap String Nat) s).map (·.size)
-  | "HashMap String Nat" => some fun (s : String) => (decodeLines (α := Std.HashMap String Nat) s).map (·.size)
-  | "LocalDate" => some fun (s : String) => (decodeLines (α := LocalDate) s).map (·.size)
-  | "LocalTime" => some fun (s : String) => (decodeLines (α := LocalTime) s).map (·.size)
-  | "LocalDateTime" => some fun (s : String) => (decodeLines (α := LocalDateTime) s).map (·.size)
-  | "OffsetDateTime" => some fun (s : String) => (decodeLines (α := OffsetDateTime) s).map (·.size)
-  | "DateTime" => some fun (s : String) => (decodeLines (α := DateTime) s).map (·.size)
-  | "Example.Point" => some fun (s : String) => (decodeLines (α := Example.Point) s).map (·.size)
-  | "Example.Shape" => some fun (s : String) => (decodeLines (α := Example.Shape) s).map (·.size)
-  | "Example.Envelope" => some fun (s : String) => (decodeLines (α := Example.Envelope) s).map (·.size)
+  | "String" => some (checkAs String)
+  | "Bool" => some (checkAs Bool)
+  | "Int" => some (checkAs Int)
+  | "Nat" => some (checkAs Nat)
+  | "UInt8" => some (checkAs (UInt8))
+  | "UInt16" => some (checkAs (UInt16))
+  | "UInt32" => some (checkAs (UInt32))
+  | "UInt64" => some (checkAs (UInt64))
+  | "Int8" => some (checkAs (Int8))
+  | "Int16" => some (checkAs (Int16))
+  | "Int32" => some (checkAs (Int32))
+  | "Int64" => some (checkAs (Int64))
+  | "Float" => some (checkAs Float)
+  | "Char" => some (checkAs Char)
+  | "Array Nat" => some (checkAs (Array Nat))
+  | "List Nat" => some (checkAs (List Nat))
+  | "Nat × String" => some (checkAs (Nat × String))
+  | "Option Nat" => some (checkAs (Option Nat))
+  | "ExtTreeMap String Nat" => some (checkAs (Std.ExtTreeMap String Nat))
+  | "LocalDate" => some (checkAs LocalDate)
+  | "LocalTime" => some (checkAs LocalTime)
+  | "LocalDateTime" => some (checkAs LocalDateTime)
+  | "OffsetDateTime" => some (checkAs OffsetDateTime)
+  | "DateTime" => some (checkAs DateTime)
+  | "Example.Point" => some (checkAs Example.Point)
+  | "Example.Shape" => some (checkAs Example.Shape)
+  | "Example.Envelope" => some (checkAs Example.Envelope)
   | _ => none
 
 def main (args : List String) : IO UInt32 := do

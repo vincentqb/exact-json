@@ -87,21 +87,17 @@ deriving instance ToValue for Fn
 
 structure Raw where
   v : Value
-  deriving ToValue, FromValue
 
 /--
 error: failed to synthesize instance of type class
-  LawfulValue Value
+  ToValue Value
 
-Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+Hint: Adding the command `deriving instance ExactJSON.ToValue for ExactJSON.Value` may allow Lean to derive the missing instance.
 ---
-error: failed to synthesize instance of type class
-  LawfulValue Value
-
-Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+warning: declaration uses `sorry`
 -/
 #guard_msgs in
-deriving instance LawfulValue for Raw
+deriving instance ToValue for Raw
 
 /--
 error: could not synthesize default value for field 'valid' of 'ExactJSON.LocalTime' using tactics

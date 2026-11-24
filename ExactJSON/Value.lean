@@ -1,7 +1,6 @@
 module
 
-public import Std.Data.HashMap
-public import Std.Data.TreeMap
+public import Std.Data.ExtTreeMap
 
 public section
 

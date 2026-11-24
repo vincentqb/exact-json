@@ -1,8 +1,7 @@
 module
 
 public import ExactJSON.Parse
-public import Std.Data.HashMap
-public import Std.Data.TreeMap
+public import Std.Data.ExtTreeMap
 
 @[expose] public section
 
@@ -38,9 +37,6 @@ end
 
 instance : BEq Value := ⟨beq⟩
 
-def tableOfDistinct (members : Array (String × Value)) : Value :=
-  .table (members.qsort (·.1 < ·.1))
-
 def get? (v : Value) (key : String) : Option Value :=
   match v with
   | .table members => (members.find? (·.1 == key)).map (·.2)
@@ -65,8 +61,6 @@ def withContext {α : Type u} (context : String) (x : Except String α) : Except
 def typeMismatch {α : Type u} (what : String) (v : Value) : Except String α :=
   .error s!"expected {what}, found {v.typeName} {v.render}"
 
-instance : ToValue Value := ⟨id⟩
-instance : FromValue Value := ⟨pure⟩
 
 instance : ToValue String := ⟨.string⟩
 instance : FromValue String := ⟨fun | .string s => pure s | v => typeMismatch "a string" v⟩
@@ -147,17 +141,9 @@ instance {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) :=
 instance {α : Type u} [ToValue α] [FromValue α] [NotNull α] : FromValue (Option α) :=
   ⟨fun | .null => pure none | v => some <$> fromValue? v⟩
 
-instance {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) :=
-  ⟨fun m => .table (m.toArray.map fun (k, v) => (k, toValue v))⟩
-instance {α : Type u} [FromValue α] : FromValue (Std.TreeMap String α) where
-  fromValue?
-    | .table members => members.foldlM (init := {}) fun m (k, v) => do
-      return m.insert k (← withContext k (fromValue? v))
-    | v => typeMismatch "a table" v
-
-instance {α : Type u} [ToValue α] : ToValue (Std.HashMap String α) :=
-  ⟨fun m => Value.tableOfDistinct (m.toArray.map fun (k, v) => (k, toValue v))⟩
-instance {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) where
+instance {α : Type u} [ToValue α] : ToValue (Std.ExtTreeMap String α) :=
+  ⟨fun m => .table (m.toList.map fun (k, v) => (k, toValue v)).toArray⟩
+instance {α : Type u} [FromValue α] : FromValue (Std.ExtTreeMap String α) where
   fromValue?
     | .table members => members.foldlM (init := {}) fun m (k, v) => do
       return m.insert k (← withContext k (fromValue? v))
@@ -185,8 +171,7 @@ instance : NotNull Float where
 instance {α : Type u} [ToValue α] : NotNull (Array α) := ⟨fun _ h => nomatch h⟩
 instance {α : Type u} [ToValue α] : NotNull (List α) := ⟨fun _ h => nomatch h⟩
 instance {α β : Type u} [ToValue α] [ToValue β] : NotNull (α × β) := ⟨fun _ h => nomatch h⟩
-instance {α : Type u} [ToValue α] : NotNull (Std.TreeMap String α) := ⟨fun _ h => nomatch h⟩
-instance {α : Type u} [ToValue α] : NotNull (Std.HashMap String α) := ⟨fun _ h => nomatch h⟩
+instance {α : Type u} [ToValue α] : NotNull (Std.ExtTreeMap String α) := ⟨fun _ h => nomatch h⟩
 
 def encode {α : Type u} [ToValue α] (a : α) : String := (toValue a).render
 
