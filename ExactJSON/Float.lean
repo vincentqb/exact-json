@@ -80,22 +80,40 @@ def tenPowLe (k : Int) (m : Nat) (e : Int) : Bool :=
   let (bn, bd) := powSplit 2 e
   tn * bd ≤ m * bn * td
 
+/-- `k`, lowered while `10 ^ k > m × 2 ^ e`, at most `n` times. -/
+def lowerExponent (m : Nat) (e : Int) : Nat → Int → Int
+  | 0, k => k
+  | n + 1, k => if tenPowLe k m e then k else lowerExponent m e n (k - 1)
+
+/-- `k`, raised while `10 ^ (k + 1) ≤ m × 2 ^ e`, at most `n` times. -/
+def raiseExponent (m : Nat) (e : Int) : Nat → Int → Int
+  | 0, k => k
+  | n + 1, k => if tenPowLe (k + 1) m e then raiseExponent m e n (k + 1) else k
+
 /-- `⌊log₁₀ (m × 2 ^ e)⌋` for `m > 0`, by an estimate corrected with exact comparisons. -/
-def decimalExponent (m : Nat) (e : Int) : Int := Id.run do
+def decimalExponent (m : Nat) (e : Int) : Int :=
   -- log₁₀ 2 ≈ 78913 / 2^18; the estimate is off by at most one either way.
   let log2 : Int := (Nat.log2 m : Int) + e
-  let mut k : Int := (log2 * 78913) / 262144
-  for _ in [0:4] do
-    if !tenPowLe k m e then k := k - 1
-  for _ in [0:4] do
-    if tenPowLe (k + 1) m e then k := k + 1
-  return k
+  raiseExponent m e 4 (lowerExponent m e 4 ((log2 * 78913) / 262144))
 
 /-- The interval of reals that round to `m × 2 ^ e` (the float with significand `m`, binary
 exponent `e`, and the boundary flag `lowerCloser` when the next float down is closer), scaled by
 `2 ^ (2 - e)`: `(low, x, high)`, every one an integer. -/
 def roundingInterval (m : Nat) (lowerCloser : Bool) : Nat × Nat × Nat :=
   (if lowerCloser then 4 * m - 1 else 4 * m - 2, 4 * m, 4 * m + 2)
+
+/-- The scale `(a, b)` of a candidate for `m × 2 ^ e` at `10 ^ k`: a multiple `y` of `2 ^ (e - 2)`
+is `y × a / b` units of `10 ^ k`. -/
+def scale (e k : Int) : Nat × Nat :=
+  let (a2, b2) := powSplit 2 (e - 2)
+  let (b10, a10) := powSplit 10 k
+  (a2 * a10, b2 * b10)
+
+/-- Whether `d` units of `10 ^ k` lie between `low` and `high` multiples of `2 ^ (e - 2)`, at
+scale `(a, b)` (`scale e k`), the ends included when `inclusive`. -/
+def fits (low high a b : Nat) (inclusive : Bool) (d : Nat) : Bool :=
+  let v := d * b
+  (low * a < v || (inclusive && low * a == v)) && (v < high * a || (inclusive && v == high * a))
 
 /-- The `p`-digit decimal significand nearest `m × 2^e` that still reads back as it, if any:
 `d` with `d × 10 ^ k` in the rounding interval, for `k = E - p + 1` where `E` is the decimal
@@ -104,16 +122,9 @@ def candidate (m : Nat) (e : Int) (lowerCloser inclusive : Bool) (k : Int) :
     Option Nat :=
   let (low, x, high) := roundingInterval m lowerCloser
   -- The scaled values are multiples of `2 ^ (e - 2)`; divide by `10 ^ k` as `· × a / b`.
-  let (a2, b2) := powSplit 2 (e - 2)
-  let (b10, a10) := powSplit 10 k
-  let a := a2 * a10
-  let b := b2 * b10
+  let (a, b) := scale e k
   let xa := x * a
-  let la := low * a
-  let ha := high * a
-  let fits (d : Nat) : Bool :=
-    let v := d * b
-    (la < v || (inclusive && la == v)) && (v < ha || (inclusive && v == ha))
+  let fits := fits low high a b inclusive
   let d0 := xa / b
   let d1 := d0 + 1
   match fits d0, fits d1 with
@@ -127,10 +138,25 @@ def candidate (m : Nat) (e : Int) (lowerCloser inclusive : Bool) (k : Int) :
   | false, true => some d1
   | false, false => none
 
+/-- The least `p` in `[lo, hi]` with `cand p`, halving the range `n` times, when `cand` is monotone
+and true at `hi`. -/
+def searchDigits (cand : Nat → Bool) : Nat → Nat → Nat → Nat
+  | 0, lo, _ => lo
+  | n + 1, lo, hi =>
+    if lo < hi then
+      let mid := (lo + hi) / 2
+      if cand mid then searchDigits cand n lo mid else searchDigits cand n (mid + 1) hi
+    else lo
+
+/-- `d × 10 ^ x` with at most `n` trailing zeros of `d` moved into the exponent. -/
+def stripZeros : Nat → Nat → Int → Nat × Int
+  | 0, d, x => (d, x)
+  | n + 1, d, x => if d != 0 && d % 10 == 0 then stripZeros n (d / 10) (x + 1) else (d, x)
+
 /-- The shortest decimal that reads back as `x`, closest to `x` among the shortest; `none` for a
 NaN or an infinity. -/
 def shortest (x : Float) : Option Decimal :=
-  if x.isNaN || x.isInf then none
+  if !finiteFloat x then none
   else
     let (negative, m, e) := decompose x
     if m = 0 then some { negative, digits := 0, exponent := 0 }
@@ -143,25 +169,13 @@ def shortest (x : Float) : Option Decimal :=
       let cand (p : Nat) := candidate m e lowerCloser inclusive (big - p + 1)
       -- `p ↦ (cand p).isSome` is monotone and true at 17: search for its least `p`, halving
       -- `[1, 17]` five times.
-      let p := Id.run do
-        let mut lo := 1
-        let mut hi := 17
-        for _ in [0:5] do
-          if lo < hi then
-            let mid := (lo + hi) / 2
-            if (cand mid).isSome then hi := mid else lo := mid + 1
-        return lo
+      let p := searchDigits (fun p => (cand p).isSome) 5 1 17
       match cand p with
       | none => none  -- unreachable: 17 digits always suffice
-      | some d => Id.run do
+      | some d =>
         -- at most 18 trailing zeros (17 digits, rounded up to a power of ten)
-        let mut digits := d
-        let mut exponent := big - p + 1
-        for _ in [0:20] do
-          if digits != 0 && digits % 10 == 0 then
-            digits := digits / 10
-            exponent := exponent + 1
-        return some { negative, digits, exponent }
+        let (digits, exponent) := stripZeros 20 d (big - p + 1)
+        some { negative, digits, exponent }
 
 /-- The float nearest `(-1)^negative × m × 10^q`, rounding ties to even, or `none` when that is
 an infinity (`Rfc8259.floatOf?`). -/
