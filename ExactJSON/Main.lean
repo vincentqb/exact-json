@@ -1,11 +1,14 @@
 module
 
 public import ExactJSON.Codec
+public import ExactJSON.LeanJson
 
 open ExactJSON
 
 def usage : String :=
   "usage: exactjson version\n" ++
+  "       exactjson lean-json < input.json\n" ++
+  "  write the JSON text as Lean.Json compresses it, then its canonical text read back from Lean.Json\n" ++
   "       exactjson get KEY < input.jsonl\n" ++
   "  write the value under KEY of each line's table, or null\n" ++
   "       exactjson check [--as TYPE] < input.jsonl\n" ++
@@ -59,6 +62,15 @@ def getAll (key : String) (input : String) : Except String String := do
   let values ← Value.parseLines input
   return encodeLines (values.map fun v => (v.get? key).getD .null)
 
+def leanJsonOf : Value → Lean.Json
+  | .float x => ExactFloat.exactToJsonFloat.toJson x
+  | v => v.toJson
+
+def viaLeanJson (input : String) : Except String String := do
+  let j := leanJsonOf (← Value.readJson input)
+  let w ← Value.ofJson? j
+  return j.compress ++ "\n" ++ w.render ++ "\n"
+
 def typedCheck : String → Option (String → Except String Nat)
   | "Value" => some fun (s : String) => (decodeLines (α := Value) s).map (·.size)
   | "String" => some fun (s : String) => (decodeLines (α := String) s).map (·.size)
@@ -91,6 +103,14 @@ def main (args : List String) : IO UInt32 := do
       | ["--lines"] => pure true
       | _ => do IO.eprint usage; return 2
     match (← readStdin) >>= canon lines with
+    | .ok text =>
+      IO.print text
+      return 0
+    | .error e =>
+      IO.eprintln s!"exactjson: {e}"
+      return 1
+  | ["lean-json"] =>
+    match (← readStdin) >>= viaLeanJson with
     | .ok text =>
       IO.print text
       return 0
