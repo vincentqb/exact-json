@@ -52,7 +52,8 @@ theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : 
         exact parse_render_text s v hv
       · cases h
 
-theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat :=
+theorem render_no_control (v : Value) :
+    ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 :=
   printable_render v
 
 theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
@@ -91,7 +92,8 @@ theorem parse_render_invalid_rejects_null :
   simp [Except.toOption] at this
 
 theorem render_no_control_rejects_newline :
-    ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
+    ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList,
+      0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 := by
   intro h
   exact absurd (h .null '\n' (by decide)) (by decide)
 

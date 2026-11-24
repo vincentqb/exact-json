@@ -6,7 +6,18 @@ public section
 
 namespace ExactJSON
 
-abbrev Printable (cs : List Char) : Prop := ∀ c ∈ cs, 0x20 ≤ c.toNat
+abbrev CleanChar (c : Char) : Prop :=
+  0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029
+
+abbrev Printable (cs : List Char) : Prop := ∀ c ∈ cs, CleanChar c
+
+theorem cleanChar_of_mustEscape {c : Char} (h : mustEscape c = false) : CleanChar c := by
+  simp only [mustEscape, Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not, beq_eq_false_iff_ne,
+    ne_eq] at h
+  obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := h
+  refine ⟨by omega, ?_, h3, h4⟩
+  rintro ⟨a, b⟩
+  rcases h2 with h2 | h2 <;> omega
 
 theorem printable_append {a b : List Char} (ha : Printable a) (hb : Printable b) : Printable (a ++ b) :=
   List.forall_mem_append.mpr ⟨ha, hb⟩
@@ -16,7 +27,7 @@ theorem printable_string_append {s t : String} (hs : Printable s.toList) (ht : P
   rw [String.toList_append]
   exact printable_append hs ht
 
-theorem printable_push {s : String} {c : Char} (hs : Printable s.toList) (hc : 0x20 ≤ c.toNat) :
+theorem printable_push {s : String} {c : Char} (hs : Printable s.toList) (hc : CleanChar c) :
     Printable (s.push c).toList := by
   rw [String.toList_push]
   refine printable_append hs fun x hx => ?_
@@ -24,10 +35,13 @@ theorem printable_push {s : String} {c : Char} (hs : Printable s.toList) (hc : 0
   subst hx
   exact hc
 
-theorem printable_of_isDigit {c : Char} (h : c.isDigit = true) : 0x20 ≤ c.toNat := by
+theorem printable_of_isDigit {c : Char} (h : c.isDigit = true) : CleanChar c := by
   simp only [Char.isDigit, Bool.and_eq_true, decide_eq_true_eq] at h
   have low := UInt32.le_iff_toNat_le.mp h.1
-  exact Nat.le_trans (by decide) low
+  have high := UInt32.le_iff_toNat_le.mp h.2
+  have l : 0x30 ≤ c.toNat := Nat.le_trans (by decide) low
+  have u : c.toNat ≤ 0x39 := Nat.le_trans high (by decide)
+  exact ⟨by omega, by omega, by omega, by omega⟩
 
 theorem printable_toDigits (n : Nat) : Printable (Nat.toDigits 10 n) := fun _ h =>
   printable_of_isDigit (Nat.isDigit_of_mem_toDigits (by decide) (by decide) h)
@@ -42,7 +56,7 @@ theorem printable_intToString (n : Int) : Printable (toString n).toList := by
   · exact printable_natRepr _
   · exact printable_string_append (by decide) (printable_natRepr _)
 
-theorem printable_hexDigit : ∀ n, n < 16 → 0x20 ≤ (hexDigit n).toNat := by decide
+theorem printable_hexDigit : ∀ n, n < 16 → CleanChar (hexDigit n) := by decide
 
 theorem printable_pushChar {out : String} (c : Char) (h : Printable out.toList) :
     Printable (pushChar out c).toList := by
@@ -52,12 +66,8 @@ theorem printable_pushChar {out : String} (c : Char) (h : Printable out.toList) 
   split
   · exact printable_string_append h (by decide)
   split
-  · rename_i above
-    exact printable_push h (UInt32.le_iff_toNat_le.mp above)
-  rename_i below
-  have small : c.toNat < 0x20 := by
-    have := UInt32.lt_iff_toNat_lt.mp (UInt32.not_le.mp below)
-    exact this
+  · rename_i raw
+    exact printable_push h (cleanChar_of_mustEscape (by simpa using raw))
   split
   · exact printable_string_append h (by decide)
   split
@@ -68,9 +78,8 @@ theorem printable_pushChar {out : String} (c : Char) (h : Printable out.toList) 
   · exact printable_string_append h (by decide)
   split
   · exact printable_string_append h (by decide)
-  · refine printable_push (printable_push (printable_string_append h (by decide)) ?_) ?_
-    · exact printable_hexDigit _ (by omega)
-    · exact printable_hexDigit _ (Nat.mod_lt _ (by decide))
+  · refine printable_push (printable_push (printable_push (printable_push (printable_string_append h (by decide))
+      ?_) ?_) ?_) ?_ <;> exact printable_hexDigit _ (Nat.mod_lt _ (by decide))
 
 theorem printable_foldl_pushChar : ∀ (cs : List Char) {out : String}, Printable out.toList →
     Printable (cs.foldl pushChar out).toList

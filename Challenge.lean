@@ -14,18 +14,20 @@ public section
 
 A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it holds
 gives back: reading takes exactly those texts, and holds what any JSON reader reads in them. A
-value's text is `write` of its parts: minimal escapes in strings, an integer in decimal, keys as
-they come; a finite float is the shortest decimal that reads back as it, the nearest of those,
-ties to an even last digit, laid out by `Decimal.toFloatText`; and an invalid value's text is not
-read. Every valid value's text is JSON that holds that value; no text holds a character below
-U+0020; reading JSON in any spelling holds what RFC 8259 reads in it; JSON Lines is one canonical
-text a line; typed decoding reads exactly what typed encoding writes, for any type whose instances
-are lawful (`LawfulValue`: they read back what they write, as valid values); each of the library's
-instances writes the value its codec law states and reads exactly that, except that a dictionary
-(`Std.ExtTreeMap String α`) reads back what it writes; derived instances write the shapes their
-examples state, and are lawful; dates and times are written in one RFC 3339 form each and read in
-that form only; and the steps the reader counts as it reads (`Value.parseCosted`, whose value is
-`Value.parse`) are linear in the text's length.
+value's text is `write` of its parts: in strings, escapes for `"`, `\`, control characters and
+line separators (`mustEscape`) and no others, an integer in decimal, keys as they come; a finite
+float is the shortest decimal that reads back as it, the nearest of those, ties to an even last
+digit, laid out by `Decimal.toFloatText`; and an invalid value's text is not read. Every valid
+value's text is JSON that holds that value; no text holds a control character (below U+0020, or
+U+007F to U+009F) or a line or paragraph separator (U+2028, U+2029); reading JSON in any spelling
+holds what RFC 8259 reads in it; JSON Lines is one canonical text a line; typed decoding reads
+exactly what typed encoding writes, for any type whose instances are lawful (`LawfulValue`: they
+read back what they write, as valid values); each of the library's instances writes the value its
+codec law states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`)
+reads back what it writes; derived instances write the shapes their examples state, and are
+lawful; dates and times are written in one RFC 3339 form each and read in that form only; and the
+steps the reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear
+in the text's length.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names, and the command line tool beyond the functions it calls; nor that
 the steps are the work done: the reader counts them itself, so the law bounds its count, not its
@@ -188,7 +190,8 @@ theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v 
 theorem readJson_spec (s : String) : (Value.readJson s).toOption = Rfc8259.read? s := by
   sorry
 
-theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat := by
+theorem render_no_control (v : Value) :
+    ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 := by
   sorry
 
 theorem parse_costed (s : String) : (Value.parseCosted s).value = Value.parse s := by
@@ -402,7 +405,8 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
   sorry
 
 @[kills render_no_control] theorem render_no_control_rejects_newline :
-    ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList, 0x20 ≤ c.toNat := by
+    ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList,
+      0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 := by
   sorry
 
 @[kills parse_costed] theorem parse_costed_rejects_mismatch :

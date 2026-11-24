@@ -1,9 +1,10 @@
-"""Canonical JSON in Python, standard library only: a second implementation of the writer.
+r"""Canonical JSON in Python, standard library only: a second implementation of the writer.
 
 Canonical text is JSON, and ``json.loads`` reads it as usual. ``dumps`` writes it, byte for byte
 as the Lean library does: no whitespace, keys in code point order, integers without a point,
-floats with the shortest digits that read back and always a point, JSON's minimal escaping, and
-``None`` as ``null``. The test suite uses it as an independent oracle (CPython's ``repr`` gives
+floats with the shortest digits that read back and always a point, JSON's escapes for ``"``, ``\``
+and the C0 controls plus ``\uXXXX`` for DEL, the C1 controls and U+2028/U+2029, and ``None`` as
+``null``. The test suite uses it as an independent oracle (CPython's ``repr`` gives
 the float digits).
 """
 
@@ -27,8 +28,11 @@ def dumps_float(x: float) -> str:
     return f"{mantissa}e{int(exponent)}"
 
 
+_ESCAPED = {c: f"\\u{c:04x}" for c in [*range(0x7F, 0xA0), 0x2028, 0x2029]}
+
+
 def _string(s: str) -> str:
-    text = json.dumps(s, ensure_ascii=False)
+    text = json.dumps(s, ensure_ascii=False).translate(_ESCAPED)
     try:
         text.encode("utf-8")
     except UnicodeEncodeError:

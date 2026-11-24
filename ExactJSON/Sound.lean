@@ -42,12 +42,10 @@ theorem unescape_sound (e c : Char) (h : unescape e = some c) : (pushChar "" c).
   unfold unescape at h
   split at h <;> cases h <;> decide
 
-theorem pushChar_plain (c : Char) (h1 : ¬(c == '"') = true) (h2 : ¬(c == '\\') = true) (h3 : ¬c.val < 32) :
+theorem pushChar_plain (c : Char) (h1 : ¬(c == '"') = true) (h2 : ¬(c == '\\') = true) (h3 : ¬mustEscape c = true) :
     (pushChar "" c).toList = [c] := by
-  have h4 : c.val ≥ 0x20 := by
-    simp only [UInt32.not_lt] at h3
-    exact h3
-  simp only [pushChar, h1, h2, h4]
+  simp only [Bool.not_eq_true] at h3
+  simp only [pushChar, h1, h2, h3, Bool.not_false, ite_true]
   simp
 
 theorem string_step {acc str : String} {x : Char} {r rest : List Char}

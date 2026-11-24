@@ -7,15 +7,13 @@ public import ExactJSON.Text
 namespace ExactJSON
 
 theorem pushChar_escapeChar (c : Char) : (pushChar "" c).toList = (escapeChar c).toList := by
-  have hv : c.val.toNat = c.toNat := rfl
   by_cases h1 : c = '"'
   · subst h1; simp [pushChar, escapeChar]
   by_cases h2 : c = '\\'
   · subst h2; simp [pushChar, escapeChar]
-  by_cases h3 : c.toNat < 0x20
-  · have h4 : ¬ c.val ≥ 0x20 := by
-      intro h; have := UInt32.le_iff_toNat_le.mp h; simp at this; omega
-    simp only [pushChar, escapeChar, beq_iff_eq, h1, h2, h4, h3, ite_false, ite_true]
+  by_cases h3 : mustEscape c = true
+  · simp only [pushChar, escapeChar, beq_iff_eq, h1, h2, h3, Bool.not_true, Bool.false_eq_true, ite_false,
+      ite_true]
     by_cases b : c = '\x08'
     · simp [b]
     by_cases t : c = '\t'
@@ -28,12 +26,11 @@ theorem pushChar_escapeChar (c : Char) : (pushChar "" c).toList = (escapeChar c)
     · simp [r]
     simp only [b, t, nl, f, r, ite_false, String.toList_push, String.toList_append]
     simp [hexDigit, hexChar]
-  · have h4 : c.val ≥ 0x20 := by
-      apply UInt32.le_iff_toNat_le.mpr; simp; omega
-    have hb : c ≠ '\x08' ∧ c ≠ '\t' ∧ c ≠ '\n' ∧ c ≠ '\x0c' ∧ c ≠ '\r' := by
-      refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> (intro h; subst h; simp at h3)
-    simp only [pushChar, escapeChar, beq_iff_eq, h1, h2, h4, h3, hb.1, hb.2.1, hb.2.2.1, hb.2.2.2.1,
-      hb.2.2.2.2, ite_false, ite_true]
+  · have hb : c ≠ '\x08' ∧ c ≠ '\t' ∧ c ≠ '\n' ∧ c ≠ '\x0c' ∧ c ≠ '\r' := by
+      refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> (intro h; subst h; simp [mustEscape] at h3)
+    simp only [Bool.not_eq_true] at h3
+    simp only [pushChar, escapeChar, beq_iff_eq, h1, h2, h3, hb.1, hb.2.1, hb.2.2.1, hb.2.2.2.1, hb.2.2.2.2,
+      Bool.not_false, Bool.false_eq_true, ite_false, ite_true]
     simp
 
 theorem escapeList_eq (cs : List Char) : escapeList cs = (String.join (cs.map escapeChar)).toList := by

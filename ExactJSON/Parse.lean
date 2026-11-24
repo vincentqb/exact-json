@@ -67,7 +67,7 @@ def string : List Char → String → Nat → Read String
         | some u => string r (acc.push u) (steps + 2)
         | none => .error (if e == '/' then "write /, not \\/" else "invalid escape") (c :: rest) (steps + 2)
       | [] => .error "invalid escape" (c :: rest) (steps + 1)
-    else if c.val < 0x20 then .error "control character in string (it must be escaped)" (c :: rest) (steps + 1)
+    else if mustEscape c then .error s!"write {pushChar "" c}, not the character itself" (c :: rest) (steps + 1)
     else string rest (acc.push c) (steps + 1)
 
 inductive Grammar where

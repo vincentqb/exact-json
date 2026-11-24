@@ -51,7 +51,13 @@ def errorOf {α : Type} (e : Except String α) : String :=
 
 #guard Value.render (.string "tab\t nl\n cr\r bs\x08 ff\x0c q\" bsl\\ nul\x00 us\x1f") ==
   "\"tab\\t nl\\n cr\\r bs\\b ff\\f q\\\" bsl\\\\ nul\\u0000 us\\u001f\""
-#guard Value.render (.string "\x7f\u0085\u2028/é😀") == "\"\x7f\u0085\u2028/é😀\""
+#guard Value.render (.string "\x7f\u0085\u009b\u2028\u2029/é😀\u200d\ufe0f") ==
+  "\"\\u007f\\u0085\\u009b\\u2028\\u2029/é😀\u200d\ufe0f\""
+#guard check "\"\\u007f\\u0085\\u2028\\u2029\"" == "ok"
+#guard check "\"\x7f\"" == "at character 1: write \\u007f, not the character itself"
+#guard check "\"a\u0085\"" == "at character 2: write \\u0085, not the character itself"
+#guard check "\"\u2028\"" == "at character 1: write \\u2028, not the character itself"
+#guard check "\"\\u009B\"" == "at character 1: write \\u009b, not \\u009B"
 #guard check "\"\\/\"" == "at character 1: write /, not \\/"
 #guard check "\"\\u0041\"" == "at character 1: write A, not \\u0041"
 #guard check "\"\\u0100\"" == "at character 1: write Ā, not \\u0100"
@@ -60,7 +66,7 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard check "\"\\u001F\"" == "at character 1: write \\u001f, not \\u001F"
 #guard check "\"\\ud83d\\ude00\"" == "at character 1: write 😀, not the surrogate pair \\ud83d\\ude00"
 #guard check "\"\\udc00\"" == "at character 1: \\udc00 is a lone surrogate, not a character"
-#guard check "\"a\tb\"" == "at character 2: control character in string (it must be escaped)"
+#guard check "\"a\tb\"" == "at character 2: write \\t, not the character itself"
 
 #guard check ("{\"B\":1,\"a\":2,\"" ++ String.singleton (Char.ofNat 0xFFFF) ++ "\":3,\"" ++
   String.singleton (Char.ofNat 0x10000) ++ "\":4}") == "ok"

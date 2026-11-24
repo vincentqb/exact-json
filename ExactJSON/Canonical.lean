@@ -61,6 +61,9 @@ end Decimal
 
 def hexChar (n : Nat) : Char := if n < 10 then Char.ofNat (48 + n) else Char.ofNat (87 + n)
 
+def mustEscape (c : Char) : Bool :=
+  c.toNat < 0x20 || (0x7F ≤ c.toNat && c.toNat ≤ 0x9F) || c.toNat == 0x2028 || c.toNat == 0x2029
+
 def escapeChar (c : Char) : String :=
   if c = '"' then "\\\""
   else if c = '\\' then "\\\\"
@@ -69,8 +72,9 @@ def escapeChar (c : Char) : String :=
   else if c = '\n' then "\\n"
   else if c = '\x0c' then "\\f"
   else if c = '\r' then "\\r"
-  else if c.toNat < 0x20 then
-    "\\u00" ++ (hexChar (c.toNat / 16)).toString ++ (hexChar (c.toNat % 16)).toString
+  else if mustEscape c then
+    "\\u" ++ (hexChar (c.toNat / 4096 % 16)).toString ++ (hexChar (c.toNat / 256 % 16)).toString ++
+      (hexChar (c.toNat / 16 % 16)).toString ++ (hexChar (c.toNat % 16)).toString
   else c.toString
 
 def stringText (s : String) : String := "\"" ++ String.join (s.toList.map escapeChar) ++ "\""

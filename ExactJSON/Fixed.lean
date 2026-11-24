@@ -48,11 +48,21 @@ theorem span_text (text rest : List Char) (htext : ∀ c ∈ text, Rfc8259.isNum
 
 theorem hexValue?_hexDigit : ∀ n, n < 16 → Rfc8259.hexValue? (hexDigit n) = some n := by decide
 
-theorem hex4?_control (c : Char) (h : c.toNat < 0x20) :
-    Rfc8259.hex4? '0' '0' (hexDigit (c.toNat / 16)) (hexDigit (c.toNat % 16)) = some c.toNat := by
-  simp only [Rfc8259.hex4?, hexValue?_hexDigit _ (by omega : c.toNat / 16 < 16),
-    hexValue?_hexDigit _ (Nat.mod_lt _ (by decide))]
-  simp only [Rfc8259.hexValue?]
+theorem mustEscape_lt {c : Char} (h : mustEscape c = true) : c.toNat < 0x2030 := by
+  simp only [mustEscape, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h
+  omega
+
+theorem not_lt_of_mustEscape {c : Char} (h : mustEscape c = false) : ¬ c.val < 32 := by
+  intro hlt
+  have hl := UInt32.lt_iff_toNat_lt.mp hlt
+  have : c.toNat < 32 := by simpa using hl
+  simp only [mustEscape, Bool.or_eq_false_iff, decide_eq_false_iff_not] at h
+  exact h.1.1.1 this
+
+theorem hex4?_escape (c : Char) (h : c.toNat < 0x10000) :
+    Rfc8259.hex4? (hexDigit (c.toNat / 4096 % 16)) (hexDigit (c.toNat / 256 % 16)) (hexDigit (c.toNat / 16 % 16))
+      (hexDigit (c.toNat % 16)) = some c.toNat := by
+  simp only [Rfc8259.hex4?, hexValue?_hexDigit _ (Nat.mod_lt _ (by decide))]
   simp
   omega
 
@@ -77,20 +87,13 @@ theorem spec_chars_escape : ∀ (t rest acc : List Char),
     · rename_i h1 h2 h3
       have n1 : c ≠ '"' := fun e => h1 (by simp [e])
       have n2 : c ≠ '\\' := fun e => h2 (by simp [e])
-      have n3 : ¬ c.val < 32 := by
-        have := UInt32.le_iff_toNat_le.mp h3
-        intro hlt
-        have := UInt32.lt_iff_toNat_lt.mp hlt
-        simp at *
-        omega
+      have n3 : ¬ c.val < 32 := not_lt_of_mustEscape (by simpa using h3)
       simp only [String.toList_push, String.toList_empty, List.nil_append, List.singleton_append]
       rw [Rfc8259.chars.eq_5 _ _ _ (by simpa using n1) (by intro a b d e r h; simp_all)
         (by intro e r h; simp_all)]
       simp [n3, ih]
     rename_i h1 h2 h3
-    have n3 : c.val < 32 := by
-      have := UInt32.not_le.mp h3
-      exact this
+    have hm : mustEscape c = true := by simpa using h3
     split
     · rename_i h
       have := beq_iff_eq.mp h
@@ -116,14 +119,12 @@ theorem spec_chars_escape : ∀ (t rest acc : List Char),
       have := beq_iff_eq.mp h
       subst this
       simp [Rfc8259.chars, Rfc8259.unescape?, ih]
-    · have hc : c.toNat < 0x20 := by
-        have := UInt32.lt_iff_toNat_lt.mp n3
-        simpa using this
+    · have hc : c.toNat < 0x2030 := mustEscape_lt hm
       simp only [String.toList_push, String.toList_append, List.append_assoc, List.cons_append]
-      have hu : "\\u00".toList = ['\\', 'u', '0', '0'] := by decide
+      have hu : "\\u".toList = ['\\', 'u'] := by decide
       rw [hu]
       simp only [List.cons_append, List.nil_append, String.toList_empty]
-      rw [Rfc8259.chars.eq_3, hex4?_control c hc]
+      rw [Rfc8259.chars.eq_3, hex4?_escape c (by omega)]
       have hlt : (decide (c.toNat < 0xD800) || decide (0xE000 ≤ c.toNat)) = true := by
         simp
         omega
@@ -132,11 +133,10 @@ theorem spec_chars_escape : ∀ (t rest acc : List Char),
 
 theorem parser_hexValue_hexDigit : ∀ n, n < 16 → Parser.hexValue (hexDigit n) = some n := by decide
 
-theorem parser_hex4_control (c : Char) (h : c.toNat < 0x20) :
-    Parser.hex4 '0' '0' (hexDigit (c.toNat / 16)) (hexDigit (c.toNat % 16)) = some c.toNat := by
-  simp only [Parser.hex4, parser_hexValue_hexDigit _ (by omega : c.toNat / 16 < 16),
-    parser_hexValue_hexDigit _ (Nat.mod_lt _ (by decide))]
-  simp only [Parser.hexValue]
+theorem parser_hex4_escape (c : Char) (h : c.toNat < 0x10000) :
+    Parser.hex4 (hexDigit (c.toNat / 4096 % 16)) (hexDigit (c.toNat / 256 % 16)) (hexDigit (c.toNat / 16 % 16))
+      (hexDigit (c.toNat % 16)) = some c.toNat := by
+  simp only [Parser.hex4, parser_hexValue_hexDigit _ (Nat.mod_lt _ (by decide))]
   simp
   omega
 
@@ -151,7 +151,7 @@ theorem strict_string_quote (rest : List Char) (acc : String) (s0 : Nat) :
   simp
 
 theorem strict_string_raw (c : Char) (X : List Char) (acc : String) (s0 : Nat) (h1 : ¬(c == '"') = true)
-    (h2 : ¬(c == '\\') = true) (n3 : ¬ c.val < 32) :
+    (h2 : ¬(c == '\\') = true) (n3 : mustEscape c = false) :
     Parser.string (c :: X) acc s0 = Parser.string X (acc.push c) (s0 + 1) := by
   rw [Parser.string.eq_def]
   simp only
@@ -164,20 +164,22 @@ theorem strict_string_short (e c : Char) (X : List Char) (acc : String) (s0 : Na
   simp only
   split <;> simp_all
 
-theorem strict_string_control (c : Char) (X : List Char) (acc : String) (s0 : Nat) (hc : c.toNat < 0x20)
-    (hpush : (pushChar "" c).toList = ['\\', 'u', '0', '0', hexDigit (c.toNat / 16), hexDigit (c.toNat % 16)]) :
+theorem strict_string_control (c : Char) (X : List Char) (acc : String) (s0 : Nat) (hc : c.toNat < 0x2030)
+    (hpush : (pushChar "" c).toList = ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16),
+      hexDigit (c.toNat / 16 % 16), hexDigit (c.toNat % 16)]) :
     Parser.string ((pushChar "" c).toList ++ X) acc s0 = Parser.string X (acc.push c) (s0 + 12) := by
   rw [hpush, Parser.string.eq_def]
   simp only [List.cons_append, List.nil_append]
   simp only [beq_self_eq_true, ite_true]
   have hq : ('\\' == '"') = false := by decide
   simp only [hq, Bool.false_eq_true, ite_false]
-  rw [parser_hex4_control c hc]
+  rw [parser_hex4_escape c (by omega)]
   have hs : (decide (55296 ≤ c.toNat) && decide (c.toNat < 57344)) = false := by
     simp
     omega
   simp only [hs, Bool.false_eq_true, ite_false, Char.ofNat_toNat]
-  have hw : (pushChar "" c == String.ofList ['\\', 'u', '0', '0', hexDigit (c.toNat / 16), hexDigit (c.toNat % 16)]) = true := by
+  have hw : (pushChar "" c == String.ofList ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16),
+      hexDigit (c.toNat / 16 % 16), hexDigit (c.toNat % 16)]) = true := by
     rw [beq_iff_eq]
     apply String.ext
     rw [hpush, String.toList_ofList]
@@ -204,19 +206,11 @@ theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat
     · have := beq_iff_eq.mp h2
       subst this
       exact step 2 (strict_string_short '\\' '\\' _ acc s0 rfl (by decide))
-    by_cases h3 : c.val ≥ 32
-    · have n3 : ¬ c.val < 32 := by
-        have := UInt32.le_iff_toNat_le.mp h3
-        intro hlt
-        have := UInt32.lt_iff_toNat_lt.mp hlt
-        simp at *
-        omega
-      have hp : (pushChar "" c).toList = [c] := by simp [pushChar, h1, h2, h3]
-      exact step 1 (by rw [hp, List.singleton_append]; exact strict_string_raw c _ acc s0 h1 h2 n3)
-    have n3 : c.val < 32 := UInt32.not_le.mp h3
-    have hc : c.toNat < 0x20 := by
-      have := UInt32.lt_iff_toNat_lt.mp n3
-      simpa using this
+    by_cases h3 : mustEscape c = false
+    · have hp : (pushChar "" c).toList = [c] := by simp [pushChar, h1, h2, h3]
+      exact step 1 (by rw [hp, List.singleton_append]; exact strict_string_raw c _ acc s0 h1 h2 h3)
+    have hm : mustEscape c = true := by simpa using h3
+    have hc : c.toNat < 0x2030 := mustEscape_lt hm
     by_cases h4 : (c == '\x08') = true
     · have := beq_iff_eq.mp h4
       subst this
@@ -238,8 +232,9 @@ theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat
       subst this
       exact step 2 (strict_string_short 'r' '\r' _ acc s0 rfl (by decide))
     have hpush : (pushChar "" c).toList =
-        ['\\', 'u', '0', '0', hexDigit (c.toNat / 16), hexDigit (c.toNat % 16)] := by
-      simp only [pushChar, h1, h2, h3, h4, h5, h6, h7, h8]
+        ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16), hexDigit (c.toNat / 16 % 16),
+          hexDigit (c.toNat % 16)] := by
+      simp only [pushChar, h1, h2, hm, h4, h5, h6, h7, h8, Bool.not_true, Bool.false_eq_true, ite_false]
       simp
     exact step 12 (strict_string_control c _ acc s0 hc hpush)
 
