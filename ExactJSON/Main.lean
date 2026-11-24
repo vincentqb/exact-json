@@ -44,18 +44,16 @@ public section
 
 namespace ExactJSON
 
-def canon (lines : Bool) (input : String) : Except String String := do
-  if !lines then
-    let v ← Value.readJson input
-    return v.render.push '\n'
-  let parts := input.splitOn "\n"
-  let mut out := #[]
-  for line in parts, k in [0:parts.length] do
-    if k + 1 == parts.length && line.isEmpty then break
-    match Value.readJson line with
-    | .ok v => out := out.push v
-    | .error e => throw s!"line {k + 1}, {e}"
-  return Value.renderLines out
+@[expose] def canon (lines : Bool) (input : String) : Except String String :=
+  if lines then (readEach 0 #[] (jsonLines input)).map Value.renderLines
+  else (Value.readJson input).map fun v => v.render.push '\n'
+where
+  readEach (number : Nat) (out : Array Value) : List String → Except String (Array Value)
+    | [] => .ok out
+    | line :: rest =>
+      match Value.readJson line with
+      | .error e => .error s!"line {number + 1}, {e}"
+      | .ok v => readEach (number + 1) (out.push v) rest
 
 end ExactJSON
 
