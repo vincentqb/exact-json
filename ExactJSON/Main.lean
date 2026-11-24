@@ -10,7 +10,7 @@ exactjson canon < any.json
 exactjson canon --lines < any.jsonl
 ```
 
-`check` exits 0 when every line is a canonical text (see `SPEC.md`), each ended by a line feed, and
+`check` exits 0 when every line is a canonical text, each ended by a line feed, and
 1 at the first line that is not, with the character where it departs from canonical form.
 
 `canon` reads its input as one JSON text (RFC 8259), in any spelling, and writes the canonical

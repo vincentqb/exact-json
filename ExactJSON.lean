@@ -12,6 +12,5 @@ public import ExactJSON.LeanJson
 
 /-! # ExactJSON
 
-Canonical, strictly typed JSON: one line of ordinary JSON per value, under the law
-`decode s = .ok a ↔ encode a = s`. See `SPEC.md`.
+Canonical, strictly typed JSON. The laws are the headlines of `Challenge.lean`.
 -/

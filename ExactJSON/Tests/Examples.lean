@@ -3,8 +3,7 @@ module
 import ExactJSON
 meta import ExactJSON
 
-/-! Examples of the format, checked when this module is built (`lake test`). The examples in
-`SPEC.md` and `README.md` are among them. -/
+/-! Examples of the format, checked when this module is built (`lake test`). -/
 
 open ExactJSON
 
