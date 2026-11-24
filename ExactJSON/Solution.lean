@@ -71,13 +71,7 @@ theorem render_composes_rejects_null :
 
 theorem render_float_rejects_empty :
     ¬ ∀ (x : Float), finiteFloat x = true →
-      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.ReadsBack x ∧
-        ∀ d' : Decimal, d'.ReadsBack x →
-          d.digitCount < d'.digitCount ∨
-            (d.digitCount = d'.digitCount ∧
-              ((d.value - floatValue x).abs < (d'.value - floatValue x).abs ∨
-                ((d.value - floatValue x).abs = (d'.value - floatValue x).abs ∧
-                  (d' = d ∨ d.digits % 2 = 0)))) := by
+      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.IsShortest x := by
   intro h
   obtain ⟨d, hd, -⟩ := h 0.0 (by decide +kernel)
   have := toFloatText_toList_ne_nil d

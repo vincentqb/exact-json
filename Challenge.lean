@@ -3,6 +3,8 @@ module
 public import ExactJSON.Value
 public import ExactJSON.Rfc8259
 public import ExactJSON.Canonical
+public import ExactJSON.Calendar
+public import ExactJSON.Shapes
 public import Lean.Data.Json.FromToJson
 meta import SoftwareChallenge
 
@@ -17,14 +19,19 @@ them. A value's text is `write` of its parts: minimal escapes in strings, an int
 keys as they come; a finite float is the shortest decimal that reads back as it, the nearest of
 those, ties to an even last digit, laid out by `Decimal.toFloatText`; a float that is not finite
 is `NaN`, `Infinity` or `-Infinity`; and an invalid value's text is not read. Every valid value's
-text is JSON that holds that value; no text holds a character below U+0020, so no line feed or
-carriage return, and every text is one line of JSON Lines; reading JSON in any spelling holds
-what RFC 8259 reads in it; typed decoding reads exactly what typed encoding writes, for any type
-whose instances read back what they write; and the steps the reader counts as it reads
-(`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's length.
-Not claimed: anything about the date-time types, deriving, `exactjson%`, `Lean.Json`, or the
-readers' error messages; nor that the steps are the work done: the reader counts them itself, so
-the law bounds its count, not its running time.
+text is JSON that holds that value; no text holds a character below U+0020; reading JSON in any
+spelling holds what RFC 8259 reads in it; JSON Lines is one canonical text a line; typed decoding
+reads exactly what typed encoding writes, for any type whose instances read back what they
+write; each of the library's instances writes the value its codec law states and reads exactly
+that; derived instances write and read the shapes their examples state; dates and times are
+written in one RFC 3339 form each, read in that form only, and convert to and from days and
+nanoseconds since 1970; the `exactjson%` literals, the `Lean.Json` conversions and `canon` do what
+their laws state; and the steps the reader counts as it reads (`Value.parseCosted`, whose value
+is `Value.parse`) are linear in the text's length.
+Not claimed: what `OffsetDateTime.now` reads from the clock; the readers' error messages; which
+`deriving` and `exactjson%` uses fail to compile; the library's definitions that no law names; nor
+that the steps are the work done: the reader counts them itself, so the law bounds its count, not
+its running time.
 -/
 
 namespace ExactJSON
@@ -76,6 +83,68 @@ def Value.ofJson? : Lean.Json → Except String Value := sorry
 def ExactFloat.exactToJsonFloat : Lean.ToJson Float := sorry
 
 def canon : Bool → String → Except String String := sorry
+
+protected def LocalDate.toString : LocalDate → String := sorry
+
+protected def LocalTime.toString : LocalTime → String := sorry
+
+protected def LocalDateTime.toString : LocalDateTime → String := sorry
+
+protected def OffsetDateTime.toString : OffsetDateTime → String := sorry
+
+protected def DateTime.toString : DateTime → String := sorry
+
+def DateTime.parse? : String → Option DateTime := sorry
+
+instance instToStringLocalDate : ToString LocalDate := sorry
+
+instance instToValueLocalDate : ToValue LocalDate := sorry
+
+instance instFromValueLocalDate : FromValue LocalDate := sorry
+
+instance instToStringLocalTime : ToString LocalTime := sorry
+
+instance instToValueLocalTime : ToValue LocalTime := sorry
+
+instance instFromValueLocalTime : FromValue LocalTime := sorry
+
+instance instToStringLocalDateTime : ToString LocalDateTime := sorry
+
+instance instToValueLocalDateTime : ToValue LocalDateTime := sorry
+
+instance instFromValueLocalDateTime : FromValue LocalDateTime := sorry
+
+instance instToStringOffsetDateTime : ToString OffsetDateTime := sorry
+
+instance instToValueOffsetDateTime : ToValue OffsetDateTime := sorry
+
+instance instFromValueOffsetDateTime : FromValue OffsetDateTime := sorry
+
+instance instToStringDateTime : ToString DateTime := sorry
+
+instance instToValueDateTime : ToValue DateTime := sorry
+
+instance instFromValueDateTime : FromValue DateTime := sorry
+
+def LocalDate.toDaysSinceEpoch : LocalDate → Int := sorry
+
+def LocalDate.ofDaysSinceEpoch? : Int → Option LocalDate := sorry
+
+def OffsetDateTime.ofUnixNanos? : Int → Option OffsetDateTime := sorry
+
+def OffsetDateTime.toUnixNanos : OffsetDateTime → Int := sorry
+
+instance Example.instToValuePoint : ToValue Example.Point := sorry
+
+instance Example.instFromValuePoint : FromValue Example.Point := sorry
+
+instance Example.instToValueShape : ToValue Example.Shape := sorry
+
+instance Example.instFromValueShape : FromValue Example.Shape := sorry
+
+instance Example.instToValueEnvelope : ToValue Example.Envelope := sorry
+
+instance Example.instFromValueEnvelope : FromValue Example.Envelope := sorry
 
 instance instToValueValue : ToValue Value := sorry
 
@@ -390,6 +459,93 @@ theorem canon_lines (s : String) :
       ((jsonLines s).mapM fun l => (Value.readJson l).toOption).map fun vs => Value.renderLines vs.toArray := by
   sorry
 
+theorem localDate_text (d : LocalDate) (h : d.isValid = true) : d.toString = d.text := by
+  sorry
+
+theorem localTime_text (t : LocalTime) (h : t.isValid = true) : t.toString = t.text := by
+  sorry
+
+theorem localDateTime_text (dt : LocalDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
+  sorry
+
+theorem offsetDateTime_text (dt : OffsetDateTime) (h : dt.isValid = true) : dt.toString = dt.text := by
+  sorry
+
+theorem dateTime_text (d : DateTime) (h : d.isValid = true) : d.toString = d.text := by
+  sorry
+
+theorem dateTime_parse (s : String) (d : DateTime) : DateTime.parse? s = some d ↔ d.isValid = true ∧ d.text = s := by
+  sorry
+
+theorem toString_dateTimes (d : LocalDate) (t : LocalTime) (ldt : LocalDateTime) (odt : OffsetDateTime) (dt : DateTime) :
+    toString d = d.toString ∧ toString t = t.toString ∧ toString ldt = ldt.toString ∧ toString odt = odt.toString ∧
+      toString dt = dt.toString := by
+  sorry
+
+theorem codec_localDate (d : LocalDate) :
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+  sorry
+
+theorem codec_localTime (t : LocalTime) :
+    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ t.isValid = true ∧ w = .string t.text := by
+  sorry
+
+theorem codec_localDateTime (dt : LocalDateTime) :
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+  sorry
+
+theorem codec_offsetDateTime (dt : OffsetDateTime) :
+    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+  sorry
+
+theorem codec_dateTime (d : DateTime) :
+    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+  sorry
+
+theorem toDaysSinceEpoch_epoch : LocalDate.toDaysSinceEpoch ⟨1970, 1, 1⟩ = 0 := by
+  sorry
+
+theorem toDaysSinceEpoch_next (d : LocalDate) (h : d.isValid = true) (h' : d.next.isValid = true) :
+    d.next.toDaysSinceEpoch = d.toDaysSinceEpoch + 1 := by
+  sorry
+
+theorem ofDaysSinceEpoch_spec (n : Int) (d : LocalDate) :
+    LocalDate.ofDaysSinceEpoch? n = some d ↔ d.isValid = true ∧ d.toDaysSinceEpoch = n := by
+  sorry
+
+theorem toUnixNanos_eq (dt : OffsetDateTime) :
+    dt.toUnixNanos = (dt.date.toDaysSinceEpoch * 86400 + dt.time.hour * 3600 + dt.time.minute * 60 + dt.time.second -
+      dt.offsetMinutes * 60) * 1000000000 + dt.time.nanosecond := by
+  sorry
+
+theorem ofUnixNanos_spec (n : Int) (dt : OffsetDateTime) :
+    OffsetDateTime.ofUnixNanos? n = some dt ↔
+      dt.isValid = true ∧ dt.offsetMinutes = 0 ∧ dt.time.second < 60 ∧ dt.toUnixNanos = n := by
+  sorry
+
+theorem codec_point (p : Example.Point) :
+    toValue p = .table ((match p.label? with | none => #[] | some l => #[("label", toValue l)]) ++
+      #[("x", toValue p.x), ("y", toValue p.y)]) ∧
+      fromValue? (toValue p) = .ok p := by
+  sorry
+
+theorem codec_shape (s : Example.Shape) :
+    toValue s = (match s with
+      | .dot => .string "dot"
+      | .circle r => .table #[("circle", .table #[("radius", toValue r)])]
+      | .rect w h => .table #[("rect", .table #[("height", toValue h), ("width", toValue w)])]
+      | .tagged n => .table #[("tagged", toValue n)]
+      | .pair n t => .table #[("pair", .array #[toValue n, toValue t])]
+      | .scaled f inner => .table #[("scaled", .table #[("factor", toValue f), ("inner", toValue inner)])]) ∧
+      fromValue? (toValue s) = .ok s := by
+  sorry
+
+theorem codec_envelope (e : Example.Envelope) :
+    toValue e = .table (#[("id", toValue e.id)] ++
+      (match e.note? with | none => #[] | some n => #[("note", toValue n)]) ++ #[("shape", toValue e.shape)]) ∧
+      fromValue? (toValue e) = .ok e := by
+  sorry
+
 @[kills parse_fixed] theorem parse_fixed_rejects_constant :
     ¬ ∀ (s : String) (v : Value),
       (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
@@ -700,6 +856,116 @@ theorem canon_lines (s : String) :
 
 @[witness decodeLines_text] theorem decodeLines_text_applies :
     ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (as : Array α), decodeLines s = .ok as := by
+  sorry
+
+@[kills localDate_text] theorem localDate_text_rejects_empty :
+    ¬ ∀ (d : LocalDate), d.isValid = true → (fun (_ : LocalDate) => "") d = d.text := by
+  sorry
+
+@[kills localTime_text] theorem localTime_text_rejects_empty :
+    ¬ ∀ (t : LocalTime), t.isValid = true → (fun (_ : LocalTime) => "") t = t.text := by
+  sorry
+
+@[kills localDateTime_text] theorem localDateTime_text_rejects_empty :
+    ¬ ∀ (dt : LocalDateTime), dt.isValid = true → (fun (_ : LocalDateTime) => "") dt = dt.text := by
+  sorry
+
+@[kills offsetDateTime_text] theorem offsetDateTime_text_rejects_empty :
+    ¬ ∀ (dt : OffsetDateTime), dt.isValid = true → (fun (_ : OffsetDateTime) => "") dt = dt.text := by
+  sorry
+
+@[kills dateTime_text] theorem dateTime_text_rejects_empty :
+    ¬ ∀ (d : DateTime), d.isValid = true → (fun (_ : DateTime) => "") d = d.text := by
+  sorry
+
+@[kills dateTime_parse] theorem dateTime_parse_rejects_none :
+    ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.isValid = true ∧ d.text = s := by
+  sorry
+
+@[kills toString_dateTimes] theorem toString_dateTimes_rejects_empty :
+    ¬ ∀ (d : LocalDate) (t : LocalTime) (ldt : LocalDateTime) (odt : OffsetDateTime) (dt : DateTime),
+      @ToString.toString LocalDate ⟨fun _ => ""⟩ d = (fun (_ : LocalDate) => "x") d ∧
+        @ToString.toString LocalTime ⟨fun _ => ""⟩ t = (fun (_ : LocalTime) => "x") t ∧
+        @ToString.toString LocalDateTime ⟨fun _ => ""⟩ ldt = (fun (_ : LocalDateTime) => "x") ldt ∧
+        @ToString.toString OffsetDateTime ⟨fun _ => ""⟩ odt = (fun (_ : OffsetDateTime) => "x") odt ∧
+        @ToString.toString DateTime ⟨fun _ => ""⟩ dt = (fun (_ : DateTime) => "x") dt := by
+  sorry
+
+@[kills codec_localDate] theorem codec_localDate_rejects_null :
+    ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string ((fun (_ : LocalDate) => "") d) ∧
+      ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+  sorry
+
+@[kills codec_localTime] theorem codec_localTime_rejects_null :
+    ¬ ∀ (t : LocalTime), @toValue LocalTime ⟨fun _ => .null⟩ t = .string ((fun (_ : LocalTime) => "") t) ∧
+      ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ t.isValid = true ∧ w = .string t.text := by
+  sorry
+
+@[kills codec_localDateTime] theorem codec_localDateTime_rejects_null :
+    ¬ ∀ (dt : LocalDateTime), @toValue LocalDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : LocalDateTime) => "") dt) ∧
+      ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+  sorry
+
+@[kills codec_offsetDateTime] theorem codec_offsetDateTime_rejects_null :
+    ¬ ∀ (dt : OffsetDateTime), @toValue OffsetDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : OffsetDateTime) => "") dt) ∧
+      ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ dt.isValid = true ∧ w = .string dt.text := by
+  sorry
+
+@[kills codec_dateTime] theorem codec_dateTime_rejects_null :
+    ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string ((fun (_ : DateTime) => "") d) ∧
+      ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ d.isValid = true ∧ w = .string d.text := by
+  sorry
+
+@[kills toDaysSinceEpoch_epoch] theorem toDaysSinceEpoch_epoch_rejects_one :
+    ¬ (fun (_ : LocalDate) => (1 : Int)) ⟨1970, 1, 1⟩ = 0 := by
+  sorry
+
+@[kills toDaysSinceEpoch_next] theorem toDaysSinceEpoch_next_rejects_zero :
+    ¬ ∀ (d : LocalDate), d.isValid = true → d.next.isValid = true →
+      (fun (_ : LocalDate) => (0 : Int)) d.next = (fun (_ : LocalDate) => (0 : Int)) d + 1 := by
+  sorry
+
+@[kills ofDaysSinceEpoch_spec] theorem ofDaysSinceEpoch_spec_rejects_none :
+    ¬ ∀ (n : Int) (d : LocalDate), (fun (_ : Int) => (none : Option LocalDate)) n = some d ↔
+      d.isValid = true ∧ (fun (_ : LocalDate) => (0 : Int)) d = n := by
+  sorry
+
+@[kills toUnixNanos_eq] theorem toUnixNanos_eq_rejects_zero :
+    ¬ ∀ (dt : OffsetDateTime), (fun (_ : OffsetDateTime) => (0 : Int)) dt =
+      ((fun (_ : LocalDate) => (0 : Int)) dt.date * 86400 + dt.time.hour * 3600 + dt.time.minute * 60 + dt.time.second -
+        dt.offsetMinutes * 60) * 1000000000 + dt.time.nanosecond := by
+  sorry
+
+@[kills ofUnixNanos_spec] theorem ofUnixNanos_spec_rejects_none :
+    ¬ ∀ (n : Int) (dt : OffsetDateTime), (fun (_ : Int) => (none : Option OffsetDateTime)) n = some dt ↔
+      dt.isValid = true ∧ dt.offsetMinutes = 0 ∧ dt.time.second < 60 ∧ (fun (_ : OffsetDateTime) => (0 : Int)) dt = n := by
+  sorry
+
+@[kills codec_point] theorem codec_point_rejects_null :
+    ¬ ∀ (p : Example.Point),
+      @toValue Example.Point ⟨fun _ => .null⟩ p = .table ((match p.label? with | none => #[] | some l => #[("label", toValue l)]) ++
+        #[("x", toValue p.x), ("y", toValue p.y)]) ∧
+        @fromValue? Example.Point ⟨fun _ => .error ""⟩ (@toValue Example.Point ⟨fun _ => .null⟩ p) = .ok p := by
+  sorry
+
+@[kills codec_shape] theorem codec_shape_rejects_null :
+    ¬ ∀ (s : Example.Shape),
+      @toValue Example.Shape ⟨fun _ => .null⟩ s = (match s with
+        | .dot => .string "dot"
+        | .circle r => .table #[("circle", .table #[("radius", toValue r)])]
+        | .rect w h => .table #[("rect", .table #[("height", toValue h), ("width", toValue w)])]
+        | .tagged n => .table #[("tagged", toValue n)]
+        | .pair n t => .table #[("pair", .array #[toValue n, toValue t])]
+        | .scaled f inner =>
+          .table #[("scaled", .table #[("factor", toValue f), ("inner", @toValue Example.Shape ⟨fun _ => .null⟩ inner)])]) ∧
+        @fromValue? Example.Shape ⟨fun _ => .error ""⟩ (@toValue Example.Shape ⟨fun _ => .null⟩ s) = .ok s := by
+  sorry
+
+@[kills codec_envelope] theorem codec_envelope_rejects_null :
+    ¬ ∀ (e : Example.Envelope),
+      @toValue Example.Envelope ⟨fun _ => .null⟩ e = .table (#[("id", toValue e.id)] ++
+        (match e.note? with | none => #[] | some n => #[("note", toValue n)]) ++ #[("shape", toValue e.shape)]) ∧
+        @fromValue? Example.Envelope ⟨fun _ => .error ""⟩ (@toValue Example.Envelope ⟨fun _ => .null⟩ e) = .ok e := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :

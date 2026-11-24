@@ -1,11 +1,14 @@
 module
 
-import ExactJSON.Codec
+public import ExactJSON.Codec
 
 open ExactJSON
 
 def usage : String :=
-  "usage: exactjson check [--as TYPE] < input.jsonl\n" ++
+  "usage: exactjson version\n" ++
+  "       exactjson get KEY < input.jsonl\n" ++
+  "  write the value under KEY of each line's table, or null\n" ++
+  "       exactjson check [--as TYPE] < input.jsonl\n" ++
   "  exit 1 at the first line that is not canonical JSON Lines (of a value of TYPE)\n" ++
   "       exactjson canon [--lines] < input.json\n" ++
   "  write the canonical text of the JSON text (or of each line)\n"
@@ -31,6 +34,13 @@ def readStdin : IO (Except String String) := do
     return .error "not UTF-8"
 
 public section
+
+def version : Value :=
+  .table #[("name", Coe.coe "exactjson"), ("strict", Coe.coe true), ("version", (1 : Value))]
+
+def getAll (key : String) (input : String) : Except String String := do
+  let values ← Value.parseLines input
+  return encodeLines (values.map fun v => (v.get? key).getD .null)
 
 def typedCheck : String → Option (String → Except String Nat)
   | "Value" => some fun (s : String) => (decodeLines (α := Value) s).map (·.size)
@@ -61,13 +71,13 @@ def canon (lines : Bool) (input : String) : Except String String := do
     let v ← Value.readJson input
     return v.render.push '\n'
   let parts := input.splitOn "\n"
-  let mut out := ""
+  let mut out := #[]
   for line in parts, k in [0:parts.length] do
     if k + 1 == parts.length && line.isEmpty then break
     match Value.readJson line with
-    | .ok v => out := (Value.renderTo out v).push '\n'
+    | .ok v => out := out.push v
     | .error e => throw s!"line {k + 1}, {e}"
-  return out
+  return Value.renderLines out
 
 def main (args : List String) : IO UInt32 := do
   match args with
@@ -83,9 +93,20 @@ def main (args : List String) : IO UInt32 := do
     | .error e =>
       IO.eprintln s!"exactjson: {e}"
       return 1
+  | ["version"] =>
+    IO.println (toString version)
+    return 0
+  | ["get", key] =>
+    match (← readStdin) >>= getAll key with
+    | .ok text =>
+      IO.print text
+      return 0
+    | .error e =>
+      IO.eprintln s!"exactjson: {e}"
+      return 1
   | "check" :: flags =>
     let some decodeAll := (match flags with
-      | [] => some fun (s : String) => (decodeLines (α := Value) s).map Array.size
+      | [] => some fun (s : String) => (Value.parseLines s).map Array.size
       | ["--as", type] => typedCheck type
       | _ => none)
       | do IO.eprint usage; return 2
