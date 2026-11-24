@@ -155,10 +155,11 @@ inductive Leaf (α : Type) where
   | leaf (x : α)
   deriving ToValue, FromValue
 
-#guard encode ({ x := none } : Box (Option Nat)) == "{}"
+#guard encode ({ x := none } : Box (Option Nat)) == "{\"x\":null}"
 #guard encode ({ x := some 1 } : Box (Option Nat)) == "{\"x\":1}"
-#guard (decode "{}" : Except String (Box (Option Nat))).isOk
-#guard encode (Leaf.leaf (none : Option Nat)) == "{\"leaf\":{}}"
+#guard (decode "{\"x\":null}" : Except String (Box (Option Nat))).isOk
+#guard !(decode "{}" : Except String (Box (Option Nat))).isOk
+#guard encode (Leaf.leaf (none : Option Nat)) == "{\"leaf\":{\"x\":null}}"
 #guard encode ({ x := 3 } : Box Nat) == "{\"x\":3}"
 
 inductive Shape where

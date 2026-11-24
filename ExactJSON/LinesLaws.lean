@@ -320,8 +320,7 @@ theorem decodeLines_text {α : Type u} [ToValue α] [FromValue α] (s : String) 
   rw [htext, encodeLines_eq, renderLines_eq]
   simp [encode, Function.comp_def]
 
-theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α]
-    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (as : Array α) :
+theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α) :
     decodeLines (encodeLines as) = .ok as := by
   have htext : encodeLines as = String.join (as.toList.map fun a => encode a ++ "\n") := by
     rw [encodeLines_eq, renderLines_eq]
@@ -329,7 +328,8 @@ theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α]
   unfold decodeLines
   rw [htext, splitOn_terminated encode as.toList (fun a _ => no_newline (toValue a)), readLines_ok]
   exact ⟨rfl, as.toList,
-    mapM_map_ok as.toList (fun a _ => decode_encode_of_rounds ofScientificRounds lawful valid a), by simp⟩
+    mapM_map_ok as.toList (fun a _ => decode_encode_of_rounds ofScientificRounds LawfulValue.fromValue_toValue
+      LawfulValue.toValue_valid a), by simp⟩
 
 theorem renderLines_eq_rejects_empty :
     ¬ ∀ (vs : Array Value), (fun (_ : Array Value) => "") vs = String.join (vs.toList.map fun v => v.render ++ "\n") := by
@@ -358,16 +358,17 @@ theorem decodeLines_text_rejects_empty :
   exact absurd (@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ "" #[] rfl) (by decide)
 
 theorem decodeLines_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α], (∀ a : α, fromValue? (toValue a) = .ok a) →
-      (∀ a : α, (toValue a).Valid) → ∀ (as : Array α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "" : Except String (Array β)))
           ((fun {β : Type u} [ToValue β] (_ : Array β) => "") as) = .ok as := by
   intro h
-  cases @h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (fun _ => rfl) (fun _ => rfl) #[]
+  cases @h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (@LawfulValue.mk PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩
+    (fun _ => rfl) (fun _ => rfl)) #[]
 
 theorem decodeLines_text_applies :
     ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (as : Array α), decodeLines s = .ok as :=
   ⟨PUnit, ⟨fun _ => .null⟩, ⟨fun _ => .ok ⟨⟩⟩, @encodeLines PUnit ⟨fun _ => .null⟩ #[], #[],
-    @decodeLines_encode PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (fun _ => rfl) (fun _ => rfl) #[]⟩
+    @decodeLines_encode PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (@LawfulValue.mk PUnit ⟨fun _ => .null⟩
+      ⟨fun _ => .ok ⟨⟩⟩ (fun _ => rfl) (fun _ => rfl)) #[]⟩
 
 end ExactJSON

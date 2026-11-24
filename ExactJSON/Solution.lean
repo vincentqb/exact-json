@@ -8,6 +8,7 @@ public import ExactJSON.Fixed
 public import ExactJSON.OfScientific
 public import ExactJSON.Write
 public import ExactJSON.CodecLaws
+public import ExactJSON.Lawful
 public import ExactJSON.DateTimeLaws
 public import ExactJSON.ShortestLaws
 public import ExactJSON.ShapesCodec
@@ -57,10 +58,9 @@ theorem render_no_control (v : Value) : ∀ c ∈ v.render.toList, 0x20 ≤ c.to
 theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
   read_render_of_rounds ofScientificRounds v h
 
-theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
-    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
+theorem decode_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α) :
     decode (encode a) = .ok a :=
-  decode_encode_of_rounds ofScientificRounds lawful valid a
+  decode_encode_of_rounds ofScientificRounds LawfulValue.fromValue_toValue LawfulValue.toValue_valid a
 
 theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v :=
   Value.render_eq_write v
@@ -146,12 +146,12 @@ theorem decode_text_rejects_constant :
   exact absurd (@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ "x" ⟨⟩ rfl) (by decide)
 
 theorem decode_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α], (∀ a : α, fromValue? (toValue a) = .ok a) →
-      (∀ a : α, (toValue a).Valid) → ∀ (a : α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "wrong" : Except String β))
           ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
   intro h
-  cases @h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (fun _ => rfl) (fun _ => rfl) ⟨⟩
+  cases @h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ (@LawfulValue.mk PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩
+    (fun _ => rfl) (fun _ => rfl)) ⟨⟩
 
 theorem render_no_control_applies : ∃ (v : Value), ∃ (c : Char), c ∈ v.render.toList :=
   ⟨.null, 'n', by decide +kernel⟩

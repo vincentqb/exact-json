@@ -144,7 +144,7 @@ instance {α : Type u} {β : Type u} [FromValue α] [FromValue β] : FromValue (
 
 instance {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) :=
   ⟨fun | none => .null | some a => toValue a⟩
-instance {α : Type u} [FromValue α] [NotNull α] : FromValue (Option α) :=
+instance {α : Type u} [ToValue α] [FromValue α] [NotNull α] : FromValue (Option α) :=
   ⟨fun | .null => pure none | v => some <$> fromValue? v⟩
 
 instance {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) :=
@@ -163,29 +163,30 @@ instance {α : Type u} [FromValue α] : FromValue (Std.HashMap String α) where
       return m.insert k (← withContext k (fromValue? v))
     | v => typeMismatch "a table" v
 
-class ToField (α : Type u) where
-  pushField : Array (String × Value) → String → α → Array (String × Value)
-
-class FromField (α : Type u) where
-  getField? : Value → String → Except String α
-
-instance (priority := low) {α : Type u} [ToValue α] : ToField α :=
-  ⟨fun members key a => members.push (key, toValue a)⟩
-
-instance {α : Type u} [ToValue α] : ToField (Option α) :=
-  ⟨fun members key a => match a with
-    | some a => members.push (key, toValue a)
-    | none => members⟩
-
-instance (priority := low) {α : Type u} [FromValue α] : FromField α where
-  getField? v key := match v.get? key with
-    | some item => withContext key (fromValue? item)
-    | none => .error s!"missing key {pushString "" key}"
-
-instance {α : Type u} [FromValue α] : FromField (Option α) where
-  getField? v key := match v.get? key with
-    | some item => some <$> withContext key (fromValue? item)
-    | none => pure none
+instance : NotNull String := ⟨fun _ h => nomatch h⟩
+instance : NotNull Bool := ⟨fun _ h => nomatch h⟩
+instance : NotNull Int := ⟨fun _ h => nomatch h⟩
+instance : NotNull Nat := ⟨fun _ h => nomatch h⟩
+instance : NotNull UInt8 := ⟨fun _ h => nomatch h⟩
+instance : NotNull UInt16 := ⟨fun _ h => nomatch h⟩
+instance : NotNull UInt32 := ⟨fun _ h => nomatch h⟩
+instance : NotNull UInt64 := ⟨fun _ h => nomatch h⟩
+instance : NotNull Int8 := ⟨fun _ h => nomatch h⟩
+instance : NotNull Int16 := ⟨fun _ h => nomatch h⟩
+instance : NotNull Int32 := ⟨fun _ h => nomatch h⟩
+instance : NotNull Int64 := ⟨fun _ h => nomatch h⟩
+instance : NotNull Char := ⟨fun _ h => nomatch h⟩
+instance : NotNull Float where
+  toValue_ne_null x h := by
+    change (if x.isNaN then _ else if x.isInf then _ else _) = _ at h
+    split at h
+    · cases h
+    · split at h <;> cases h
+instance {α : Type u} [ToValue α] : NotNull (Array α) := ⟨fun _ h => nomatch h⟩
+instance {α : Type u} [ToValue α] : NotNull (List α) := ⟨fun _ h => nomatch h⟩
+instance {α β : Type u} [ToValue α] [ToValue β] : NotNull (α × β) := ⟨fun _ h => nomatch h⟩
+instance {α : Type u} [ToValue α] : NotNull (Std.TreeMap String α) := ⟨fun _ h => nomatch h⟩
+instance {α : Type u} [ToValue α] : NotNull (Std.HashMap String α) := ⟨fun _ h => nomatch h⟩
 
 def encode {α : Type u} [ToValue α] (a : α) : String := (toValue a).render
 

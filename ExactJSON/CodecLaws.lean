@@ -901,10 +901,10 @@ theorem codec_option_rejects_constant :
     ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o : Option α),
       @toValue (Option α) ((fun {β : Type u} [ToValue β] [NotNull β] => (⟨fun _ => .null⟩ : ToValue (Option β))) (β := α)) o =
           (match o with | none => .null | some a => toValue a) ∧
-        ∀ w : Value, @fromValue? (Option α) ((fun {β : Type u} [FromValue β] [NotNull β] => (⟨fun _ => .ok none⟩ : FromValue (Option β))) (β := α)) w = .ok o ↔
+        ∀ w : Value, @fromValue? (Option α) ((fun {β : Type u} [ToValue β] [FromValue β] [NotNull β] => (⟨fun _ => .ok none⟩ : FromValue (Option β))) (β := α)) w = .ok o ↔
           (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
   intro h
-  have := ((@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ ⟨⟩ none).2 (.integer 0)).mp rfl
+  have := ((@h PUnit ⟨fun _ => .boolean true⟩ ⟨fun _ => .ok ⟨⟩⟩ (@NotNull.mk PUnit ⟨fun _ => .boolean true⟩ fun _ h => nomatch h) none).2 (.integer 0)).mp rfl
   cases this
 
 theorem codec_treeMap_rejects_null :

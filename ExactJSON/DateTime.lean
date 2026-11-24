@@ -149,4 +149,10 @@ instance : FromValue LocalTime where
     | .localTime t => pure t
     | _ => typeMismatch "a time of day (HH:MM:SS)" v
 
+instance : NotNull DateTime := ⟨fun _ h => nomatch h⟩
+instance : NotNull OffsetDateTime := ⟨fun _ h => nomatch h⟩
+instance : NotNull LocalDateTime := ⟨fun _ h => nomatch h⟩
+instance : NotNull LocalDate := ⟨fun _ h => nomatch h⟩
+instance : NotNull LocalTime := ⟨fun _ h => nomatch h⟩
+
 end ExactJSON

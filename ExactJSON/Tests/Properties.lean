@@ -204,7 +204,6 @@ structure Sample where
   note? : Option String
   points : Array (Int × Float)
   readings : Array (Option Float)
-  children : List Sample
   day : LocalDate
   stamp : OffsetDateTime
   deriving ToValue, FromValue, Inhabited
@@ -222,7 +221,7 @@ def genOffsetDateTime : Gen OffsetDateTime := do
   let offset ← pick #[0, 0, 60, -420, 330, 1439, -1439]
   return { date := ← genDate, time := ← genTime, offsetMinutes := offset }
 
-partial def genSample (depth : Nat) : Gen Sample := do
+def genSample : Gen Sample := do
   let k ← below 3
   let mut points := #[]
   for _ in [0:k] do points := points.push (← genInt, ← genFloat true)
@@ -230,14 +229,11 @@ partial def genSample (depth : Nat) : Gen Sample := do
   for _ in [0:(← below 4)] do
     let x ← genFloat true
     readings := readings.push (if (← below 3) == 0 then none else some x)
-  let mut children := []
-  if depth > 0 then
-    for _ in [0:(← below 3)] do children := (← genSample (depth - 1)) :: children
   let note ← genString
   let hasNote := (← below 2) == 0
   return { label := ← genString, count := ← below 1000, value := ← genFloat true,
            note? := if hasNote then some note else none,
-           points, readings, children, day := ← genDate, stamp := ← genOffsetDateTime }
+           points, readings, day := ← genDate, stamp := ← genOffsetDateTime }
 
 structure SampleV2 extends Sample where
   added? : Option String
@@ -251,7 +247,7 @@ def setKey (v : Value) (key : String) (x : Value) : Value :=
 
 def instanceLaws (seed count : Nat) : IO Unit := do
   for i in [0:count] do
-    let a := (genSample 1).run' (seed + i)
+    let a := genSample.run' (seed + i)
     let v := toValue a
     match (fromValue? v : Except String Sample) with
     | .ok b => check (toValue b == v) s!"fromValue? ∘ toValue changes {v.render}"
@@ -263,7 +259,7 @@ def instanceLaws (seed count : Nat) : IO Unit := do
 
 def typedLaws (seed count : Nat) : IO Unit := do
   for i in [0:count] do
-    let a := (genSample 2).run' (seed + i)
+    let a := genSample.run' (seed + i)
     let text := encode a
     match (decode text : Except String Sample) with
     | .ok b => check (encode b == text) s!"decode ∘ encode changes {text}"

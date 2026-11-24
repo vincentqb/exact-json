@@ -12,23 +12,23 @@ public section
 /-!
 # Canonical, strictly typed JSON
 
-A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it
-holds gives back: reading takes exactly those texts, and holds what any JSON reader reads in
-them. A value's text is `write` of its parts: minimal escapes in strings, an integer in decimal,
-keys as they come; a finite float is the shortest decimal that reads back as it, the nearest of
-those, ties to an even last digit, laid out by `Decimal.toFloatText`; and an invalid value's text
-is not read. Every valid value's text is JSON that holds that value; no text holds a character
-below U+0020; reading JSON in any spelling holds what RFC 8259 reads in it; JSON Lines is one
-canonical text a line; typed decoding reads exactly what typed encoding writes, for any type
-whose instances read back what they write; each of the library's instances writes the value its
-codec law states and reads exactly that; derived instances write and read the shapes their
-examples state; dates and times are written in one RFC 3339 form each and read in that form
-only; and the steps the reader counts as it reads (`Value.parseCosted`, whose value is
-`Value.parse`) are linear in the text's length.
+A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it holds
+gives back: reading takes exactly those texts, and holds what any JSON reader reads in them. A
+value's text is `write` of its parts: minimal escapes in strings, an integer in decimal, keys as
+they come; a finite float is the shortest decimal that reads back as it, the nearest of those,
+ties to an even last digit, laid out by `Decimal.toFloatText`; and an invalid value's text is not
+read. Every valid value's text is JSON that holds that value; no text holds a character below
+U+0020; reading JSON in any spelling holds what RFC 8259 reads in it; JSON Lines is one canonical
+text a line; typed decoding reads exactly what typed encoding writes, for any type whose instances
+are lawful (`LawfulValue`: they read back what they write, as valid values); each of the library's
+instances writes the value its codec law states and reads exactly that; derived instances write
+the shapes their examples state, and are lawful; dates and times are written in one RFC 3339 form
+each and read in that form only; and the steps the reader counts as it reads (`Value.parseCosted`,
+whose value is `Value.parse`) are linear in the text's length.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
-definitions that no law names, and the command line tool beyond the functions it calls; nor
-that the steps are the work done: the reader counts them itself, so the law bounds its count, not
-its running time.
+definitions that no law names, and the command line tool beyond the functions it calls; nor that
+the steps are the work done: the reader counts them itself, so the law bounds its count, not its
+running time.
 -/
 
 namespace ExactJSON
@@ -175,7 +175,7 @@ instance instFromValueProd {α β : Type u} [FromValue α] [FromValue β] : From
 
 instance instToValueOptionOfNotNull {α : Type u} [ToValue α] [NotNull α] : ToValue (Option α) := sorry
 
-instance instFromValueOptionOfNotNull {α : Type u} [FromValue α] [NotNull α] : FromValue (Option α) := sorry
+instance instFromValueOptionOfNotNull {α : Type u} [ToValue α] [FromValue α] [NotNull α] : FromValue (Option α) := sorry
 
 instance instToValueTreeMapString {α : Type u} [ToValue α] : ToValue (Std.TreeMap String α) := sorry
 
@@ -208,8 +208,7 @@ theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : 
     (h : decode s = .ok a) : encode a = s := by
   sorry
 
-theorem decode_encode {α : Type u} [ToValue α] [FromValue α]
-    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
+theorem decode_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α) :
     decode (encode a) = .ok a := by
   sorry
 
@@ -337,8 +336,7 @@ theorem decodeLines_text {α : Type u} [ToValue α] [FromValue α] (s : String) 
     (h : decodeLines s = .ok as) : encodeLines as = s := by
   sorry
 
-theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α]
-    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (as : Array α) :
+theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α) :
     decodeLines (encodeLines as) = .ok as := by
   sorry
 
@@ -385,8 +383,7 @@ theorem codec_dateTime (d : DateTime) :
 
 theorem codec_point (p : Example.Point) :
     toValue p = .table ((match p.label? with | none => #[] | some l => #[("label", toValue l)]) ++
-      #[("x", toValue p.x), ("y", toValue p.y)]) ∧
-      fromValue? (toValue p) = .ok p := by
+      #[("x", toValue p.x), ("y", toValue p.y)]) := by
   sorry
 
 theorem codec_shape (s : Example.Shape) :
@@ -396,14 +393,16 @@ theorem codec_shape (s : Example.Shape) :
       | .rect w h => .table #[("rect", .table #[("height", toValue h), ("width", toValue w)])]
       | .tagged n => .table #[("tagged", toValue n)]
       | .pair n t => .table #[("pair", .array #[toValue n, toValue t])]
-      | .scaled f inner => .table #[("scaled", .table #[("factor", toValue f), ("inner", toValue inner)])]) ∧
-      fromValue? (toValue s) = .ok s := by
+      | .scaled f inner => .table #[("scaled", .table #[("factor", toValue f), ("inner", toValue inner)])]) := by
   sorry
 
 theorem codec_envelope (e : Example.Envelope) :
     toValue e = .table (#[("id", toValue e.id)] ++
-      (match e.note? with | none => #[] | some n => #[("note", toValue n)]) ++ #[("shape", toValue e.shape)]) ∧
-      fromValue? (toValue e) = .ok e := by
+      (match e.note? with | none => #[] | some none => #[("note", .null)] | some (some n) => #[("note", toValue n)]) ++
+      #[("shape", toValue e.shape)]) := by
+  sorry
+
+theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shape ∧ LawfulValue Example.Envelope := by
   sorry
 
 @[kills parse_fixed] theorem parse_fixed_rejects_constant :
@@ -443,8 +442,7 @@ theorem codec_envelope (e : Example.Envelope) :
   sorry
 
 @[kills decode_encode] theorem decode_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α], (∀ a : α, fromValue? (toValue a) = .ok a) →
-      (∀ a : α, (toValue a).Valid) → ∀ (a : α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "wrong" : Except String β))
           ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
   sorry
@@ -568,7 +566,7 @@ theorem codec_envelope (e : Example.Envelope) :
     ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o : Option α),
       @toValue (Option α) ((fun {β : Type u} [ToValue β] [NotNull β] => (⟨fun _ => .null⟩ : ToValue (Option β))) (β := α)) o =
           (match o with | none => .null | some a => toValue a) ∧
-        ∀ w : Value, @fromValue? (Option α) ((fun {β : Type u} [FromValue β] [NotNull β] => (⟨fun _ => .ok none⟩ : FromValue (Option β))) (β := α)) w = .ok o ↔
+        ∀ w : Value, @fromValue? (Option α) ((fun {β : Type u} [ToValue β] [FromValue β] [NotNull β] => (⟨fun _ => .ok none⟩ : FromValue (Option β))) (β := α)) w = .ok o ↔
           (match o with | none => w = .null | some a => w ≠ .null ∧ fromValue? w = .ok a) := by
   sorry
 
@@ -617,8 +615,7 @@ theorem codec_envelope (e : Example.Envelope) :
   sorry
 
 @[kills decodeLines_encode] theorem decodeLines_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α], (∀ a : α, fromValue? (toValue a) = .ok a) →
-      (∀ a : α, (toValue a).Valid) → ∀ (as : Array α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α),
         (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "" : Except String (Array β)))
           ((fun {β : Type u} [ToValue β] (_ : Array β) => "") as) = .ok as := by
   sorry
@@ -683,8 +680,7 @@ theorem codec_envelope (e : Example.Envelope) :
 @[kills codec_point] theorem codec_point_rejects_null :
     ¬ ∀ (p : Example.Point),
       @toValue Example.Point ⟨fun _ => .null⟩ p = .table ((match p.label? with | none => #[] | some l => #[("label", toValue l)]) ++
-        #[("x", toValue p.x), ("y", toValue p.y)]) ∧
-        @fromValue? Example.Point ⟨fun _ => .error ""⟩ (@toValue Example.Point ⟨fun _ => .null⟩ p) = .ok p := by
+        #[("x", toValue p.x), ("y", toValue p.y)]) := by
   sorry
 
 @[kills codec_shape] theorem codec_shape_rejects_null :
@@ -696,15 +692,19 @@ theorem codec_envelope (e : Example.Envelope) :
         | .tagged n => .table #[("tagged", toValue n)]
         | .pair n t => .table #[("pair", .array #[toValue n, toValue t])]
         | .scaled f inner =>
-          .table #[("scaled", .table #[("factor", toValue f), ("inner", @toValue Example.Shape ⟨fun _ => .null⟩ inner)])]) ∧
-        @fromValue? Example.Shape ⟨fun _ => .error ""⟩ (@toValue Example.Shape ⟨fun _ => .null⟩ s) = .ok s := by
+          .table #[("scaled", .table #[("factor", toValue f), ("inner", @toValue Example.Shape ⟨fun _ => .null⟩ inner)])]) := by
   sorry
 
 @[kills codec_envelope] theorem codec_envelope_rejects_null :
     ¬ ∀ (e : Example.Envelope),
       @toValue Example.Envelope ⟨fun _ => .null⟩ e = .table (#[("id", toValue e.id)] ++
-        (match e.note? with | none => #[] | some n => #[("note", toValue n)]) ++ #[("shape", toValue e.shape)]) ∧
-        @fromValue? Example.Envelope ⟨fun _ => .error ""⟩ (@toValue Example.Envelope ⟨fun _ => .null⟩ e) = .ok e := by
+        (match e.note? with | none => #[] | some none => #[("note", .null)] | some (some n) => #[("note", toValue n)]) ++
+        #[("shape", toValue e.shape)]) := by
+  sorry
+
+@[kills lawful_examples] theorem lawful_examples_rejects_failure :
+    ¬ (@LawfulValue Example.Point Example.instToValuePoint ⟨fun _ => .error ""⟩ ∧ LawfulValue Example.Shape ∧
+      LawfulValue Example.Envelope) := by
   sorry
 
 @[witness render_no_control] theorem render_no_control_applies :

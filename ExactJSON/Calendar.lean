@@ -91,10 +91,4 @@ def DateTime.text : DateTime → String
   | .localDate d => d.text
   | .localTime t => t.text
 
-instance : NotNull DateTime := ⟨⟩
-instance : NotNull OffsetDateTime := ⟨⟩
-instance : NotNull LocalDateTime := ⟨⟩
-instance : NotNull LocalDate := ⟨⟩
-instance : NotNull LocalTime := ⟨⟩
-
 end ExactJSON
