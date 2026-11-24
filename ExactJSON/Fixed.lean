@@ -355,7 +355,7 @@ theorem spec_value_floatText_none (f : Nat) (x : Float) (rest : List Char)
   have minf : ∀ rest : List Char, (Rfc8259.value (f + 1) ("-Infinity".toList ++ rest)).toOption = none := by
     intro rest
     unfold Rfc8259.value
-    simp [List.span, List.span.loop, Rfc8259.isNumberChar, Except.toOption, Rfc8259.numberValue]
+    simp [List.span, List.span.loop, Rfc8259.isNumberChar, Except.toOption, Rfc8259.numberValue, Rfc8259.numberSign]
   rcases h with h | h | h
   · exact ⟨by rw [h]; exact nan rest, by simp only [Value.rereadFloat, h]; rfl⟩
   · exact ⟨by rw [h]; exact inf rest, by simp only [Value.rereadFloat, h]; rfl⟩
@@ -1146,7 +1146,7 @@ theorem parse_fixed (s : String) (v : Value) :
 /-! ## What remains: every finite float reads back from its text -/
 
 /-- Every finite float is read back from its canonical text. -/
-def FloatsReadBack : Prop := ∀ x : Float, finiteFloat x = true → Value.rereadFloat x = some (.float x)
+@[expose] def FloatsReadBack : Prop := ∀ x : Float, finiteFloat x = true → Value.rereadFloat x = some (.float x)
 
 section Floats
 

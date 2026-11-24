@@ -238,10 +238,14 @@ about the code that runs, which is plain total Lean (no `partial`, `@[extern]` o
 
 `parse_fixed` gives the rest of the bijection: whatever `parse` reads is valid and its own
 canonical text, and every valid value whose floats read back is read back from its text. The two
-not yet proved both come down to one lemma about floats, `FloatsReadBack` in
-`ExactJSON/Fixed.lean`: RFC 8259 reads every finite float's canonical text back as that float (the
-shortest digits round to it). `read_render_of_floats` and `decode_encode_of_floats` derive the
-two headlines from it. Meanwhile it is tested: by every power of two and of ten, their neighbours
+not yet proved both come down to one property of Lean's floats, `OfScientificRounds` in
+`ExactJSON/ReadBack.lean`: `Float.ofScientific` reads every decimal in the rounding interval of a
+positive finite float as that float (it rounds to nearest, ties to even). From it,
+`floatsReadBack` proves that RFC 8259 reads every finite float's canonical text back as that
+float (`FloatsReadBack`): the shortest digits lie in the float's rounding interval
+(`ExactJSON/Shortest.lean`), and the reader reads the text as those digits.
+`read_render_of_rounds` and `decode_encode_of_rounds` derive the two headlines. Meanwhile the
+property is tested: by every power of two and of ten, their neighbours
 and random doubles against CPython's `repr` (`python/crosscheck.py --floats`), by the randomized
 laws over values, their other spellings (rejected by `parse`, read by `readJson` as the value),
 typed records and schema evolution (`ExactJSON/Tests/`), and by byte-for-byte agreement with

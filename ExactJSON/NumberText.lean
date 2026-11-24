@@ -101,7 +101,7 @@ private theorem span_of_forall {α : Type u} {p : α → Bool} {l : List α} (h 
   rw [span_loop_of_forall l [] h]
   simp
 
-private theorem toDigits_head?_ne_zero (m : Nat) (hm : 0 < m) : (Nat.toDigits 10 m).head? ≠ some '0' := by
+theorem toDigits_head?_ne_zero (m : Nat) (hm : 0 < m) : (Nat.toDigits 10 m).head? ≠ some '0' := by
   induction m using Nat.strongRecOn with
   | ind m ih =>
     rw [Nat.toDigits_eq_ite (by decide)]
@@ -133,6 +133,7 @@ private theorem numberValue_digits (negative : Bool) {ds : List Char} (digits : 
   split
   rename_i signed t sign
   have unsigned : signed = negative ∧ t = c :: cs := by
+    unfold Rfc8259.numberSign at sign
     cases negative <;> simp only [Bool.false_eq_true, ↓reduceIte] at sign <;> (try split at sign) <;> simp_all
   obtain ⟨rfl, rfl⟩ := unsigned
   rw [span_of_forall digits]

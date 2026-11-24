@@ -73,15 +73,24 @@ def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
   | some x => if finiteFloat x then some x else none
   | none => none
 
+/-- A number's sign: whether it starts with `-`, and the rest. -/
+def numberSign : List Char → Bool × List Char
+  | '-' :: t => (true, t)
+  | t => (false, t)
+
+/-- An exponent's sign: whether it is `-` (none, and `+`, are positive), and the rest. -/
+def exponentSign : List Char → Bool × List Char
+  | '-' :: t => (true, t)
+  | '+' :: t => (false, t)
+  | t => (false, t)
+
 /-- The value of the number written as all of `token` (§6): `[ minus ] int [ frac ] [ exp ]`, where
 `int` is `0` or digits not starting with `0`, `frac` is `.` and digits, and `exp` is `e` or `E`, a
 sign or none, and digits. It is an integer when there is neither a fraction nor an exponent, and
 otherwise the float nearest it, if that is finite. An exponent is counted only up to the token's
 length and 400: one that large already makes the float infinite or zero (see `floatOf?`). -/
 def numberValue (token : List Char) : Except String Value :=
-  let (negative, t) : Bool × List Char := match token with
-    | '-' :: t => (true, t)
-    | t => (false, t)
+  let (negative, t) := numberSign token
   let (whole, t) := t.span Char.isDigit
   if whole.isEmpty then .error "expected a digit"
   else if whole.head? == some '0' && whole.length > 1 then .error "a number starts with no 0 but 0 itself"
@@ -97,10 +106,7 @@ def numberValue (token : List Char) : Except String Value :=
       let exponent : Except String (Option Int × List Char) := match t with
         | e :: t =>
           if e == 'e' || e == 'E' then
-            let (minus, t) : Bool × List Char := match t with
-              | '-' :: t => (true, t)
-              | '+' :: t => (false, t)
-              | t => (false, t)
+            let (minus, t) := exponentSign t
             let (ds, t) := t.span Char.isDigit
             let size := digitsValueUpTo (token.length + 400) ds
             if ds.isEmpty then .error "expected a digit in the exponent"

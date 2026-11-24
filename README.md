@@ -69,10 +69,13 @@ RFC, and what a JSON text holds (an integer when a number has no fraction and no
 nearest float otherwise; no repeated key; no lone surrogate). `parse_fixed` says the canonical
 texts are exactly the JSON texts that reading and writing back leaves unchanged, so the format is
 a consistent subset of JSON, and `canon s := render <$> readJson s` brings any JSON text to its
-canonical form. The two headlines not yet proved both follow from one lemma about floats, that
-every finite float's canonical text reads back as it (`FloatsReadBack` in `ExactJSON/Fixed.lean`,
-with `read_render_of_floats` and `decode_encode_of_floats`); the tests and the Python
-cross-checks stand for it meanwhile.
+canonical form. The two headlines not yet proved both follow from one property of Lean's own
+floats: that `Float.ofScientific` rounds to nearest, ties to even (`OfScientificRounds` in
+`ExactJSON/ReadBack.lean`). The rest is proved: the printer's shortest digits lie in the float's
+rounding interval (`ExactJSON/Shortest.lean`), RFC 8259 reads a canonical text as those digits,
+so every finite float reads back from its text (`floatsReadBack`), and both headlines follow
+(`read_render_of_rounds`, `decode_encode_of_rounds`). Lean's core states no such lemma about
+`Float.ofScientific`; the tests and the Python cross-checks stand for it meanwhile.
 
 Because the soundness laws are proved, the code does no defensive work: `Value.parse` does not
 check what it read (by rendering it again, or validating it), and `decode` compares the value it
