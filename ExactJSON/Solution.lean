@@ -7,6 +7,7 @@ public import ExactJSON.Cost
 public import ExactJSON.Fixed
 public import ExactJSON.OfScientific
 public import ExactJSON.Write
+public import ExactJSON.CodecLaws
 
 public section
 
