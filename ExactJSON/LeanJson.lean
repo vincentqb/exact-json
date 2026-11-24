@@ -3,7 +3,7 @@ module
 public import ExactJSON.Codec
 public import Lean.Data.Json.FromToJson
 
-public section
+@[expose] public section
 
 namespace ExactJSON
 
@@ -19,16 +19,30 @@ def floatToJson (x : Float) : Json :=
 
 namespace Value
 
-partial def toJson : Value → Json
+mutual
+
+def toJson : Value → Json
   | .null => .null
   | .string s => .str s
   | .integer n => .num ⟨n, 0⟩
   | .float x => floatToJson x
   | .boolean b => .bool b
-  | .array items => .arr (items.map toJson)
-  | .table members => Json.mkObj (members.toList.map fun (k, v) => (k, toJson v))
+  | .array ⟨items⟩ => .arr (itemsToJson #[] items)
+  | .table ⟨members⟩ => Json.mkObj (membersToJson #[] members).toList
 
-partial def ofJson? : Json → Except String Value
+def itemsToJson (acc : Array Json) : List Value → Array Json
+  | [] => acc
+  | v :: rest => itemsToJson (acc.push (toJson v)) rest
+
+def membersToJson (acc : Array (String × Json)) : List (String × Value) → Array (String × Json)
+  | [] => acc
+  | (k, v) :: rest => membersToJson (acc.push (k, toJson v)) rest
+
+end
+
+mutual
+
+def ofJson? : Json → Except String Value
   | .null => pure .null
   | .bool b => pure (.boolean b)
   | .str s => pure (.string s)
@@ -37,9 +51,21 @@ partial def ofJson? : Json → Except String Value
     else match FloatText.ofDecimal? (n.mantissa < 0) n.mantissa.natAbs (-(n.exponent : Int)) with
       | some x => pure (.float x)
       | none => .error s!"{n} is beyond the range of binary64"
-  | .arr items => .array <$> items.mapIdxM fun i item => withContext s!"[{i}]" (ofJson? item)
-  | .obj members => .table <$> members.foldlM (init := #[]) fun acc k v => do
-    return acc.push (k, ← withContext k (ofJson? v))
+  | .arr ⟨items⟩ => .array <$> itemsOfJson? #[] items
+  | .obj ⟨⟨members⟩⟩ => .table <$> membersOfJson? #[] members
+
+def itemsOfJson? (acc : Array Value) : List Json → Except String (Array Value)
+  | [] => pure acc
+  | item :: rest => do itemsOfJson? (acc.push (← withContext s!"[{acc.size}]" (ofJson? item))) rest
+
+def membersOfJson? (acc : Array (String × Value)) :
+    Std.DTreeMap.Internal.Impl String (fun _ => Json) → Except String (Array (String × Value))
+  | .leaf => pure acc
+  | .inner _ k v l r => do
+    let left ← membersOfJson? acc l
+    membersOfJson? (left.push (k, ← withContext k (ofJson? v))) r
+
+end
 
 end Value
 
