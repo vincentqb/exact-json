@@ -185,4 +185,33 @@ theorem neighboursDistinct_of_keysIncrease (l : List (String × Value)) (h : key
     Rfc8259.neighboursDistinct l = true :=
   neighboursDistinct_of_pairwise (List.pairwise_map.mp (pairwise_of_keysIncrease h))
 
+theorem span_loop (p : Char → Bool) : ∀ (l acc token rest : List Char),
+    List.span.loop p l acc = (token, rest) → acc.reverse ++ l = token ++ rest
+  | [], acc, token, rest, h => by
+    simp only [List.span.loop, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    simp
+  | a :: l, acc, token, rest, h => by
+    simp only [List.span.loop] at h
+    split at h
+    · have := span_loop p l (a :: acc) token rest h
+      simpa using this
+    · simp only [Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+
+theorem span_append (p : Char → Bool) (l token rest : List Char) (h : l.span p = (token, rest)) :
+    l = token ++ rest := by
+  have := span_loop p l [] token rest h
+  simpa using this
+
+theorem numberValue_shape (token : List Char) (v : Value) (h : Rfc8259.numberValue token = .ok v) :
+    (∃ n, v = .integer n) ∨ (∃ d, v = .decimal d) := by
+  unfold Rfc8259.numberValue at h
+  simp only at h
+  repeat' (split at h <;> (try cases h))
+  all_goals first
+    | exact .inl ⟨_, rfl⟩
+    | exact .inr ⟨_, rfl⟩
+
 end ExactJSON

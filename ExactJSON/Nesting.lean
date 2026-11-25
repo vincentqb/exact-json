@@ -1,7 +1,7 @@
 module
 
 public import ExactJSON.Read
-public import ExactJSON.Sound
+public import ExactJSON.NumberText
 
 public section
 
@@ -128,7 +128,7 @@ theorem numberChar_plain {c : Char} (h : isNumberChar c = true) :
 theorem foldl_number {input token rest : List Char} (h : input.span isNumberChar = (token, rest)) (k m : Nat) :
     input.foldl Nesting.next (Outside k m) = rest.foldl Nesting.next (Outside k m) := by
   have hall := span_loop_all isNumberChar input [] token rest h (fun _ hc => absurd hc List.not_mem_nil)
-  rw [Parser.span_append _ _ _ _ h, List.foldl_append,
+  rw [span_append _ _ _ _ h, List.foldl_append,
     foldl_plain_outside token (fun c hc => numberChar_plain (hall c hc))]
 
 theorem depth_array (items : Array Value) : (Value.array items).depth = itemsDepth items.toList + 1 := by
@@ -177,7 +177,7 @@ theorem table_depth {l : List (String × Value)} {t : Value} (h : table l = .ok 
   · cases h
 
 theorem number_depth {token : List Char} {v : Value} (h : numberValue token = .ok v) : v.depth = 0 := by
-  rcases Parser.numberValue_shape _ _ h with ⟨n, rfl⟩ | ⟨d, rfl⟩ <;> rfl
+  rcases numberValue_shape _ _ h with ⟨n, rfl⟩ | ⟨d, rfl⟩ <;> rfl
 
 theorem foldl_word (w rest : List Char) (hw : ∀ c ∈ w, c ≠ '"' ∧ c ≠ '[' ∧ c ≠ '{' ∧ c ≠ ']' ∧ c ≠ '}')
     (k m : Nat) : (w ++ rest).foldl Nesting.next (Outside k m) = rest.foldl Nesting.next (Outside k m) := by

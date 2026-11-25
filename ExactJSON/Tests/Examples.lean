@@ -18,6 +18,13 @@ def check (s : String) : String :=
   | .ok v => if v.render == s then "ok" else s!"read, but written back as {v.render}"
   | .error e => e
 
+def spelled (s canonical : String) : Bool :=
+  !(parseText s).isOk && match readText s with
+    | .ok v => v.render == canonical
+    | .error _ => false
+
+def notJson (s : String) : Bool := !(readText s).isOk
+
 def gives {α : Type} [BEq α] (e : Except String α) (x : α) : Bool :=
   match e with
   | .ok y => y == x
@@ -31,54 +38,50 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard ["null", "true", "false", "0", "-17", "123456789012345678901234567890", "1.0", "-0.0", "0.1",
   "1.5e-7", "1.0e16", "5.0e-324", "1.7976931348623157e308", "\"\"", "\"a\\tb\"", "[]", "{}",
   "[1,2.5,\"x\",null,[],{}]", "{\"a\":{\"b\":[null]},\"b\":1}"].all (check · == "ok")
-#guard check "1e5" == "at character 0: not the canonical text of this decimal: write 100000.0"
-#guard check "1.50" == "at character 0: not the canonical text of this decimal: write 1.5"
-#guard check "1.0e+16" == "at character 0: not the canonical text of this decimal: write 1.0e16"
-#guard check "0.00001" == "at character 0: not the canonical text of this decimal: write 1.0e-5"
-#guard check "1e16" == "at character 0: not the canonical text of this decimal: write 1.0e16"
+#guard spelled "1e5" "100000.0"
+#guard spelled "1.50" "1.5"
+#guard spelled "1.0e+16" "1.0e16"
+#guard spelled "0.00001" "1.0e-5"
+#guard spelled "1e16" "1.0e16"
 #guard ["0.1000000000000000055511151231257827", "9007199254740993.0", "1.0e400", "-1.0e-400",
   "1.2345678901234567890123456789e-5000"].all (check · == "ok")
-#guard check "-0" == "at character 0: not the canonical text of this integer: write 0"
-#guard check "01" == "at character 0: not the canonical text of this integer: write 1"
-#guard check "-01" == "at character 0: not the canonical text of this integer: write -1"
-#guard check "00.5" == "at character 0: not the canonical text of this decimal: write 0.5"
-#guard check "1e400" == "at character 0: not the canonical text of this decimal: write 1.0e400"
-#guard check ("1e" ++ String.ofList (List.replicate 5000 '0') ++ "1") ==
-  "at character 0: not the canonical text of this decimal: write 10.0"
-#guard check ("1e" ++ String.ofList (List.replicate 2000 '9')) ==
-  "at character 0: not the canonical text of this decimal: write 1.0e" ++ String.ofList (List.replicate 2000 '9')
-#guard check ("1e-" ++ String.ofList (List.replicate 2000 '9')) ==
-  "at character 0: not the canonical text of this decimal: write 1.0e-" ++ String.ofList (List.replicate 2000 '9')
-#guard check ("0.0e" ++ String.ofList (List.replicate 100000 '9')) ==
-  "at character 0: not the canonical text of this decimal: write 0.0"
-#guard check " 1" == "at character 0: canonical text has no whitespace"
-#guard check "[1, 2]" == "at character 3: canonical text has no whitespace"
-#guard check "{\"a\": 1}" == "at character 5: canonical text has no whitespace"
-#guard check "1\n" == "at character 1: text after the value (canonical text has no whitespace)"
+#guard spelled "-0" "0"
+#guard notJson "01"
+#guard notJson "-01"
+#guard notJson "00.5"
+#guard spelled "1e400" "1.0e400"
+#guard spelled ("1e" ++ String.ofList (List.replicate 5000 '0') ++ "1") "10.0"
+#guard spelled ("1e" ++ String.ofList (List.replicate 2000 '9')) ("1.0e" ++ String.ofList (List.replicate 2000 '9'))
+#guard spelled ("1e-" ++ String.ofList (List.replicate 2000 '9')) ("1.0e-" ++ String.ofList (List.replicate 2000 '9'))
+#guard spelled ("0.0e" ++ String.ofList (List.replicate 100000 '9')) "0.0"
+#guard check " 1" == "at character 0: not the canonical text, which goes on with \"1\""
+#guard spelled "[1, 2]" "[1,2]"
+#guard spelled "{\"a\": 1}" "{\"a\":1}"
+#guard spelled "1\n" "1"
 
 #guard Value.render (.string "tab\t nl\n cr\r bs\x08 ff\x0c q\" bsl\\ nul\x00 us\x1f") ==
   "\"tab\\t nl\\n cr\\r bs\\b ff\\f q\\\" bsl\\\\ nul\\u0000 us\\u001f\""
 #guard Value.render (.string "\x7f\u0085\u009b\u2028\u2029/é😀\u200d\ufe0f") ==
   "\"\\u007f\\u0085\\u009b\\u2028\\u2029/é😀\u200d\ufe0f\""
 #guard check "\"\\u007f\\u0085\\u2028\\u2029\"" == "ok"
-#guard check "\"\x7f\"" == "at character 1: write \\u007f, not the character itself"
-#guard check "\"a\u0085\"" == "at character 2: write \\u0085, not the character itself"
-#guard check "\"\u2028\"" == "at character 1: write \\u2028, not the character itself"
-#guard check "\"\\u009B\"" == "at character 1: write \\u009b, not \\u009B"
-#guard check "\"\\/\"" == "at character 1: write /, not \\/"
-#guard check "\"\\u0041\"" == "at character 1: write A, not \\u0041"
-#guard check "\"\\u0100\"" == "at character 1: write Ā, not \\u0100"
-#guard check "\"\\u000a\"" == "at character 1: write \\n, not \\u000a"
-#guard check "\"\\u0022\"" == "at character 1: write \\\", not \\u0022"
-#guard check "\"\\u001F\"" == "at character 1: write \\u001f, not \\u001F"
-#guard check "\"\\ud83d\\ude00\"" == "at character 1: write 😀, not the surrogate pair \\ud83d\\ude00"
-#guard check "\"\\udc00\"" == "at character 1: \\udc00 is a lone surrogate, not a character"
-#guard check "\"a\tb\"" == "at character 2: write \\t, not the character itself"
+#guard spelled "\"\x7f\"" "\"\\u007f\""
+#guard spelled "\"a\u0085\"" "\"a\\u0085\""
+#guard spelled "\"\u2028\"" "\"\\u2028\""
+#guard spelled "\"\\u009B\"" "\"\\u009b\""
+#guard spelled "\"\\/\"" "\"/\""
+#guard spelled "\"\\u0041\"" "\"A\""
+#guard spelled "\"\\u0100\"" "\"Ā\""
+#guard spelled "\"\\u000a\"" "\"\\n\""
+#guard spelled "\"\\u0022\"" "\"\\\"\""
+#guard spelled "\"\\u001F\"" "\"\\u001f\""
+#guard spelled "\"\\ud83d\\ude00\"" "\"😀\""
+#guard notJson "\"\\udc00\""
+#guard notJson "\"a\tb\""
 
 #guard check ("{\"B\":1,\"a\":2,\"" ++ String.singleton (Char.ofNat 0xFFFF) ++ "\":3,\"" ++
   String.singleton (Char.ofNat 0x10000) ++ "\":4}") == "ok"
-#guard check "{\"b\":1,\"a\":2}" == "at character 7: keys must increase: \"a\" comes before \"b\""
-#guard check "{\"a\":1,\"a\":2}" == "at character 7: duplicate key \"a\""
+#guard spelled "{\"b\":1,\"a\":2}" "{\"a\":2,\"b\":1}"
+#guard check "{\"a\":1,\"a\":2}" == "at character 7: a key repeats"
 #guard check "{\"a\":null}" == "ok"
 
 #guard ["", "{", "[1,]", "[,1]", "{\"a\":1,}", "1.", ".5", "-", "1e", "+1", "tru", "nul",
@@ -98,7 +101,7 @@ def errorOf {α : Type} (e : Except String α) : String :=
   "0.1000000000000000055511151231257827"
 #guard errorOf (decodeText "1" : Except String Decimal) == "expected a decimal, found integer 1"
 #guard errorOf (decodeText "1.50" : Except String Decimal) ==
-  "at character 0: not the canonical text of this decimal: write 1.5"
+  "at character 3: not the canonical text, which ends here"
 #guard gives (parseText "0.1000000000000000055511151231257827")
   (.decimal ⟨false, 1000000000000000055511151231257827, -34, by decide⟩)
 #guard gives (parseText "-0.0") (.decimal ⟨true, 0, 0, by decide⟩)
@@ -112,11 +115,11 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard errorOf (decodeText "1.0e-400" : Except String Float) ==
   "expected the shortest decimal of a float: write 0.0, not 1.0e-400"
 
-#guard check "[[[[" == "at character 4: expected a value, found the end of the text"
-#guard check "{\"a\":[{\"b\":" == "at character 11: expected a value, found the end of the text"
+#guard check "[[[[" == "at character 4: expected a value"
+#guard check "{\"a\":[{\"b\":" == "at character 11: expected a value"
 #guard check (String.ofList (List.replicate 2000 '[' ++ List.replicate 2000 ']')) == "ok"
 #guard check (String.ofList (List.replicate 2000 '[')) ==
-  "at character 2000: expected a value, found the end of the text"
+  "at character 2000: expected a value"
 
 def canon (s : String) : String :=
   match readText s with
@@ -142,9 +145,9 @@ def canon (s : String) : String :=
 #guard gives ((linesText "").map (·.size)) 0
 #guard errorOf (linesText "{\"a\":1}\n[2]") == "the last line has no line feed at its end"
 #guard errorOf (linesText "1\n[\n3") == "the last line has no line feed at its end"
-#guard errorOf (linesText "1\n[\n3\n") == "line 2: at character 1: expected a value, found the end of the text"
-#guard errorOf (linesText "1\n\n2\n") == "line 2: at character 0: expected a value, found the end of the text"
-#guard errorOf (linesText "1\r\n") == "line 1: at character 1: text after the value (canonical text has no whitespace)"
+#guard errorOf (linesText "1\n[\n3\n") == "line 2: at character 1: expected a value"
+#guard errorOf (linesText "1\n\n2\n") == "line 2: at character 0: expected a value"
+#guard errorOf (linesText "1\r\n") == "line 1: at character 1: not the canonical text, which ends here"
 
 
 structure Run where

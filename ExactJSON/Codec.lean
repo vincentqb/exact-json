@@ -1,6 +1,7 @@
 module
 
 public import ExactJSON.Read
+public import ExactJSON.Equality
 public import ExactJSON.Float
 public import Std.Data.ExtTreeMap
 
@@ -12,31 +13,6 @@ universe u
 
 namespace Value
 
-mutual
-
-def beq : Value → Value → Bool
-  | .null, .null => true
-  | .string a, .string b => a == b
-  | .integer a, .integer b => a == b
-  | .decimal a, .decimal b => a == b
-  | .boolean a, .boolean b => a == b
-  | .array ⟨as⟩, .array ⟨bs⟩ => beqItems as bs
-  | .table ⟨as⟩, .table ⟨bs⟩ => beqMembers as bs
-  | _, _ => false
-
-def beqItems : List Value → List Value → Bool
-  | [], [] => true
-  | a :: as, b :: bs => beq a b && beqItems as bs
-  | _, _ => false
-
-def beqMembers : List (String × Value) → List (String × Value) → Bool
-  | [], [] => true
-  | (k, a) :: as, (l, b) :: bs => k == l && beq a b && beqMembers as bs
-  | _, _ => false
-
-end
-
-instance : BEq Value := ⟨beq⟩
 
 def get? (v : Value) (key : String) : Option Value :=
   match v with

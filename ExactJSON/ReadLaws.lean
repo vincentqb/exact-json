@@ -1,7 +1,7 @@
 module
 
 public import ExactJSON.Nesting
-public import ExactJSON.Fixed
+public import ExactJSON.SpecRender
 public import ExactJSON.Write
 
 public section
@@ -31,43 +31,46 @@ theorem readJson_ok {s : String} {v : Value} : Value.readJson s = .ok v ↔ Rfc8
 theorem read_spelling (sp : Spelling) (maxDepth : Nat) (b : ByteArray) (v : Value) :
     Value.read sp maxDepth b = .ok v ↔ sp.Spells b v ∧ v.depth ≤ maxDepth := by
   unfold Value.read
-  cases sp with
-  | canonical =>
-    constructor
-    · intro h
+  constructor
+  · intro h
+    split at h
+    · cases h
+    · rename_i s hs
       split at h
-      · cases h
-      · rename_i s hs
+      · rename_i hd
         split at h
-        · rename_i hd
-          obtain ⟨hread, hr⟩ := (parse_fixed s v).mp h
-          refine ⟨⟨Rfc8259.read?_valid _ _ hread, ?_⟩, by rw [← nesting_read hread]; exact hd⟩
-          rw [fromUTF8?_eq_some.mp hs, ← hr, Value.render_eq_write]
-          rfl
         · cases h
-    · rintro ⟨⟨hvalid, hb⟩, hd⟩
+        · rename_i w hw
+          have hread := readJson_ok.mp hw
+          cases sp with
+          | any =>
+            cases h
+            exact ⟨⟨s, hs, hread⟩, by rw [← nesting_read hread]; exact hd⟩
+          | canonical =>
+            simp only at h
+            split at h
+            · rename_i hr
+              cases h
+              refine ⟨⟨Rfc8259.read?_valid _ _ hread, ?_⟩, by rw [← nesting_read hread]; exact hd⟩
+              rw [fromUTF8?_eq_some.mp hs, ← hr, Value.render_eq_write]
+              rfl
+            · cases h
+      · cases h
+  · rintro ⟨hsp, hd⟩
+    cases sp with
+    | any =>
+      obtain ⟨s, hs, hread⟩ := hsp
+      simp only [hs]
+      rw [ite_eq_left (by rw [nesting_read hread]; exact hd), readJson_ok.mpr hread]
+    | canonical =>
+      obtain ⟨hvalid, hb⟩ := hsp
       have hs : String.fromUTF8? b = some v.render := by
         rw [fromUTF8?_eq_some, hb, Value.render_eq_write]
         rfl
       have hread := spec_read_render v hvalid
       simp only [hs]
-      rw [ite_eq_left (by rw [nesting_read hread]; exact hd)]
-      exact render_parse v hvalid
-  | any =>
-    constructor
-    · intro h
-      split at h
-      · cases h
-      · rename_i s hs
-        split at h
-        · rename_i hd
-          have hread := readJson_ok.mp h
-          exact ⟨⟨s, hs, hread⟩, by rw [← nesting_read hread]; exact hd⟩
-        · cases h
-    · rintro ⟨⟨s, hs, hread⟩, hd⟩
-      simp only [hs]
-      rw [ite_eq_left (by rw [nesting_read hread]; exact hd)]
-      exact readJson_ok.mpr hread
+      rw [ite_eq_left (by rw [nesting_read hread]; exact hd), readJson_ok.mpr hread]
+      simp
 
 theorem foldlM_loop {β : Type} (f : β → UInt8 → β) (as : ByteArray) (h : as.size ≤ as.size) :
     ∀ (i j : Nat) (acc : β), j + i = as.size →

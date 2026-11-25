@@ -2,7 +2,7 @@ module
 
 public import ExactJSON.Shortest
 public import ExactJSON.FloatBits
-public import ExactJSON.Fixed
+public import ExactJSON.SpecRender
 
 public section
 

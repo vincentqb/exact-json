@@ -1,6 +1,6 @@
 module
 
-public import ExactJSON.Parse
+public import ExactJSON.Render
 
 @[expose] public section
 
@@ -25,14 +25,32 @@ def Nesting.next (n : Nesting) (c : Char) : Nesting :=
 
 def nestingDepth (cs : List Char) : Nat := (cs.foldl Nesting.next {}).deepest
 
+def Value.readJson (s : String) : Except String Value :=
+  match Rfc8259.read s with
+  | .ok v => .ok v
+  | .error (message, rest) => .error s!"at character {s.length - rest.length}: {message}"
+
+def firstDifference : List Char → List Char → Nat → Nat
+  | a :: as, b :: bs, i => if a = b then firstDifference as bs (i + 1) else i
+  | _, _, i => i
+
+def notCanonical (s canonical : String) : String :=
+  let i := firstDifference s.toList canonical.toList 0
+  let rest := canonical.toList.drop i
+  if rest.isEmpty then s!"at character {i}: not the canonical text, which ends here"
+  else s!"at character {i}: not the canonical text, which goes on with {repr (String.ofList (rest.take 40))}"
+
 def Value.read (sp : Spelling) (maxDepth : Nat) (b : ByteArray) : Except String Value :=
   match String.fromUTF8? b with
   | none => .error "not UTF-8"
   | some s =>
     if nestingDepth s.toList ≤ maxDepth then
-      match sp with
-      | .canonical => Value.parse s
-      | .any => Value.readJson s
+      match Value.readJson s with
+      | .error e => .error e
+      | .ok v =>
+        match sp with
+        | .any => .ok v
+        | .canonical => if v.render = s then .ok v else .error (notCanonical s v.render)
     else .error s!"nested deeper than {maxDepth}"
 
 structure ReaderState where

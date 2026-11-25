@@ -2,6 +2,7 @@ module
 
 public import ExactJSON.ShortestLaws
 public import ExactJSON.FloatSpecial
+public import ExactJSON.Codec
 
 public section
 

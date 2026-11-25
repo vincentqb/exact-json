@@ -23,13 +23,13 @@ theorem typed_ok {α : Type u} [ToValue α] [FromValue α] (v : Value) (a : α) 
       split at h
       · rename_i hbeq
         cases h
-        have hv := (Value.beq_eq_true_iff _ _).mp hbeq
+        have hv := beq_iff_eq.mp hbeq
         exact ⟨hv.symm, hv ▸ ha'⟩
       · cases h
   · rintro ⟨rfl, ha⟩
     rw [ha]
     simp only
-    rw [ite_eq_left (show (toValue a == toValue a) = true from Value.beq_self (toValue a))]
+    rw [ite_eq_left (show (toValue a == toValue a) = true from beq_self_eq_true _)]
 
 theorem decode_eq {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) (a : α) :
     decode maxDepth b = .ok a ↔

@@ -1,6 +1,7 @@
 module
 
-public import ExactJSON.Sound
+public import ExactJSON.Reread
+public import ExactJSON.Text
 public import ExactJSON.NumberText
 public import ExactJSON.SpecValid
 public import ExactJSON.DecimalText
@@ -10,6 +11,10 @@ public section
 namespace ExactJSON
 
 universe u
+
+theorem array_push_eq {α : Type} (acc : Array α) (x : α) : acc.push x = ⟨acc.toList ++ [x]⟩ := by
+  cases acc
+  simp [Array.push]
 
 def RestOk (rest : List Char) : Prop :=
   rest = [] ∨ ∃ c t, rest = c :: t ∧ (c = ',' ∨ c = ']' ∨ c = '}')
@@ -120,113 +125,6 @@ theorem spec_chars_escape : ∀ (t rest acc : List Char),
         omega
       simp only [hlt, ite_true, Char.ofNat_toNat, ih]
       simp
-
-theorem parser_hexValue_hexDigit : ∀ n, n < 16 → Parser.hexValue (hexDigit n) = some n := by decide
-
-theorem parser_hex4_escape (c : Char) (h : c.toNat < 0x10000) :
-    Parser.hex4 (hexDigit (c.toNat / 4096 % 16)) (hexDigit (c.toNat / 256 % 16)) (hexDigit (c.toNat / 16 % 16))
-      (hexDigit (c.toNat % 16)) = some c.toNat := by
-  simp only [Parser.hex4, parser_hexValue_hexDigit _ (Nat.mod_lt _ (by decide))]
-  simp
-  omega
-
-theorem string_push_ofList (acc : String) (c : Char) (t : List Char) :
-    acc.push c ++ String.ofList t = acc ++ String.ofList (c :: t) := by
-  apply String.ext
-  simp [String.toList_append, String.toList_push]
-
-theorem strict_string_quote (rest : List Char) (acc : String) (s0 : Nat) :
-    Parser.string ('"' :: rest) acc s0 = .ok acc rest (s0 + 1) := by
-  rw [Parser.string.eq_def]
-  simp
-
-theorem strict_string_raw (c : Char) (X : List Char) (acc : String) (s0 : Nat) (h1 : ¬(c == '"') = true)
-    (h2 : ¬(c == '\\') = true) (n3 : mustEscape c = false) :
-    Parser.string (c :: X) acc s0 = Parser.string X (acc.push c) (s0 + 1) := by
-  rw [Parser.string.eq_def]
-  simp only
-  split <;> simp_all
-
-theorem strict_string_short (e c : Char) (X : List Char) (acc : String) (s0 : Nat)
-    (hu : Parser.unescape e = some c) (he : e ≠ 'u') :
-    Parser.string ('\\' :: e :: X) acc s0 = Parser.string X (acc.push c) (s0 + 2) := by
-  rw [Parser.string.eq_def]
-  simp only
-  split <;> simp_all
-
-theorem strict_string_control (c : Char) (X : List Char) (acc : String) (s0 : Nat) (hc : c.toNat < 0x2030)
-    (hpush : (pushChar "" c).toList = ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16),
-      hexDigit (c.toNat / 16 % 16), hexDigit (c.toNat % 16)]) :
-    Parser.string ((pushChar "" c).toList ++ X) acc s0 = Parser.string X (acc.push c) (s0 + 12) := by
-  rw [hpush, Parser.string.eq_def]
-  simp only [List.cons_append, List.nil_append]
-  simp only [beq_self_eq_true, ite_true]
-  have hq : ('\\' == '"') = false := by decide
-  simp only [hq, Bool.false_eq_true, ite_false]
-  rw [parser_hex4_escape c (by omega)]
-  have hs : (decide (55296 ≤ c.toNat) && decide (c.toNat < 57344)) = false := by
-    simp
-    omega
-  simp only [hs, Bool.false_eq_true, ite_false, Char.ofNat_toNat]
-  have hw : (pushChar "" c == String.ofList ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16),
-      hexDigit (c.toNat / 16 % 16), hexDigit (c.toNat % 16)]) = true := by
-    rw [beq_iff_eq]
-    apply String.ext
-    rw [hpush, String.toList_ofList]
-  simp only [hw, ite_true]
-
-theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat),
-    ∃ s, Parser.string (escapeList t ++ '"' :: rest) acc s0 = .ok (acc ++ String.ofList t) rest s
-  | [], rest, acc, s0 => ⟨s0 + 1, by simp [escapeList_nil, strict_string_quote]⟩
-  | c :: t, rest, acc, s0 => by
-    have ih := strict_string_escape t rest
-    rw [escapeList_cons, List.append_assoc]
-    have step : ∀ k, Parser.string ((pushChar "" c).toList ++ (escapeList t ++ '"' :: rest)) acc s0 =
-        Parser.string (escapeList t ++ '"' :: rest) (acc.push c) (s0 + k) →
-        ∃ s, Parser.string ((pushChar "" c).toList ++ (escapeList t ++ '"' :: rest)) acc s0 =
-          .ok (acc ++ String.ofList (c :: t)) rest s := by
-      intro k hk
-      obtain ⟨s, hs⟩ := ih (acc.push c) (s0 + k)
-      exact ⟨s, by rw [hk, hs, string_push_ofList]⟩
-    by_cases h1 : (c == '"') = true
-    · have := beq_iff_eq.mp h1
-      subst this
-      exact step 2 (strict_string_short '"' '"' _ acc s0 rfl (by decide))
-    by_cases h2 : (c == '\\') = true
-    · have := beq_iff_eq.mp h2
-      subst this
-      exact step 2 (strict_string_short '\\' '\\' _ acc s0 rfl (by decide))
-    by_cases h3 : mustEscape c = false
-    · have hp : (pushChar "" c).toList = [c] := by simp [pushChar, h1, h2, h3]
-      exact step 1 (by rw [hp, List.singleton_append]; exact strict_string_raw c _ acc s0 h1 h2 h3)
-    have hm : mustEscape c = true := by simpa using h3
-    have hc : c.toNat < 0x2030 := mustEscape_lt hm
-    by_cases h4 : (c == '\x08') = true
-    · have := beq_iff_eq.mp h4
-      subst this
-      exact step 2 (strict_string_short 'b' '\x08' _ acc s0 rfl (by decide))
-    by_cases h5 : (c == '\t') = true
-    · have := beq_iff_eq.mp h5
-      subst this
-      exact step 2 (strict_string_short 't' '\t' _ acc s0 rfl (by decide))
-    by_cases h6 : (c == '\n') = true
-    · have := beq_iff_eq.mp h6
-      subst this
-      exact step 2 (strict_string_short 'n' '\n' _ acc s0 rfl (by decide))
-    by_cases h7 : (c == '\x0c') = true
-    · have := beq_iff_eq.mp h7
-      subst this
-      exact step 2 (strict_string_short 'f' '\x0c' _ acc s0 rfl (by decide))
-    by_cases h8 : (c == '\r') = true
-    · have := beq_iff_eq.mp h8
-      subst this
-      exact step 2 (strict_string_short 'r' '\r' _ acc s0 rfl (by decide))
-    have hpush : (pushChar "" c).toList =
-        ['\\', 'u', hexDigit (c.toNat / 4096 % 16), hexDigit (c.toNat / 256 % 16), hexDigit (c.toNat / 16 % 16),
-          hexDigit (c.toNat % 16)] := by
-      simp only [pushChar, h1, h2, hm, h4, h5, h6, h7, h8, Bool.not_true, Bool.false_eq_true, ite_false]
-      simp
-    exact step 12 (strict_string_control c _ acc s0 hc hpush)
 
 theorem render_integer_toList (n : Int) : (Value.render (.integer n)).toList = (toString n).toList := by
   simp [Value.render, Value.renderTo, intText_eq]
@@ -514,7 +412,7 @@ theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List C
         obtain ⟨rfl, rfl⟩ := ih
         simp only
         rw [skipWs_cons ']' rest (by decide)]
-        simp [Value.rereadItems, h, Except.toOption, Parser.array_push_eq]
+        simp [Value.rereadItems, h, Except.toOption, array_push_eq]
   | v :: w :: ws, f + 1, rest, acc, _, hrest, hvalid, hlen => by
     have hv : v.Valid := by
       simp only [itemsValid, Bool.and_eq_true] at hvalid
@@ -559,7 +457,7 @@ theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List C
             | some a, some b => some (a :: b)
             | _, _ => none := rfl
         rw [hcons, h]
-        cases Value.rereadItems (w :: ws) <;> simp [Parser.array_push_eq]
+        cases Value.rereadItems (w :: ws) <;> simp [array_push_eq]
 
 theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (rest : List Char)
     (acc : Array (String × Value)), members ≠ [] → RestOk rest → membersValid members = true →
@@ -661,290 +559,7 @@ theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (
             | some a, some b => some ((k, a) :: b)
             | _, _ => none := rfl
         rw [hcons, h]
-        cases Value.rereadMembers (m :: ms) <;> simp [Parser.array_push_eq]
-
-end
-
-theorem strict_value_number (f s0 : Nat) (c : Char) (t : List Char) (hc : c = '-' ∨ c.isDigit = true) :
-    Parser.value (f + 1) (c :: t) s0 = Parser.number (c :: t) s0 := by
-  have ne : ∀ d : Char, (d = '"' ∨ d = '[' ∨ d = '{' ∨ d = 'n' ∨ d = 't' ∨ d = 'f') → c ≠ d := by
-    rintro d hd rfl
-    rcases hc with h | h <;> rcases hd with rfl | rfl | rfl | rfl | rfl | rfl <;> simp_all
-  rw [Parser.value.eq_11 _ _ _ _ (ne _ (by simp)) (fun _ h _ => ne _ (by simp) h) (ne _ (by simp))
-    (fun _ h _ => ne _ (by simp) h) (ne _ (by simp)) (fun _ h _ => ne _ (by simp) h)
-    (fun _ h _ => ne _ (by simp) h) (fun _ h _ => ne _ (by simp) h)]
-  have : (c == '-' || c.isDigit) = true := by
-    rcases hc with rfl | h
-    · rfl
-    · simp [h]
-  simp [this]
-
-theorem strict_number_text (s0 : Nat) (text rest : List Char) (v : Value)
-    (htext : ∀ c ∈ text, Rfc8259.isNumberChar c = true) (hrest : RestOk rest)
-    (hv : Rfc8259.numberValue text = .ok v) (hr : (Value.render v).toList = text) :
-    ∃ s, Parser.number (text ++ rest) s0 = .ok v rest s := by
-  unfold Parser.number
-  rw [span_text text rest htext hrest]
-  simp only [hv]
-  exact ⟨s0 + 7 * text.length + 7, by simp [hr]⟩
-
-theorem rereadItems_cons {v : Value} {vs ws : List Value} (h : Value.rereadItems (v :: vs) = some ws) :
-    ∃ w us, v.reread = some w ∧ Value.rereadItems vs = some us ∧ ws = w :: us := by
-  have hcons : Value.rereadItems (v :: vs) =
-      match v.reread, Value.rereadItems vs with
-      | some a, some b => some (a :: b)
-      | _, _ => none := rfl
-  rw [hcons] at h
-  split at h
-  · rename_i a b ha hb
-    cases h
-    exact ⟨a, b, ha, hb, rfl⟩
-  · cases h
-
-theorem rereadMembers_cons {k : String} {v : Value} {ms ws : List (String × Value)}
-    (h : Value.rereadMembers ((k, v) :: ms) = some ws) :
-    ∃ w us, v.reread = some w ∧ Value.rereadMembers ms = some us ∧ ws = (k, w) :: us := by
-  have hcons : Value.rereadMembers ((k, v) :: ms) =
-      match v.reread, Value.rereadMembers ms with
-      | some a, some b => some ((k, a) :: b)
-      | _, _ => none := rfl
-  rw [hcons] at h
-  split at h
-  · rename_i a b ha hb
-    cases h
-    exact ⟨a, b, ha, hb, rfl⟩
-  · cases h
-
-theorem keysIncreaseFrom_prefix : ∀ (p : String) (l1 l2 : List String),
-    keysIncreaseFrom p (l1 ++ l2) = true → keysIncreaseFrom p l1 = true
-  | _, [], _, _ => rfl
-  | p, a :: l1, l2, h => by
-    simp only [List.cons_append, keysIncreaseFrom, Bool.and_eq_true] at h ⊢
-    exact ⟨h.1, keysIncreaseFrom_prefix a l1 l2 h.2⟩
-
-theorem keysIncrease_prefix (l1 l2 : List String) (h : keysIncrease (l1 ++ l2) = true) :
-    keysIncrease l1 = true := by
-  cases l1 with
-  | nil => rfl
-  | cons a l1 =>
-    simp only [List.cons_append, keysIncrease] at h ⊢
-    exact keysIncreaseFrom_prefix a l1 l2 h
-
-theorem keyFollows_of_keysIncrease (acc : Array (String × Value)) (k : String) (v : Value)
-    (ms : List (String × Value)) (h : keysIncrease ((acc.toList ++ (k, v) :: ms).map (·.1)) = true) :
-    Parser.keyFollows acc k = true := by
-  have h1 : keysIncrease (acc.toList.map (·.1) ++ [k]) = true := by
-    apply keysIncrease_prefix _ (ms.map (·.1))
-    simpa using h
-  unfold Parser.keyFollows
-  rw [← Array.getLast?_toList]
-  cases hl : acc.toList with
-  | nil => rfl
-  | cons a l =>
-    rw [hl] at h1
-    simp only [List.map_cons, List.cons_append, keysIncrease] at h1
-    have h2 := ((keysIncreaseFrom_append _ _ _).mp h1).2
-    cases hlast : (a :: l).getLast? with
-    | none => simp at hlast
-    | some q =>
-      obtain ⟨p, w⟩ := q
-      simp only
-      have hp : (l.map (·.1)).getLast?.getD a.1 = p := by
-        have := congrArg (Option.map (·.1)) hlast
-        simp only [List.getLast?_cons, Option.map_some] at this
-        rw [List.getLast?_map]
-        cases hl' : l.getLast? with
-        | none => simp [hl'] at this ⊢; exact this
-        | some r => simp [hl'] at this ⊢; exact this
-      rw [hp] at h2
-      exact decide_eq_true h2
-
-theorem strict_open_array (f s0 : Nat) (X : List Char) (c : Char) (t : List Char) (hX : X = c :: t)
-    (hb : c ≠ ']') : Parser.value (f + 1) ('[' :: X) s0 = Parser.items f X #[] (s0 + 1) := by
-  subst hX
-  rw [Parser.value.eq_5]
-  intro r h
-  simp only [List.cons.injEq] at h
-  exact hb h.1
-
-theorem strict_open_table (f s0 : Nat) (t : List Char) :
-    Parser.value (f + 1) ('{' :: '"' :: t) s0 = Parser.members f ('"' :: t) #[] (s0 + 1) := by
-  rw [Parser.value.eq_7]
-  intro r h
-  simp at h
-
-mutual
-
-theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), RestOk rest → v.Valid →
-    v.reread = some v → (Value.render v).toList.length ≤ fuel →
-    ∃ s, Parser.value fuel ((Value.render v).toList ++ rest) s0 = .ok v rest s
-  | v, 0, _, _, _, _, _, hlen => absurd hlen (by have := render_length_pos v; omega)
-  | .null, f + 1, s0, rest, _, _, _, _ => ⟨s0 + 4, by rw [Value.text_null]; rfl⟩
-  | .boolean b, f + 1, s0, rest, _, _, _, _ => by
-    cases b
-    · exact ⟨s0 + 5, by rw [Value.text_boolean]; rfl⟩
-    · exact ⟨s0 + 4, by rw [Value.text_boolean]; rfl⟩
-  | .string str, f + 1, s0, rest, _, _, _, _ => by
-    rw [Value.text_string]
-    simp only [List.cons_append, List.append_assoc]
-    obtain ⟨s, hs⟩ := strict_string_escape str.toList rest "" (s0 + 1)
-    refine ⟨s, ?_⟩
-    rw [Parser.value.eq_3]
-    simp only [List.nil_append, hs]
-    simp
-  | .integer n, f + 1, s0, rest, hrest, _, _, _ => by
-    rw [render_integer_toList]
-    obtain ⟨c, hc, hk⟩ := toString_head n
-    obtain ⟨t, ht⟩ := exists_cons_of_head? hc
-    rw [ht, List.cons_append, strict_value_number f s0 c _ hk, ← List.cons_append, ← ht]
-    exact strict_number_text s0 _ rest _ (numberChars_toString n) hrest (numberValue_toString n)
-      (render_integer_toList n)
-  | .decimal d, f + 1, s0, rest, hrest, hvalid, _, _ => by
-    rw [render_decimal_toList]
-    obtain ⟨c, hc, hk⟩ := decimalText_head d
-    obtain ⟨t, ht⟩ := exists_cons_of_head? hc
-    rw [ht, List.cons_append, strict_value_number f s0 c _ hk, ← List.cons_append, ← ht]
-    exact strict_number_text s0 _ rest _ (numberChars_decimalText d) hrest (numberValue_text d)
-      (render_decimal_toList d)
-  | .array ⟨[]⟩, f + 1, s0, rest, _, _, _, _ => ⟨s0 + 2, by
-      rw [Value.text_array]
-      rfl⟩
-  | .array ⟨v :: vs⟩, f + 1, s0, rest, hrest, hvalid, hre, hlen => by
-    have hvalid' : itemsValid (v :: vs) = true := hvalid
-    have hre' : Value.rereadItems (v :: vs) = some (v :: vs) := by
-      simp only [Value.reread] at hre
-      cases h : Value.rereadItems (v :: vs) with
-      | none => rw [h] at hre; cases hre
-      | some ws =>
-        rw [h] at hre
-        simp only [Option.map_some, Option.some.injEq, Value.array.injEq, Array.mk.injEq] at hre
-        rw [hre]
-    rw [Value.text_array] at hlen ⊢
-    simp only [List.length_cons, List.length_append] at hlen
-    simp only [List.cons_append, List.append_assoc, List.nil_append]
-    obtain ⟨c, t, hct, -, hb, -, -⟩ := itemsText_head v vs
-    rw [strict_open_array f s0 _ c (t ++ ']' :: rest) (by rw [hct, List.cons_append]) hb]
-    obtain ⟨s, hs⟩ := strict_items (v :: vs) f (s0 + 1) rest #[] (by simp) hrest hvalid' hre' (by omega)
-    exact ⟨s, by rw [hs]; rfl⟩
-  | .table ⟨[]⟩, f + 1, s0, rest, _, _, _, _ => ⟨s0 + 2, by
-      rw [Value.text_table]
-      rfl⟩
-  | .table ⟨(k, v) :: ms⟩, f + 1, s0, rest, hrest, hvalid, hre, hlen => by
-    have hboth : (keysIncrease (((k, v) :: ms).map (·.1)) && membersValid ((k, v) :: ms)) = true := hvalid
-    simp only [Bool.and_eq_true] at hboth
-    have hre' : Value.rereadMembers ((k, v) :: ms) = some ((k, v) :: ms) := by
-      simp only [Value.reread] at hre
-      cases h : Value.rereadMembers ((k, v) :: ms) with
-      | none => rw [h] at hre; cases hre
-      | some ws =>
-        rw [h] at hre
-        simp only [Option.map_some, Option.some.injEq, Value.table.injEq, Array.mk.injEq] at hre
-        rw [hre]
-    rw [Value.text_table] at hlen ⊢
-    simp only [List.length_cons, List.length_append] at hlen
-    simp only [List.cons_append, List.append_assoc, List.nil_append]
-    obtain ⟨t, ht⟩ := membersText_head k v ms
-    rw [ht, List.cons_append, strict_open_table, ← List.cons_append, ← ht]
-    obtain ⟨s, hs⟩ := strict_members ((k, v) :: ms) f (s0 + 1) rest #[] (by simp) hrest hboth.2
-      (by simpa using hboth.1) hre' (by omega)
-    exact ⟨s, by rw [hs]; rfl⟩
-
-theorem strict_items : (items : List Value) → ∀ (fuel s0 : Nat) (rest : List Char) (acc : Array Value),
-    items ≠ [] → RestOk rest → itemsValid items = true → Value.rereadItems items = some items →
-    (Value.itemsText items).length + 1 ≤ fuel →
-    ∃ s, Parser.items fuel (Value.itemsText items ++ ']' :: rest) acc s0 = .ok (.array ⟨acc.toList ++ items⟩) rest s
-  | [], _, _, _, _, hne, _, _, _, _ => absurd rfl hne
-  | _ :: _, 0, _, _, _, _, _, _, _, hlen => absurd hlen (by omega)
-  | [v], f + 1, s0, rest, acc, _, hrest, hvalid, hre, hlen => by
-    have hv : v.Valid := by
-      simp only [itemsValid, Bool.and_true] at hvalid
-      exact hvalid
-    obtain ⟨w, us, hw, -, hws⟩ := rereadItems_cons hre
-    simp only [List.cons.injEq] at hws
-    obtain ⟨rfl, -⟩ := hws
-    rw [Value.itemsText_singleton] at hlen ⊢
-    obtain ⟨s1, hs1⟩ := strict_render v f s0 (']' :: rest) (restOk_close _ _ (by simp)) hv hw (by omega)
-    refine ⟨s1 + 1, ?_⟩
-    rw [Parser.items.eq_2, hs1]
-    simp [Parser.array_push_eq]
-  | v :: w :: ws, f + 1, s0, rest, acc, _, hrest, hvalid, hre, hlen => by
-    have hv : v.Valid := by
-      simp only [itemsValid, Bool.and_eq_true] at hvalid
-      exact hvalid.1
-    have hvalid' : itemsValid (w :: ws) = true := by
-      simp only [itemsValid, Bool.and_eq_true] at hvalid ⊢
-      exact hvalid.2
-    obtain ⟨u, us, hu, hus, hws⟩ := rereadItems_cons hre
-    simp only [List.cons.injEq] at hws
-    obtain ⟨rfl, rfl⟩ := hws
-    rw [Value.itemsText_cons] at hlen ⊢
-    simp only [List.length_append, List.length_cons] at hlen
-    simp only [List.append_assoc, List.cons_append]
-    obtain ⟨s1, hs1⟩ := strict_render v f s0 (',' :: (Value.itemsText (w :: ws) ++ ']' :: rest))
-      (restOk_close _ _ (by simp)) hv hu (by omega)
-    obtain ⟨s2, hs2⟩ := strict_items (w :: ws) f (s1 + 1) rest (acc.push v) (by simp) hrest hvalid' hus (by omega)
-    refine ⟨s2, ?_⟩
-    rw [Parser.items.eq_2, hs1]
-    simp only
-    rw [hs2]
-    simp [Parser.array_push_eq]
-
-theorem strict_members : (members : List (String × Value)) → ∀ (fuel s0 : Nat) (rest : List Char)
-    (acc : Array (String × Value)), members ≠ [] → RestOk rest → membersValid members = true →
-    keysIncrease ((acc.toList ++ members).map (·.1)) = true → Value.rereadMembers members = some members →
-    (Value.membersText members).length + 1 ≤ fuel →
-    ∃ s, Parser.members fuel (Value.membersText members ++ '}' :: rest) acc s0 =
-      .ok (.table ⟨acc.toList ++ members⟩) rest s
-  | [], _, _, _, _, hne, _, _, _, _, _ => absurd rfl hne
-  | _ :: _, 0, _, _, _, _, _, _, _, _, hlen => absurd hlen (by omega)
-  | [(k, v)], f + 1, s0, rest, acc, _, hrest, hvalid, hkeys, hre, hlen => by
-    have hv : v.Valid := by
-      simp only [membersValid, Bool.and_true] at hvalid
-      exact hvalid
-    obtain ⟨w, us, hw, -, hws⟩ := rereadMembers_cons hre
-    simp only [List.cons.injEq, Prod.mk.injEq, true_and] at hws
-    obtain ⟨rfl, -⟩ := hws
-    rw [Value.membersText_singleton] at hlen ⊢
-    simp only [Value.memberText, List.length_cons, List.length_append] at hlen
-    simp only [Value.memberText, List.cons_append, List.append_assoc]
-    obtain ⟨ks, hks⟩ := strict_string_escape k.toList (':' :: ((Value.render v).toList ++ '}' :: rest)) "" 0
-    obtain ⟨s1, hs1⟩ := strict_render v f (s0 + 1 + 2 * ks + 1) ('}' :: rest) (restOk_close _ _ (by simp)) hv hw
-      (by omega)
-    refine ⟨s1 + 1, ?_⟩
-    rw [Parser.members.eq_2, hks]
-    simp only [String.empty_append, String.ofList_toList]
-    rw [keyFollows_of_keysIncrease acc k v [] hkeys]
-    simp only [ite_true]
-    rw [hs1]
-    simp [Parser.array_push_eq]
-  | (k, v) :: m :: ms, f + 1, s0, rest, acc, _, hrest, hvalid, hkeys, hre, hlen => by
-    have hv : v.Valid := by
-      simp only [membersValid, Bool.and_eq_true] at hvalid
-      exact hvalid.1
-    have hvalid' : membersValid (m :: ms) = true := by
-      simp only [membersValid, Bool.and_eq_true] at hvalid ⊢
-      exact hvalid.2
-    obtain ⟨w, us, hw, hus, hws⟩ := rereadMembers_cons hre
-    simp only [List.cons.injEq, Prod.mk.injEq, true_and] at hws
-    obtain ⟨rfl, rfl⟩ := hws
-    rw [Value.membersText_cons] at hlen ⊢
-    simp only [Value.memberText, List.length_cons, List.length_append] at hlen
-    simp only [Value.memberText, List.cons_append, List.append_assoc]
-    obtain ⟨ks, hks⟩ := strict_string_escape k.toList
-      (':' :: ((Value.render v).toList ++ ',' :: (Value.membersText (m :: ms) ++ '}' :: rest))) "" 0
-    obtain ⟨s1, hs1⟩ := strict_render v f (s0 + 1 + 2 * ks + 1) (',' :: (Value.membersText (m :: ms) ++ '}' :: rest))
-      (restOk_close _ _ (by simp)) hv hw (by omega)
-    obtain ⟨s2, hs2⟩ := strict_members (m :: ms) f (s1 + 1) rest (acc.push (k, v)) (by simp) hrest hvalid'
-      (by simpa using hkeys) hus (by omega)
-    refine ⟨s2, ?_⟩
-    rw [Parser.members.eq_2, hks]
-    simp only [String.empty_append, String.ofList_toList]
-    rw [keyFollows_of_keysIncrease acc k v (m :: ms) hkeys]
-    simp only [ite_true]
-    rw [hs1]
-    simp only
-    rw [hs2]
-    simp [Parser.array_push_eq]
+        cases Value.rereadMembers (m :: ms) <;> simp [array_push_eq]
 
 end
 
@@ -974,59 +589,6 @@ theorem read_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) 
     rwa [List.append_nil] at this
   rw [hs, h']
   rfl
-
-theorem reread_of_read (v : Value) (hvalid : v.Valid) (h : Rfc8259.read? v.render = some v) :
-    v.reread = some v := by
-  have hlen := length_le_utf8ByteSize v.render
-  have hspec := spec_render v (2 * v.render.utf8ByteSize + 2) [] (.inl rfl) hvalid (by omega)
-  rw [List.append_nil] at hspec
-  have hs : Rfc8259.skipWs v.render.toList = v.render.toList := by
-    have := skipWs_render v []
-    rwa [List.append_nil] at this
-  unfold Rfc8259.read? Rfc8259.read at h
-  rw [hs] at h
-  cases hval : Rfc8259.value (2 * v.render.utf8ByteSize + 2) v.render.toList with
-  | error e =>
-    rw [hval] at h
-    cases h
-  | ok p =>
-    obtain ⟨w, r⟩ := p
-    rw [hval] at h hspec
-    simp only [Except.toOption] at hspec
-    simp only at h
-    split at h
-    · simp only [Except.toOption, Option.some.injEq] at h
-      cases hre : v.reread with
-      | none => rw [hre] at hspec; cases hspec
-      | some u =>
-        rw [hre] at hspec
-        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at hspec
-        rw [← hspec.1, h]
-    · cases h
-
-theorem parse_render_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) :
-    Value.parse v.render = .ok v := by
-  have hlen := length_le_utf8ByteSize v.render
-  obtain ⟨s, hs⟩ := strict_render v (2 * v.render.utf8ByteSize + 2) v.render.utf8ByteSize [] (.inl rfl) hvalid hre
-    (by omega)
-  rw [List.append_nil] at hs
-  unfold Value.parse Value.parseCosted
-  simp only
-  rw [hs]
-
-theorem parse_fixed (s : String) (v : Value) :
-    Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
-  constructor
-  · intro h
-    obtain ⟨hr, hvalid⟩ := parse_sound s v h
-    have hre := parse_reread s v h
-    refine ⟨?_, hr⟩
-    rw [← hr]
-    exact read_of_reread v hvalid hre
-  · rintro ⟨hread, hr⟩
-    subst hr
-    have hvalid := Rfc8259.read?_valid _ _ hread
-    exact parse_render_of_reread v hvalid (reread_of_read v hvalid hread)
 
 mutual
 
@@ -1071,8 +633,5 @@ end
 
 theorem spec_read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
   read_of_reread v h (reread_self v h)
-
-theorem render_parse (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
-  parse_render_of_reread v h (reread_self v h)
 
 end ExactJSON

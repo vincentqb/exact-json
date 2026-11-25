@@ -62,7 +62,7 @@ def encodeLines {α : Type u} [ToValue α] : Array α → String := sorry
 
 def decodeLines {α : Type u} [ToValue α] [FromValue α] : Nat → ByteArray → Except String (Array α) := sorry
 
-instance Value.instBEq : BEq Value := sorry
+instance Value.instDecidableEq : DecidableEq Value := sorry
 
 protected def LocalDate.toString : LocalDate → String := sorry
 
@@ -323,9 +323,6 @@ theorem decodeLines_eq {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat
       Value.readLines .canonical maxDepth b = .ok (as.map toValue) ∧ ∀ a ∈ as, fromValue? (toValue a) = .ok a := by
   sorry
 
-theorem beq_iff (v w : Value) : (v == w) = true ↔ v = w := by
-  sorry
-
 theorem localDate_text (d : LocalDate) : d.toString = d.text := by
   sorry
 
@@ -566,10 +563,6 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
 @[kills encodeLines_eq] theorem encodeLines_eq_rejects_constant :
     ¬ ∀ {α : Type u} [ToValue α] (as : Array α),
       (fun {β : Type u} [ToValue β] (_ : Array β) => "x") as = (fun (_ : Array Value) => "") (as.map toValue) := by
-  sorry
-
-@[kills beq_iff] theorem beq_iff_rejects_true :
-    ¬ ∀ (v w : Value), @BEq.beq Value ⟨fun _ _ => true⟩ v w = true ↔ v = w := by
   sorry
 
 @[kills localDate_text] theorem localDate_text_rejects_empty :

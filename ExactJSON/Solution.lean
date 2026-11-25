@@ -2,8 +2,6 @@ module
 
 public import ExactJSON.Codec
 public import ExactJSON.Printable
-public import ExactJSON.Sound
-public import ExactJSON.Fixed
 public import ExactJSON.Write
 public import ExactJSON.CodecLaws
 public import ExactJSON.Lawful
@@ -12,7 +10,6 @@ public import ExactJSON.FloatCodec
 public import ExactJSON.ShapesCodec
 public import ExactJSON.LinesLaws
 public import ExactJSON.TypedLaws
-public import ExactJSON.ApiLaws
 
 public section
 
