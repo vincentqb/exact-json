@@ -8,7 +8,7 @@
    "rev": "3d5035043af16034bac2a92a7ccbcb2cee68ffa9",
    "name": "software_challenge",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "main",
+   "inputRev": "3d5035043af16034bac2a92a7ccbcb2cee68ffa9",
    "inherited": false,
    "configFile": "lakefile.lean"}],
  "name": "exactjson",
