@@ -263,10 +263,10 @@ theorem numberValue_decimalText (d : Decimal) (hd : d.digits ≠ 0) :
       simp only [List.length_cons] at hn
       omega
 
-theorem numberValue_text (d : Decimal) (h : d.isNormal = true) :
+theorem numberValue_text (d : Decimal) :
     Rfc8259.numberValue d.text.toList = .ok (.decimal d) := by
   by_cases hd : d.digits = 0
-  · have hz := Decimal.eq_zero_of_isNormal d h hd
+  · have hz := Decimal.eq_zero d hd
     have hread := numberValue_fixed d.negative ['0'] ['0'] (by simp) (by decide) (by decide) (by simp) (by decide)
     have h00 : Rfc8259.digitsValue (['0'] ++ ['0']) = 0 := by
       rw [show (['0'] ++ ['0'] : List Char) = List.replicate 2 '0' by simp [List.replicate]]
@@ -281,6 +281,6 @@ theorem numberValue_text (d : Decimal) (h : d.isNormal = true) :
   · obtain ⟨j, hj⟩ := numberValue_decimalText d hd
     rw [hj]
     unfold decimalResult
-    rw [Decimal.normalize_of_isNormal d h hd j]
+    rw [Decimal.normalize_of_normal d hd j]
 
 end ExactJSON

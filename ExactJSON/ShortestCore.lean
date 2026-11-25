@@ -116,7 +116,7 @@ theorem shortest_strong (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M 
     generalize stripZeros 20 c (big - p + 1) = sd at hj1 hj2 hnt0
     obtain ⟨digits, exponent⟩ := sd
     simp only at hj1 hj2 hnt0
-    refine ⟨_, rfl, rfl, ?_⟩
+    refine ⟨_, rfl, Decimal.normalize_negative _ _ _, ?_⟩
     simp only
     have hp1 : 1 ≤ p := hpb.1
     have hp17 : p ≤ 17 := hpb.2
@@ -180,6 +180,8 @@ theorem shortest_strong (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M 
     have hc0 : c ≠ 0 := by have := Nat.one_le_pow (p - 1) 10 (by decide); omega
     have hc20 : c < 10 ^ 20 := Nat.lt_of_le_of_lt hc_le (Nat.pow_lt_pow_right (by decide) (by omega))
     have hnt := hnt0 hc0 hc20
+    rw [Decimal.normalize_of_mod hnt]
+    simp only
     have hdig0 : digits ≠ 0 := by
       intro h; rw [h, Nat.zero_mul] at hj1; exact hc0 hj1
     have hval : (digits : Rat) * 10 ^ exponent = (c : Rat) * 10 ^ (big - p + 1) := by

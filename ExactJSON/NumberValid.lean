@@ -12,8 +12,6 @@ theorem Rfc8259.numberValue_valid (token : List Char) (v : Value) (h : Rfc8259.n
   unfold Rfc8259.numberValue at h
   simp only at h
   repeat' (split at h <;> (try cases h))
-  all_goals first
-    | rfl
-    | exact Decimal.normalize_isNormal _ _ _
+  all_goals rfl
 
 end ExactJSON

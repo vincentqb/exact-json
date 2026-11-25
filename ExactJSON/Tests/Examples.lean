@@ -87,14 +87,22 @@ def errorOf {α : Type} (e : Except String α) : String :=
 
 #guard (Value.table #[("b", .integer 1), ("a", .integer 2)]).render == "{\"b\":1,\"a\":2}"
 #guard !(Value.table #[("b", .integer 1), ("a", .integer 2)]).isValid
-#guard (Value.decimal ⟨false, 150, -2⟩).render == "1.50"
-#guard !(Value.decimal ⟨false, 150, -2⟩).isValid
-#guard !(parseText (Value.array #[.decimal ⟨false, 150, -2⟩]).render).isOk
-#guard (Value.decimal ⟨false, 10, 0⟩).render == (Value.decimal ⟨false, 1, 1⟩).render
+#guard (Value.decimal (Decimal.normalize false 150 (-2))).render == "1.5"
+#guard (Value.decimal (Decimal.normalize false 10 0)).render == "10.0"
+#guard Decimal.normalize false 10 0 == ⟨false, 1, 1, by decide⟩
+#guard Decimal.normalize true 0 7 == ⟨true, 0, 0, by decide⟩
+#guard gives (decodeText "1.5" : Except String Decimal) ⟨false, 15, -1, by decide⟩
+#guard gives (decodeText "0.1000000000000000055511151231257827" : Except String Decimal)
+  ⟨false, 1000000000000000055511151231257827, -34, by decide⟩
+#guard encode (⟨false, 1000000000000000055511151231257827, -34, by decide⟩ : Decimal) ==
+  "0.1000000000000000055511151231257827"
+#guard errorOf (decodeText "1" : Except String Decimal) == "expected a decimal, found integer 1"
+#guard errorOf (decodeText "1.50" : Except String Decimal) ==
+  "at character 0: not the canonical text of this decimal: write 1.5"
 #guard gives (parseText "0.1000000000000000055511151231257827")
-  (.decimal ⟨false, 1000000000000000055511151231257827, -34⟩)
-#guard gives (parseText "-0.0") (.decimal ⟨true, 0, 0⟩)
-#guard gives (parseText "1.0e400") (.decimal ⟨false, 1, 400⟩)
+  (.decimal ⟨false, 1000000000000000055511151231257827, -34, by decide⟩)
+#guard gives (parseText "-0.0") (.decimal ⟨true, 0, 0, by decide⟩)
+#guard gives (parseText "1.0e400") (.decimal ⟨false, 1, 400, by decide⟩)
 #guard gives (decodeText "0.1" : Except String Float) 0.1
 #guard errorOf (decodeText "0.1000000000000000055511151231257827" : Except String Float) ==
   "expected the shortest decimal of a float: write 0.1, not 0.1000000000000000055511151231257827"
@@ -250,7 +258,7 @@ structure Bench where
 #guard errorOf (Value.read .any 100 (String.ofList (List.replicate 100000 '[')).toUTF8) == "nested deeper than 100"
 #guard errorOf (Value.read .any 100 ("\"" ++ String.ofList (List.replicate 1000 '[') ++ "\"").toUTF8) == "ok"
 #guard errorOf (Value.read .any 10 ⟨#[0x22, 0xFF, 0x22]⟩) == "not UTF-8"
-#guard gives (Value.read .any 10 " [ 1 , 2.50 ] ".toUTF8) (.array #[.integer 1, .decimal ⟨false, 25, -1⟩])
+#guard gives (Value.read .any 10 " [ 1 , 2.50 ] ".toUTF8) (.array #[.integer 1, .decimal ⟨false, 25, -1, by decide⟩])
 #guard !(Value.read .canonical 10 " [ 1 , 2.50 ] ".toUTF8).isOk
 #guard gives (("2]".toUTF8.foldl Reader.step ("[1,".toUTF8.foldl Reader.step (Reader.start .canonical 10))).finish)
   (.array #[.integer 1, .integer 2])

@@ -804,7 +804,7 @@ theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), 
     obtain ⟨c, hc, hk⟩ := decimalText_head d
     obtain ⟨t, ht⟩ := exists_cons_of_head? hc
     rw [ht, List.cons_append, strict_value_number f s0 c _ hk, ← List.cons_append, ← ht]
-    exact strict_number_text s0 _ rest _ (numberChars_decimalText d) hrest (numberValue_text d hvalid)
+    exact strict_number_text s0 _ rest _ (numberChars_decimalText d) hrest (numberValue_text d)
       (render_decimal_toList d)
   | .array ⟨[]⟩, f + 1, s0, rest, _, _, _, _ => ⟨s0 + 2, by
       rw [Value.text_array]
@@ -1036,7 +1036,7 @@ theorem reread_self : (v : Value) → v.Valid → v.reread = some v
   | .integer _, _ => rfl
   | .boolean _, _ => rfl
   | .decimal d, h => by
-    simp only [Value.reread, Value.rereadDecimal, numberValue_text d h]
+    simp only [Value.reread, Value.rereadDecimal, numberValue_text d]
   | .array ⟨items⟩, h => by
     simp only [Value.reread, rereadItems_self items h]
     rfl

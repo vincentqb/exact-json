@@ -187,4 +187,13 @@ example (x : Tree) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 
 #guard !(decodeText "{\"a\":1,\"b\":null}" : Except String Req2).isOk
 #guard !(decodeText "{\"b\":\"x\"}" : Except String Req2).isOk
 
+structure Price where
+  amount : Decimal
+  cost? : Option Decimal
+  deriving ToValue, FromValue, LawfulValue
+
+example (x : Price) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+
+#guard encode ({ amount := ⟨false, 1999, -2, by decide⟩, cost? := none } : Price) == "{\"amount\":19.99}"
+
 end Domain

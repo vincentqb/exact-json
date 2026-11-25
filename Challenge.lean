@@ -12,25 +12,24 @@ public section
 /-!
 # Canonical, strictly typed JSON
 
-A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it, a number with a point or
-an exponent as the exact decimal it spells, `Value.decimal` in normal form, `Decimal.isNormal`) that
-writing what it holds gives back. A value's text is `write` of its parts: in strings, escapes for
-`"`, `\`, control characters and line separators (`mustEscape`) and no others, an integer in
-decimal, a decimal laid out by `Decimal.text`, keys as they come. Every valid value's text is JSON
-that holds that value, and no text holds a control character (below U+0020, or U+007F to U+009F)
-or a line or paragraph separator (U+2028, U+2029). Reading takes bytes in a spelling
+A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it, a number with a point or an
+exponent as the exact decimal it spells, a `Decimal`, in normal form by construction:
+`Decimal.Normal`) that writing what it holds gives back. A value's text is `write` of its parts: in
+strings, escapes for `"`, `\`, control characters and line separators (`mustEscape`) and no others,
+an integer in decimal, a decimal laid out by `Decimal.text`, keys as they come. Every valid value's
+text is JSON that holds that value, and no text holds a control character (below U+0020, or U+007F
+to U+009F) or a line or paragraph separator (U+2028, U+2029). Reading takes bytes in a spelling
 (`Spelling.Spells`): `.canonical` takes exactly the UTF-8 encodings of canonical texts, and `.any`
-those of JSON texts, holding what RFC 8259 reads in them; either takes only values no deeper than
-a given bound, and reads a byte at a time (`Reader`), so a text can arrive in pieces. JSON Lines
-is texts each ended by a line feed, read line by line in either spelling. Typed decoding reads the
+those of JSON texts, holding what RFC 8259 reads in them; either takes only values no deeper than a
+given bound, and reads a byte at a time (`Reader`), so a text can arrive in pieces. JSON Lines is
+texts each ended by a line feed, read line by line in either spelling. Typed decoding reads the
 canonical text of a value that the type writes and reads back as itself, so for a type whose
 instances are lawful (`LawfulValue`: they read back what they write, as valid values) it reads
-exactly what typed encoding writes. Each of the library's instances writes the value its codec
-law states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads
-back what it writes; a finite float is written as the shortest decimal that reads back as it, the
-nearest of those, ties to an even last digit; derived instances write the shapes their examples
-state, and are lawful; and dates and times are written in one RFC 3339 form each and read in that
-form only.
+exactly what typed encoding writes. Each of the library's instances writes the value its codec law
+states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads back what
+it writes; a finite float is written as the shortest decimal that reads back as it, the nearest of
+those, ties to an even last digit; derived instances write the shapes their examples state, and are
+lawful; and dates and times are written in one RFC 3339 form each and read in that form only.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names; and the command line tool beyond the functions it calls.
 -/
@@ -157,6 +156,10 @@ instance instToValueInt64 : ToValue Int64 := sorry
 
 instance instFromValueInt64 : FromValue Int64 := sorry
 
+instance instToValueDecimal : ToValue Decimal := sorry
+
+instance instFromValueDecimal : FromValue Decimal := sorry
+
 instance instToValueChar : ToValue Char := sorry
 
 instance instFromValueChar : FromValue Char := sorry
@@ -257,6 +260,10 @@ theorem codec_int32 (n : Int32) :
 
 theorem codec_int64 (n : Int64) :
     toValue n = (.integer n.toInt : Value) ∧ ∀ w : Value, fromValue? w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+theorem codec_decimal (d : Decimal) :
+    toValue d = (.decimal d : Value) ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = (.decimal d : Value) := by
   sorry
 
 theorem codec_char (c : Char) :
@@ -491,6 +498,11 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
 @[kills codec_int64] theorem codec_int64_rejects_null :
     ¬ ∀ (n : Int64), @toValue Int64 ⟨fun _ => .null⟩ n = (.integer n.toInt : Value) ∧
       ∀ w : Value, @fromValue? Int64 ⟨fun _ => .error ""⟩ w = .ok n ↔ w = (.integer n.toInt : Value) := by
+  sorry
+
+@[kills codec_decimal] theorem codec_decimal_rejects_null :
+    ¬ ∀ (d : Decimal), @toValue Decimal ⟨fun _ => .null⟩ d = (.decimal d : Value) ∧
+      ∀ w : Value, @fromValue? Decimal ⟨fun _ => .error ""⟩ w = .ok d ↔ w = (.decimal d : Value) := by
   sorry
 
 @[kills codec_char] theorem codec_char_rejects_null :

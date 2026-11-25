@@ -8,16 +8,6 @@ namespace ExactJSON
 
 namespace Decimal
 
-theorem strip_normal (m : Nat) (q : Int) (hm : 0 < m) : (strip m q).1 % 10 ≠ 0 ∧ 0 < (strip m q).1 := by
-  induction m using Nat.strongRecOn generalizing q with
-  | _ m ih =>
-    rw [strip_eq]
-    split
-    · rename_i h
-      exact ih (m / 10) (by omega) (q + 1) (by omega)
-    · rename_i h
-      exact ⟨by omega, hm⟩
-
 theorem strip_mul_pow (c : Nat) (hc : c % 10 ≠ 0) (j : Nat) (q : Int) :
     strip (c * 10 ^ j) (q - j) = (c, q) := by
   induction j generalizing q with
@@ -37,36 +27,53 @@ theorem strip_mul_pow (c : Nat) (hc : c % 10 ≠ 0) (j : Nat) (q : Int) :
     rw [hdiv, show q - ((j + 1 : Nat) : Int) + 1 = q - (j : Int) by omega]
     exact ih q
 
-theorem normalize_zero (negative : Bool) (q : Int) : normalize negative 0 q = ⟨negative, 0, 0⟩ := by
+theorem eq_of_parts {d e : Decimal} (h1 : d.negative = e.negative) (h2 : d.digits = e.digits)
+    (h3 : d.exponent = e.exponent) : d = e := by
+  cases d
+  cases e
+  simp_all
+
+theorem digits_mod {d : Decimal} (hd : d.digits ≠ 0) : d.digits % 10 ≠ 0 := by
+  have := d.normal
+  unfold Normal at this
+  rwa [ite_eq_right hd] at this
+
+theorem exponent_zero {d : Decimal} (hd : d.digits = 0) : d.exponent = 0 := by
+  have := d.normal
+  unfold Normal at this
+  rwa [ite_eq_left hd] at this
+
+theorem normal_of_mod {c : Nat} (hc : c % 10 ≠ 0) (q : Int) : Normal c q := by
+  unfold Normal
+  rw [ite_eq_right (by omega)]
+  exact hc
+
+theorem normalize_zero (negative : Bool) (q : Int) : normalize negative 0 q = ⟨negative, 0, 0, by decide⟩ := by
   simp [normalize]
 
+theorem normalize_negative (negative : Bool) (m : Nat) (q : Int) : (normalize negative m q).negative = negative := by
+  unfold normalize
+  split <;> rfl
+
 theorem normalize_mul_pow (negative : Bool) (c : Nat) (hc : c % 10 ≠ 0) (j : Nat) (q : Int) :
-    normalize negative (c * 10 ^ j) (q - j) = ⟨negative, c, q⟩ := by
+    normalize negative (c * 10 ^ j) (q - j) = ⟨negative, c, q, normal_of_mod hc q⟩ := by
   have hc0 : 0 < c := by omega
   have hpos : c * 10 ^ j ≠ 0 := Nat.pos_iff_ne_zero.mp (Nat.mul_pos hc0 (Nat.pow_pos (by decide)))
-  simp only [normalize, hpos, ite_false, strip_mul_pow c hc j q]
-
-theorem normalize_isNormal (negative : Bool) (m : Nat) (q : Int) : (normalize negative m q).isNormal = true := by
   unfold normalize
-  split
-  · rfl
-  · rename_i hm
-    obtain ⟨h1, h2⟩ := strip_normal m q (Nat.pos_of_ne_zero hm)
-    simp only [isNormal, Nat.pos_iff_ne_zero.mp h2, ite_false, bne_iff_ne, ne_eq]
-    exact h1
+  rw [dite_eq_right hpos]
+  exact eq_of_parts (by rfl) (by simp [strip_mul_pow c hc j q]) (by simp [strip_mul_pow c hc j q])
 
-theorem normalize_of_isNormal (d : Decimal) (h : d.isNormal = true) (hd : d.digits ≠ 0) (j : Nat) :
+theorem normalize_of_normal (d : Decimal) (hd : d.digits ≠ 0) (j : Nat) :
     normalize d.negative (d.digits * 10 ^ j) (d.exponent - j) = d := by
-  have hc : d.digits % 10 ≠ 0 := by
-    simp only [isNormal, hd, ite_false, bne_iff_ne, ne_eq] at h
-    exact h
-  rw [normalize_mul_pow _ _ hc]
+  rw [normalize_mul_pow _ _ (digits_mod hd)]
 
-theorem eq_zero_of_isNormal (d : Decimal) (h : d.isNormal = true) (hd : d.digits = 0) :
-    d = ⟨d.negative, 0, 0⟩ := by
-  simp only [isNormal, hd, ite_true, beq_iff_eq] at h
-  cases d
-  simp_all
+theorem eq_zero (d : Decimal) (hd : d.digits = 0) : d = ⟨d.negative, 0, 0, by decide⟩ :=
+  eq_of_parts rfl hd (exponent_zero hd)
+
+theorem normalize_of_mod {c : Nat} (hc : c % 10 ≠ 0) (negative : Bool) (q : Int) :
+    normalize negative c q = ⟨negative, c, q, normal_of_mod hc q⟩ := by
+  have := normalize_mul_pow negative c hc 0 q
+  simpa using this
 
 end Decimal
 

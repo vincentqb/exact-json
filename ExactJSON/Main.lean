@@ -55,6 +55,7 @@ def typedCheck : String → Option (Bool → Nat → ByteArray → Except String
   | "Int32" => some (checkAs (Int32))
   | "Int64" => some (checkAs (Int64))
   | "Float" => some (checkAs Float)
+  | "Decimal" => some (checkAs Decimal)
   | "Char" => some (checkAs Char)
   | "Array Nat" => some (checkAs (Array Nat))
   | "List Nat" => some (checkAs (List Nat))

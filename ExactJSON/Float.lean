@@ -94,7 +94,7 @@ def shortest (x : Float) : Option Decimal :=
       | none => none
       | some d =>
         let (digits, exponent) := stripZeros 20 d (big - p + 1)
-        some { negative, digits, exponent }
+        some (Decimal.normalize negative digits exponent)
 
 end FloatText
 

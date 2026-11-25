@@ -67,7 +67,7 @@ theorem fromValue_float_iff (w : Value) (x : Float) :
         · cases h
       · cases h
     · intro hs
-      rw [floatsReadBack ofScientificRounds x (finite_of_shortest hs) d hs]
+      rw [floatsReadBack x (finite_of_shortest hs) d hs]
       simp only [hs]
       simp [pure_eq_ok]
   · simp [hnan, pure_eq_ok, eq_comm]

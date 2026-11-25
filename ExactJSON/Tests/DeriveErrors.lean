@@ -119,4 +119,24 @@ is false
 #guard_msgs in
 example : LocalDate := { year := 2023, month := 2, day := 29 }
 
+/--
+error: could not synthesize default value for field 'normal' of 'ExactJSON.Decimal' using tactics
+---
+error: Tactic `decide` proved that the proposition
+  Decimal.Normal 150 (-2)
+is false
+-/
+#guard_msgs in
+example : Decimal := { negative := false, digits := 150, exponent := -2 }
+
+/--
+error: could not synthesize default value for field 'normal' of 'ExactJSON.Decimal' using tactics
+---
+error: Tactic `decide` proved that the proposition
+  Decimal.Normal 0 3
+is false
+-/
+#guard_msgs in
+example : Decimal := { negative := true, digits := 0, exponent := 3 }
+
 #check_failure (encode (some (none : Option Nat)))

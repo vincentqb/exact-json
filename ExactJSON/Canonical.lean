@@ -44,7 +44,7 @@ def digitCount (d : Decimal) : Nat := (Nat.toDigits 10 d.digits).length
 def ReadsBack (d : Decimal) (x : Float) : Prop := Rfc8259.floatOf? d.negative d.digits d.exponent = some x
 
 def IsShortest (d : Decimal) (x : Float) : Prop :=
-  d.ReadsBack x ∧ (d.digits = 0 → d.exponent = 0) ∧
+  d.ReadsBack x ∧
     ∀ d' : Decimal, d'.ReadsBack x →
       d.digitCount < d'.digitCount ∨
         (d.digitCount = d'.digitCount ∧

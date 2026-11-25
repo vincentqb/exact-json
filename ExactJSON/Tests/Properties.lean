@@ -81,7 +81,7 @@ def genInt : Gen Int := do
 
 def genDecimal : Gen Decimal := do
   match ← below 3 with
-  | 0 => return (FloatText.shortest (← genFloat false)).getD ⟨false, 15, -1⟩
+  | 0 => return (FloatText.shortest (← genFloat false)).getD ⟨false, 15, -1, by decide⟩
   | 1 =>
     let m ← below 100000
     let zeros ← below 4
@@ -114,7 +114,7 @@ partial def genValue (depth : Nat) : Gen Value := do
 def genInvalid (depth : Nat) : Gen Value := do
   let v ← genValue depth
   match ← below 3 with
-  | 0 => return .array #[v, .decimal (← pick #[⟨false, 150, -2⟩, ⟨false, 10, 0⟩, ⟨true, 0, 3⟩, ⟨false, 0, -1⟩])]
+  | 0 => return .table #[("b", v), ("b", v)]
   | 1 => return .table #[("b", v), ("a", v)]
   | _ => return .table #[("a", v), ("a", v)]
 
@@ -276,7 +276,7 @@ def instanceLaws (seed count : Nat) : IO Unit := do
     match (fromValue? v : Except String Sample) with
     | .ok b => check (toValue b == v) s!"fromValue? ∘ toValue changes {v.render}"
     | .error e => throw (IO.userError s!"fromValue? rejects {v.render}: {e}")
-    let bad := [setKey v "zz" .null, setKey v "count" (.decimal ⟨false, 1, 0⟩), setKey v "label" (.integer 1)] ++
+    let bad := [setKey v "zz" .null, setKey v "count" (.decimal ⟨false, 1, 0, by decide⟩), setKey v "label" (.integer 1)] ++
       (if a.note?.isNone then [setKey v "note" .null] else [])
     for w in bad do
       check (!(fromValue? w : Except String Sample).isOk) s!"fromValue? accepts {w.render}"

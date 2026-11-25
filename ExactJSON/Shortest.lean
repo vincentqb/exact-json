@@ -400,65 +400,6 @@ theorem decompose_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M :
     have : x.toBits.toNat / 2 ^ 52 % 2 ^ 11 ≤ 2046 := by omega
     omega
 
-theorem shortest_spec (x : Float) (hx : finiteFloat x = true) (neg : Bool) (M : Nat) (e : Int)
-    (hd : decompose x = (neg, M, e)) (hM : M ≠ 0) :
-    ∃ dd : Decimal, shortest x = some dd ∧ dd.negative = neg ∧
-      fits (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).1
-        (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).2.2
-        (scale e dd.exponent).1 (scale e dd.exponent).2 (M % 2 == 0) dd.digits = true := by
-  obtain ⟨hM53, hrange⟩ := decompose_spec x hx neg M e hd
-  obtain ⟨hr1, hr2⟩ := hrange hM
-  obtain ⟨hE, -⟩ := decimalExponent_spec M e (Nat.pos_of_ne_zero hM) hr1 hr2
-  generalize hlc : (decide (M = 2 ^ 52) && decide (e > -1074)) = lc
-  generalize hincl : (M % 2 == 0) = incl
-  generalize hbig : decimalExponent M e = big at hE
-  have h17 : (candidate M e lc incl (big - (17 : Nat) + 1)).isSome = true := by
-    apply candidate_isSome (Nat.pos_of_ne_zero hM)
-    rw [show big - ((17 : Nat) : Int) + 1 = big - 16 by omega]
-    have w4 := scale_wide M e big hE 4 (by omega)
-    have w2 : lc = true → (scale e (big - 16)).2 < 2 * (scale e (big - 16)).1 := by
-      intro h
-      have hM2 : M = 2 ^ 52 := by
-        rw [h] at hlc
-        simp only [Bool.and_eq_true, decide_eq_true_eq] at hlc
-        exact hlc.1
-      exact scale_wide M e big hE 2 (by rw [hM2]; decide)
-    generalize scale e (big - 16) = ab at w4 w2 ⊢
-    obtain ⟨a, b⟩ := ab
-    unfold roundingInterval
-    have d1 : 4 * M - (4 * M - 2) = 2 := by omega
-    have d2 : 4 * M + 2 - 4 * M = 2 := by omega
-    cases lc with
-    | false =>
-      left
-      simp only [Bool.false_eq_true, ite_false, d1, d2] at w4 ⊢
-      constructor <;> omega
-    | true =>
-      right
-      have := w2 rfl
-      simp only [d2]
-      omega
-  have hp := searchDigits_spec (fun p => (candidate M e lc incl (big - p + 1)).isSome) 5 1 17 h17
-    (by decide) (by decide)
-  unfold shortest
-  simp only [hx, Bool.not_true, Bool.false_eq_true, ite_false]
-  rw [hd]
-  simp only [hM, ite_false, hlc, hincl, hbig]
-  generalize searchDigits (fun p => (candidate M e lc incl (big - p + 1)).isSome) 5 1 17 = p at hp
-  cases hc : candidate M e lc incl (big - p + 1) with
-  | none => rw [hc] at hp; cases hp
-  | some d =>
-    simp only
-    obtain ⟨j, hj1, hj2⟩ := stripZeros_spec 20 d (big - p + 1)
-    generalize hs : stripZeros 20 d (big - p + 1) = sd at hj1 hj2
-    obtain ⟨digits, exponent⟩ := sd
-    simp only at hj1 hj2 ⊢
-    refine ⟨_, rfl, rfl, ?_⟩
-    have hf := candidate_fits hc
-    rw [hj1, fits_scale] at hf
-    rw [hj2]
-    exact hf
-
 theorem fits_le {low high a b : Nat} {incl : Bool} {d : Nat} (h : fits low high a b incl d = true) :
     low * a ≤ d * b ∧ d * b ≤ high * a := by
   unfold fits at h

@@ -50,7 +50,7 @@ theorem floatOf?_zero {x : Float} {neg : Bool} {e : Int}
   rw [floatOf?_zero_eq, eq_zero_of_decompose hd]
 
 theorem shortest_zero {x : Float} (hx : finiteFloat x = true) {neg : Bool} {e : Int}
-    (hd : decompose x = (neg, 0, e)) : shortest x = some ⟨neg, 0, 0⟩ := by
+    (hd : decompose x = (neg, 0, e)) : shortest x = some ⟨neg, 0, 0, by decide⟩ := by
   unfold shortest
   simp only [hx, Bool.not_true, Bool.false_eq_true, ite_false]
   rw [hd]
@@ -91,19 +91,19 @@ theorem neg_zero_ne_zero : (-0.0 : Float) ≠ 0.0 := by
 
 theorem rat_abs_zero_sub : ((0 : Rat) - 0).abs = 0 := by rw [Rat.sub_self, Rat.abs_zero]
 
-theorem zero_digitCount (neg : Bool) : (⟨neg, 0, 0⟩ : Decimal).digitCount = 1 := by
+theorem zero_digitCount (neg : Bool) : (⟨neg, 0, 0, by decide⟩ : Decimal).digitCount = 1 := by
   unfold Decimal.digitCount
   have h1 := (FloatText.digits_length_le_iff 0 1 (by decide)).mpr (by decide)
   have h2 := FloatText.digits_length_pos 0
   simp only at h1 h2 ⊢
   omega
 
-theorem zero_value (neg : Bool) : (⟨neg, 0, 0⟩ : Decimal).value = 0 := by
+theorem zero_value (neg : Bool) : (⟨neg, 0, 0, by decide⟩ : Decimal).value = 0 := by
   unfold Decimal.value; simp
 
 theorem isShortest_zero {x : Float} {neg : Bool} {e : Int}
-    (hd : decompose x = (neg, 0, e)) : (⟨neg, 0, 0⟩ : Decimal).IsShortest x := by
-  refine ⟨floatOf?_zero hd, fun _ => rfl, fun d' _ => ?_⟩
+    (hd : decompose x = (neg, 0, e)) : (⟨neg, 0, 0, by decide⟩ : Decimal).IsShortest x := by
+  refine ⟨floatOf?_zero hd, fun d' _ => ?_⟩
   rw [zero_digitCount, zero_value, floatValue_zero hd]
   have hn := FloatText.digits_length_pos d'.digits
   unfold Decimal.digitCount
@@ -117,11 +117,8 @@ theorem isShortest_zero {x : Float} {neg : Bool} {e : Int}
     · exact Or.inr ⟨h2, Or.inr rfl⟩
 
 theorem decimal_eq {d D : Decimal} (h1 : d.negative = D.negative) (h2 : d.digits = D.digits)
-    (h3 : d.exponent = D.exponent) : d = D := by
-  cases d
-  cases D
-  simp only at h1 h2 h3
-  rw [h1, h2, h3]
+    (h3 : d.exponent = D.exponent) : d = D :=
+  Decimal.eq_of_parts h1 h2 h3
 
 theorem shortest_isShortest (x : Float) (hx : finiteFloat x = true) (D : Decimal) (hs : shortest x = some D) :
     D.IsShortest x := by
@@ -134,15 +131,10 @@ theorem shortest_isShortest (x : Float) (hx : finiteFloat x = true) (D : Decimal
   · obtain ⟨D', hs', hneg, hfit, hall⟩ := shortest_strong x hx neg M e hd hM
     rw [hs, Option.some.injEq] at hs'
     subst hs'
-    refine ⟨?_, ?_, ?_⟩
+    refine ⟨?_, ?_⟩
     · show Rfc8259.floatOf? D.negative D.digits D.exponent = some x
       rw [hneg]
       exact floatOf?_of_roundsTo hx hd hM hfit
-    · intro h0
-      exfalso
-      obtain ⟨-, hr⟩ := decompose_spec x hx neg M e hd
-      obtain ⟨hr1, hr2⟩ := hr hM
-      exact (interval_bounds M e hM hr1 hr2 _ _ _ _ hfit).1 h0
     · intro d' hd'
       obtain ⟨hn', hr'⟩ := floatOf?_sound hx hd hM hd'
       unfold Decimal.digitCount
@@ -171,7 +163,7 @@ theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortes
     rw [shortest_zero hx hd]
     have hD := isShortest_zero hd
     have hdist : (d.value - 0).abs = 0 := by
-      rcases h.2.2 _ hD.1 with h' | ⟨-, h' | ⟨h', -⟩⟩
+      rcases h.2 _ hD.1 with h' | ⟨-, h' | ⟨h', -⟩⟩
       · rw [zero_digitCount] at h'
         have := FloatText.digits_length_pos d.digits
         unfold Decimal.digitCount at h'
@@ -183,7 +175,7 @@ theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortes
     rw [Rat.abs_eq_zero_iff] at hdist
     have hval : d.value = 0 := by grind
     have hdig := digits_zero_of_value hval
-    have hexp := h.2.1 hdig
+    have hexp := Decimal.exponent_zero hdig
     have hread := h.1
     unfold Decimal.ReadsBack at hread
     rw [hdig, hexp, floatOf?_zero_eq, eq_zero_of_decompose hd, Option.some.injEq] at hread
@@ -191,13 +183,13 @@ theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortes
       cases hn : d.negative <;> cases neg <;> rw [hn] at hread <;>
         simp only [Bool.false_eq_true, ite_false, ite_true] at hread
       all_goals first | rfl | exact absurd hread neg_zero_ne_zero | exact absurd hread.symm neg_zero_ne_zero
-    rw [decimal_eq (D := ⟨neg, 0, 0⟩) hneg hdig hexp]
+    rw [decimal_eq (D := ⟨neg, 0, 0, by decide⟩) hneg hdig hexp]
   · obtain ⟨D, hs, hneg, hfit, hall⟩ := shortest_strong x hx neg M e hd hM
     rw [hs]
     have hD := shortest_isShortest x hx D hs
     obtain ⟨hn', hr'⟩ := floatOf?_sound hx hd hM h.1
     have hc1 := hall d.digits d.exponent hr'
-    have hc2 := h.2.2 D hD.1
+    have hc2 := h.2 D hD.1
     unfold Decimal.digitCount at hc2
     rw [value_dist D x hd hneg, value_dist d x hd hn'] at hc2
     generalize (Nat.toDigits 10 D.digits).length = nD at hc1 hc2
@@ -212,63 +204,19 @@ theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortes
       · rw [decimal_eq (hneg.trans hn'.symm) e1.symm e2.symm]
       · omega
 
-theorem digitCount_mul_ten (c : Nat) (hc : c ≠ 0) :
-    (Nat.toDigits 10 (c * 10)).length = (Nat.toDigits 10 c).length + 1 := by
-  have h1 := FloatText.digits_lt c
-  have h2 := FloatText.digits_ge c hc
-  have hn := FloatText.digits_length_pos c
-  generalize (Nat.toDigits 10 c).length = n at h1 h2 hn
-  have hpow : 10 ^ n = 10 ^ (n - 1) * 10 := by
-    rw [← Nat.pow_succ]
-    congr 1
-    omega
-  have up : (Nat.toDigits 10 (c * 10)).length ≤ n + 1 :=
-    (FloatText.digits_length_le_iff _ _ (by omega)).mpr (by rw [Nat.pow_succ]; omega)
-  have lo : ¬ (Nat.toDigits 10 (c * 10)).length ≤ n := by
-    rw [FloatText.digits_length_le_iff _ _ (by omega)]
-    omega
-  omega
-
-theorem isShortest_isNormal {x : Float} {d : Decimal} (h : d.IsShortest x) : d.isNormal = true := by
-  by_cases hd0 : d.digits = 0
-  · simp [Decimal.isNormal, hd0, h.2.1 hd0]
-  · by_cases hm : d.digits % 10 = 0
-    · exfalso
-      have hx := finite_of_floatOf? h.1
-      have hc : d.digits / 10 ≠ 0 := by omega
-      have hcount : d.digitCount = (Nat.toDigits 10 (d.digits / 10)).length + 1 := by
-        have := digitCount_mul_ten (d.digits / 10) hc
-        rw [Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero hm)] at this
-        exact this
-      rcases hdec : decompose x with ⟨neg, M, e⟩
-      by_cases hM : M = 0
-      · subst hM
-        have hpos := FloatText.digits_length_pos (d.digits / 10)
-        rcases h.2.2 ⟨neg, 0, 0⟩ (floatOf?_zero hdec) with g | ⟨g, -⟩
-        · rw [zero_digitCount] at g
-          omega
-        · rw [zero_digitCount] at g
-          omega
-      · obtain ⟨hn, hr⟩ := floatOf?_sound hx hdec hM h.1
-        have hr' : roundsTo M e (d.digits / 10) (d.exponent + 1) = true := by
-          unfold roundsTo at hr ⊢
-          dsimp only at hr ⊢
-          have := fits_scale (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).1
-            (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).2.2 e d.exponent (M % 2 == 0)
-            (d.digits / 10) 1
-          rw [Nat.pow_one, Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero hm)] at this
-          rw [show d.exponent + 1 = d.exponent + ((1 : Nat) : Int) from rfl, ← this]
-          exact hr
-        have hread := floatOf?_of_roundsTo hx hdec hM hr'
-        rw [← hn] at hread
-        rcases h.2.2 ⟨d.negative, d.digits / 10, d.exponent + 1⟩ hread with g | ⟨g, -⟩
-        · unfold Decimal.digitCount at g hcount
-          simp only at g
-          omega
-        · unfold Decimal.digitCount at g hcount
-          simp only at g
-          omega
-    · simp [Decimal.isNormal, hd0, hm]
+theorem floatsReadBack (x : Float) (hx : finiteFloat x = true) (dd : Decimal) (hs : shortest x = some dd) :
+    Rfc8259.floatOf? dd.negative dd.digits dd.exponent = some x := by
+  rcases hd : decompose x with ⟨neg, M, e⟩
+  by_cases hM : M = 0
+  · subst hM
+    rw [shortest_zero hx hd] at hs
+    cases hs
+    exact floatOf?_zero hd
+  · obtain ⟨D, hs', hneg, hround, -⟩ := shortest_strong x hx neg M e hd hM
+    rw [hs] at hs'
+    cases hs'
+    rw [hneg]
+    exact floatOf?_of_roundsTo hx hd hM hround
 
 end ShortestLaws
 

@@ -120,6 +120,9 @@ instance : FromValue Float where
     | .string "-Infinity" => pure (-1.0 / 0.0)
     | v => typeMismatch "a float" v
 
+instance : ToValue Decimal := ⟨.decimal⟩
+instance : FromValue Decimal := ⟨fun | .decimal d => pure d | v => typeMismatch "a decimal" v⟩
+
 instance : ToValue Char := ⟨fun c => .string (String.singleton c)⟩
 instance : FromValue Char where
   fromValue?
@@ -171,6 +174,7 @@ instance : NotNull Int16 := ⟨fun _ h => nomatch h⟩
 instance : NotNull Int32 := ⟨fun _ h => nomatch h⟩
 instance : NotNull Int64 := ⟨fun _ h => nomatch h⟩
 instance : NotNull Char := ⟨fun _ h => nomatch h⟩
+instance : NotNull Decimal := ⟨fun _ h => nomatch h⟩
 instance : NotNull Float where
   toValue_ne_null x h := by
     change (match FloatText.shortest x with | some d => _ | none => _) = _ at h

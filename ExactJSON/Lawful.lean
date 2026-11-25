@@ -27,6 +27,7 @@ instance : LawfulValue Int16 := lawful_of_codec codec_int16 fun _ => rfl
 instance : LawfulValue Int32 := lawful_of_codec codec_int32 fun _ => rfl
 instance : LawfulValue Int64 := lawful_of_codec codec_int64 fun _ => rfl
 instance : LawfulValue Char := lawful_of_codec codec_char fun _ => rfl
+instance : LawfulValue Decimal := lawful_of_codec codec_decimal fun _ => rfl
 
 instance : LawfulValue Float where
   fromValue_toValue x := ((codec_float x).2 _).mpr rfl
@@ -42,9 +43,9 @@ instance : LawfulValue Float where
         rw [h]
         rfl
       · rw [ite_eq_right hi] at h
-        obtain ⟨d, hd, hs⟩ := h
+        obtain ⟨d, hd, -⟩ := h
         rw [hd]
-        exact ShortestLaws.isShortest_isNormal hs
+        rfl
 
 theorem mapM_toValue {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] :
     ∀ (xs : List α), (xs.map toValue).mapM fromValue? = .ok xs

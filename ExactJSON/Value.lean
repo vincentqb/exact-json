@@ -13,15 +13,16 @@ structure Decimal where
   negative : Bool
   digits : Nat
   exponent : Int
-  deriving DecidableEq, Repr, Inhabited
+  normal : Decimal.Normal digits exponent := by decide
+  deriving DecidableEq, Repr
+
+instance : Inhabited Decimal := ⟨⟨false, 0, 0, by decide⟩⟩
 
 namespace Decimal
 
-@[expose] def isNormal (d : Decimal) : Bool :=
-  if d.digits = 0 then d.exponent == 0 else d.digits % 10 != 0
-
 @[expose] def normalize (negative : Bool) (m : Nat) (q : Int) : Decimal :=
-  if m = 0 then ⟨negative, 0, 0⟩ else ⟨negative, (strip m q).1, (strip m q).2⟩
+  if h : m = 0 then ⟨negative, 0, 0, by decide⟩
+  else ⟨negative, (strip m q).1, (strip m q).2, strip_normal m q (Nat.pos_of_ne_zero h)⟩
 
 end Decimal
 
@@ -50,7 +51,7 @@ mutual
 
 @[expose] def Value.isValid : Value → Bool
   | .null | .string _ | .integer _ | .boolean _ => true
-  | .decimal d => d.isNormal
+  | .decimal _ => true
   | .array ⟨items⟩ => itemsValid items
   | .table ⟨members⟩ => keysIncrease (members.map (·.1)) && membersValid members
 

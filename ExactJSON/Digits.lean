@@ -134,6 +134,28 @@ theorem stripFast_eq (m : Nat) (q : Int) : stripFast m q = strip m q := by
         _ ≤ 10 ^ 2 ^ (m.log2.log2 + 1) := Nat.pow_le_pow_left (by decide) _
     omega
 
+def Normal (digits : Nat) (exponent : Int) : Prop := if digits = 0 then exponent = 0 else digits % 10 ≠ 0
+
+instance (digits : Nat) (exponent : Int) : Decidable (Normal digits exponent) := by
+  unfold Normal
+  infer_instance
+
+theorem strip_digits (m : Nat) (q : Int) (hm : 0 < m) : (strip m q).1 % 10 ≠ 0 ∧ 0 < (strip m q).1 := by
+  induction m using Nat.strongRecOn generalizing q with
+  | _ m ih =>
+    rw [strip_eq]
+    split
+    · rename_i h
+      exact ih (m / 10) (by omega) (q + 1) (by omega)
+    · rename_i h
+      exact ⟨by omega, hm⟩
+
+theorem strip_normal (m : Nat) (q : Int) (hm : 0 < m) : Normal (strip m q).1 (strip m q).2 := by
+  obtain ⟨h1, h2⟩ := strip_digits m q hm
+  unfold Normal
+  rw [ite_eq_right (by omega)]
+  exact h1
+
 @[csimp] theorem strip_eq_fast : @strip = @stripFast := by
   funext m q
   exact (stripFast_eq m q).symm

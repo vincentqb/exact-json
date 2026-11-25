@@ -170,6 +170,11 @@ theorem codec_string (s : String) :
   refine ⟨rfl, fun w => ⟨fun h => ?_, fun h => by rw [h]; rfl⟩⟩
   cases w <;> cases h <;> rfl
 
+theorem codec_decimal (d : Decimal) :
+    toValue d = (.decimal d : Value) ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = (.decimal d : Value) := by
+  refine ⟨rfl, fun w => ⟨fun h => ?_, fun h => by rw [h]; rfl⟩⟩
+  cases w <;> cases h <;> rfl
+
 theorem codec_bool (b : Bool) :
     toValue b = (.boolean b : Value) ∧ ∀ w : Value, fromValue? w = .ok b ↔ w = (.boolean b : Value) := by
   refine ⟨rfl, fun w => ⟨fun h => ?_, fun h => by rw [h]; rfl⟩⟩
@@ -402,6 +407,12 @@ theorem codec_string_rejects_null :
       ∀ w : Value, @fromValue? String ⟨fun _ => .error ""⟩ w = .ok s ↔ w = (.string s : Value) := by
   intro h
   cases (h "").1
+
+theorem codec_decimal_rejects_null :
+    ¬ ∀ (d : Decimal), @toValue Decimal ⟨fun _ => .null⟩ d = (.decimal d : Value) ∧
+      ∀ w : Value, @fromValue? Decimal ⟨fun _ => .error ""⟩ w = .ok d ↔ w = (.decimal d : Value) := by
+  intro h
+  cases (h default).1
 
 theorem codec_bool_rejects_null :
     ¬ ∀ (b : Bool), @toValue Bool ⟨fun _ => .null⟩ b = (.boolean b : Value) ∧
