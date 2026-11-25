@@ -96,4 +96,8 @@ def writeMembers : List (String × Value) → String
 
 end
 
+def Spelling.Spells : Spelling → ByteArray → Value → Prop
+  | .canonical, b, v => v.Valid ∧ b = (write v).toUTF8
+  | .any, b, v => ∃ s, String.fromUTF8? b = some s ∧ Rfc8259.read? s = some v
+
 end ExactJSON

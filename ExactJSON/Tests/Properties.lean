@@ -5,6 +5,14 @@ meta import ExactJSON
 
 open ExactJSON
 
+def parseText (s : String) : Except String Value := Value.read .canonical 10000 s.toUTF8
+
+def readText (s : String) : Except String Value := Value.read .any 10000 s.toUTF8
+
+def decodeText {α : Type} [ToValue α] [FromValue α] (s : String) : Except String α := decode 10000 s.toUTF8
+
+def linesText (s : String) : Except String (Array Value) := Value.readLines .canonical 10000 s.toUTF8
+
 structure Rng where
   state : UInt64
 
@@ -190,22 +198,22 @@ def valueLaws (seed count depth : Nat) : IO Unit := do
     let v := (genValue depth).run' (seed + i)
     let text := v.render
     check v.isValid s!"generated an invalid value: {text}"
-    match Value.parse text with
+    match parseText text with
     | .ok w => check (w == v) s!"parse ∘ render changes {text} into {w.render}"
     | .error e => throw (IO.userError s!"parse rejects the canonical {text}: {e}")
-    match Value.readJson text with
+    match readText text with
     | .ok w => check (w == v) s!"readJson changes {text} into {w.render}"
     | .error e => throw (IO.userError s!"readJson rejects the canonical {text}: {e}")
     for j in [0:3] do
       let other := (loose v).run' (seed * 7 + i * 3 + j)
-      match Value.parse other with
+      match parseText other with
       | .ok w => check (other == text && w == v) s!"parse accepts the non-canonical {other}"
       | .error _ => check (other != text) s!"parse rejects the canonical {text}"
-      match Value.readJson other with
+      match readText other with
       | .ok w => check (w == v) s!"readJson reads {other} as {w.render}, not {text}"
       | .error e => throw (IO.userError s!"readJson rejects the JSON {other}: {e}")
     let bad := (genInvalid (depth - 1)).run' (seed + 5 * i)
-    check (!bad.isValid && (Value.parse bad.render).toOption != some bad) s!"an invalid value is read: {bad.render}"
+    check (!bad.isValid && (parseText bad.render).toOption != some bad) s!"an invalid value is read: {bad.render}"
 
 structure Sample where
   label : String
@@ -277,14 +285,14 @@ def typedLaws (seed count : Nat) : IO Unit := do
   for i in [0:count] do
     let a := genSample.run' (seed + i)
     let text := encode a
-    match (decode text : Except String Sample) with
+    match (decodeText text : Except String Sample) with
     | .ok b => check (encode b == text) s!"decode ∘ encode changes {text}"
     | .error e => throw (IO.userError s!"decode rejects {text}: {e}")
     let other := (loose (toValue a)).run' (seed + 1000 + i)
-    check ((decode other : Except String Sample).isOk == (other == text)) s!"decode accepts {other}"
+    check ((decodeText other : Except String Sample).isOk == (other == text)) s!"decode accepts {other}"
     let a2 : SampleV2 := { toSample := a, added? := none }
     check (encode a2 == text) s!"adding an Option field changed {text}"
-    match (decode text : Except String SampleV2) with
+    match (decodeText text : Except String SampleV2) with
     | .ok b => check (b.added?.isNone && encode b.toSample == text) s!"the new type reads {text} wrongly"
     | .error e => throw (IO.userError s!"the new type rejects the old text {text}: {e}")
 

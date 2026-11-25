@@ -1075,13 +1075,4 @@ theorem spec_read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = so
 theorem render_parse (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
   parse_render_of_reread v h (reread_self v h)
 
-theorem decode_encode_of_lawful {α : Type u} [ToValue α] [FromValue α]
-    (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
-    decode (encode a) = .ok a := by
-  unfold decode encode
-  rw [render_parse _ (valid a)]
-  simp only [lawful a]
-  have : (toValue a == toValue a) = true := Value.beq_self (toValue a)
-  simp [this]
-
 end ExactJSON

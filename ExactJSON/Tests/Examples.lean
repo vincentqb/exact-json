@@ -5,8 +5,16 @@ meta import ExactJSON
 
 open ExactJSON
 
+def parseText (s : String) : Except String Value := Value.read .canonical 10000 s.toUTF8
+
+def readText (s : String) : Except String Value := Value.read .any 10000 s.toUTF8
+
+def decodeText {α : Type} [ToValue α] [FromValue α] (s : String) : Except String α := decode 10000 s.toUTF8
+
+def linesText (s : String) : Except String (Array Value) := Value.readLines .canonical 10000 s.toUTF8
+
 def check (s : String) : String :=
-  match Value.parse s with
+  match parseText s with
   | .ok v => if v.render == s then "ok" else s!"read, but written back as {v.render}"
   | .error e => e
 
@@ -75,25 +83,25 @@ def errorOf {α : Type} (e : Except String α) : String :=
 
 #guard ["", "{", "[1,]", "[,1]", "{\"a\":1,}", "1.", ".5", "-", "1e", "+1", "tru", "nul",
   "[1 2]", "{}x", "'a'", "{1:2}", "NaN", "Infinity", "\"\\x\"", "0x10", "1_000"].all
-  fun s => !(Value.parse s).isOk
+  fun s => !(parseText s).isOk
 
 #guard (Value.table #[("b", .integer 1), ("a", .integer 2)]).render == "{\"b\":1,\"a\":2}"
 #guard !(Value.table #[("b", .integer 1), ("a", .integer 2)]).isValid
 #guard (Value.decimal ⟨false, 150, -2⟩).render == "1.50"
 #guard !(Value.decimal ⟨false, 150, -2⟩).isValid
-#guard !(Value.parse (Value.array #[.decimal ⟨false, 150, -2⟩]).render).isOk
+#guard !(parseText (Value.array #[.decimal ⟨false, 150, -2⟩]).render).isOk
 #guard (Value.decimal ⟨false, 10, 0⟩).render == (Value.decimal ⟨false, 1, 1⟩).render
-#guard gives (Value.parse "0.1000000000000000055511151231257827")
+#guard gives (parseText "0.1000000000000000055511151231257827")
   (.decimal ⟨false, 1000000000000000055511151231257827, -34⟩)
-#guard gives (Value.parse "-0.0") (.decimal ⟨true, 0, 0⟩)
-#guard gives (Value.parse "1.0e400") (.decimal ⟨false, 1, 400⟩)
-#guard gives (decode "0.1" : Except String Float) 0.1
-#guard errorOf (decode "0.1000000000000000055511151231257827" : Except String Float) ==
+#guard gives (parseText "-0.0") (.decimal ⟨true, 0, 0⟩)
+#guard gives (parseText "1.0e400") (.decimal ⟨false, 1, 400⟩)
+#guard gives (decodeText "0.1" : Except String Float) 0.1
+#guard errorOf (decodeText "0.1000000000000000055511151231257827" : Except String Float) ==
   "expected the shortest decimal of a float: write 0.1, not 0.1000000000000000055511151231257827"
-#guard errorOf (decode "9007199254740993.0" : Except String Float) ==
+#guard errorOf (decodeText "9007199254740993.0" : Except String Float) ==
   "expected the shortest decimal of a float: write 9007199254740992.0, not 9007199254740993.0"
-#guard errorOf (decode "1.0e400" : Except String Float) == "a float beyond the range of binary64: 1.0e400"
-#guard errorOf (decode "1.0e-400" : Except String Float) ==
+#guard errorOf (decodeText "1.0e400" : Except String Float) == "a float beyond the range of binary64: 1.0e400"
+#guard errorOf (decodeText "1.0e-400" : Except String Float) ==
   "expected the shortest decimal of a float: write 0.0, not 1.0e-400"
 
 #guard check "[[[[" == "at character 4: expected a value, found the end of the text"
@@ -103,7 +111,7 @@ def errorOf {α : Type} (e : Except String α) : String :=
   "at character 2000: expected a value, found the end of the text"
 
 def canon (s : String) : String :=
-  match Value.readJson s with
+  match readText s with
   | .ok v => v.render
   | .error e => e
 
@@ -115,19 +123,20 @@ def canon (s : String) : String :=
   fun s => canon s == s
 #guard ["", " ", "[1,]", "{\"a\":1,}", "01", "-01", "-", "1.", ".5", "+1", "1e", "NaN", "Infinity", "'a'",
   "[1 2]", "{\"a\" 1}", "{a:1}", "\"\t\"", "\"\\x\"", "\"\\u12\"", "// c\n1", "\ufeff1", "tru", "1 2",
-  "[", "{\"a\":1", "\"a", "0x10"].all fun s => !(Value.readJson s).isOk
+  "[", "{\"a\":1", "\"a", "0x10"].all fun s => !(readText s).isOk
 #guard canon "{\"a\":1,\"a\":2}" == "at character 7: a key repeats"
 #guard canon "\"\\udc00\"" == "at character 1: a low surrogate not after a high one"
 #guard canon "\"\\ud800x\"" == "at character 1: a high surrogate not followed by a low one"
 #guard canon "1e400" == "1.0e400"
 #guard canon "[1,]" == "at character 3: expected a value"
 
-#guard gives ((Value.parseLines "{\"a\":1}\n[2]\n").map (·.map Value.render)) #["{\"a\":1}", "[2]"]
-#guard gives ((Value.parseLines "").map (·.size)) 0
-#guard errorOf (Value.parseLines "{\"a\":1}\n[2]") == "line 2: no line feed at its end"
-#guard errorOf (Value.parseLines "1\n[\n3") == "line 2, at character 1: expected a value, found the end of the text"
-#guard errorOf (Value.parseLines "1\n\n2\n") == "line 2, at character 0: expected a value, found the end of the text"
-#guard errorOf (Value.parseLines "1\r\n") == "line 1, at character 1: text after the value (canonical text has no whitespace)"
+#guard gives ((linesText "{\"a\":1}\n[2]\n").map (·.map Value.render)) #["{\"a\":1}", "[2]"]
+#guard gives ((linesText "").map (·.size)) 0
+#guard errorOf (linesText "{\"a\":1}\n[2]") == "the last line has no line feed at its end"
+#guard errorOf (linesText "1\n[\n3") == "the last line has no line feed at its end"
+#guard errorOf (linesText "1\n[\n3\n") == "line 2: at character 1: expected a value, found the end of the text"
+#guard errorOf (linesText "1\n\n2\n") == "line 2: at character 0: expected a value, found the end of the text"
+#guard errorOf (linesText "1\r\n") == "line 1: at character 1: text after the value (canonical text has no whitespace)"
 
 
 structure Run where
@@ -141,21 +150,21 @@ def run : Run := { name := "a", iters := 3, time? := some 2.0, day := { year := 
 
 #guard encode run == "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":2.0}"
 #guard encode { run with time? := none } == "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\"}"
-#guard gives ((decode (encode run) : Except String Run).map encode) (encode run)
-#guard gives ((decode (encode { run with time? := none }) : Except String Run).map encode)
+#guard gives ((decodeText (encode run) : Except String Run).map encode) (encode run)
+#guard gives ((decodeText (encode { run with time? := none }) : Except String Run).map encode)
   (encode { run with time? := none })
-#guard errorOf (decode "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":2}" : Except String Run) ==
+#guard errorOf (decodeText "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":2}" : Except String Run) ==
   "time: expected a float, found integer 2"
-#guard errorOf (decode "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"x\":0}" : Except String Run) ==
+#guard errorOf (decodeText "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"x\":0}" : Except String Run) ==
   "Run has no field \"x\""
-#guard errorOf (decode "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":null}" : Except String Run) ==
+#guard errorOf (decodeText "{\"day\":\"2024-02-29\",\"iters\":3,\"name\":\"a\",\"time\":null}" : Except String Run) ==
   "time: expected a float, found null null"
-#guard errorOf (decode "{\"day\":\"2024-02-29\",\"name\":\"a\"}" : Except String Run) == "missing key \"iters\""
-#guard errorOf (decode "{\"day\":\"2023-02-29\",\"iters\":1,\"name\":\"a\"}" : Except String Run) ==
+#guard errorOf (decodeText "{\"day\":\"2024-02-29\",\"name\":\"a\"}" : Except String Run) == "missing key \"iters\""
+#guard errorOf (decodeText "{\"day\":\"2023-02-29\",\"iters\":1,\"name\":\"a\"}" : Except String Run) ==
   "day: expected a date-time, date or time in canonical RFC 3339 form, found string \"2023-02-29\""
 
 #guard encode #[some 1, none, some 3] == "[1,null,3]"
-#guard gives (decode "[1,null,3]" : Except String (Array (Option Nat))) #[some 1, none, some 3]
+#guard gives (decodeText "[1,null,3]" : Except String (Array (Option Nat))) #[some 1, none, some 3]
 
 structure Twice where
   x : Option (Option Nat)
@@ -164,7 +173,7 @@ structure Twice where
 #guard [({ x := none } : Twice), { x := some none }, { x := some (some 2) }].map encode ==
   ["{}", "{\"x\":null}", "{\"x\":2}"]
 #guard ["{}", "{\"x\":null}", "{\"x\":2}"].all fun s =>
-  gives ((decode s : Except String Twice).map encode) s
+  gives ((decodeText s : Except String Twice).map encode) s
 
 structure Box (α : Type) where
   x : α
@@ -176,8 +185,8 @@ inductive Leaf (α : Type) where
 
 #guard encode ({ x := none } : Box (Option Nat)) == "{\"x\":null}"
 #guard encode ({ x := some 1 } : Box (Option Nat)) == "{\"x\":1}"
-#guard (decode "{\"x\":null}" : Except String (Box (Option Nat))).isOk
-#guard !(decode "{}" : Except String (Box (Option Nat))).isOk
+#guard (decodeText "{\"x\":null}" : Except String (Box (Option Nat))).isOk
+#guard !(decodeText "{}" : Except String (Box (Option Nat))).isOk
 #guard encode (Leaf.leaf (none : Option Nat)) == "{\"leaf\":{\"x\":null}}"
 #guard encode ({ x := 3 } : Box Nat) == "{\"x\":3}"
 
@@ -190,24 +199,24 @@ inductive Shape where
 
 #guard [Shape.circle 1, .rect 2 0.5, .pair 7 "s", .dot].map encode ==
   ["{\"circle\":{\"radius\":1.0}}", "{\"rect\":{\"h\":0.5,\"w\":2.0}}", "{\"pair\":[7,\"s\"]}", "\"dot\""]
-#guard errorOf (decode "{\"rect\":{\"w\":1.0}}" : Except String Shape) == "rect: missing key \"h\""
-#guard errorOf (decode "{\"circle\":{\"r\":1.0,\"radius\":1.0}}" : Except String Shape) ==
+#guard errorOf (decodeText "{\"rect\":{\"w\":1.0}}" : Except String Shape) == "rect: missing key \"h\""
+#guard errorOf (decodeText "{\"circle\":{\"r\":1.0,\"radius\":1.0}}" : Except String Shape) ==
   "circle: circle has no field \"r\""
-#guard errorOf (decode "\"square\"" : Except String Shape) == "unknown constructor \"square\""
+#guard errorOf (decodeText "\"square\"" : Except String Shape) == "unknown constructor \"square\""
 
 inductive Cmd where
   | run (verbose? : Option Bool) (level? : Option Nat)
   | stop
   deriving ToValue, FromValue
 
-#guard ["{\"run\":5}", "{\"run\":\"x\"}", "{\"run\":[true]}"].all fun s => !(decode s : Except String Cmd).isOk
-#guard (decode "{\"run\":{}}" : Except String Cmd).isOk
+#guard ["{\"run\":5}", "{\"run\":\"x\"}", "{\"run\":[true]}"].all fun s => !(decodeText s : Except String Cmd).isOk
+#guard (decodeText "{\"run\":{}}" : Except String Cmd).isOk
 
 #guard encode #[1.0 / 0.0, -1.0 / 0.0, 0.0 / 0.0, -0.0] == "[\"Infinity\",\"-Infinity\",\"NaN\",-0.0]"
-#guard gives ((decode "[\"Infinity\",-0.0]" : Except String (Array Float)).map fun xs => xs.map (·.toBits))
+#guard gives ((decodeText "[\"Infinity\",-0.0]" : Except String (Array Float)).map fun xs => xs.map (·.toBits))
   #[(1.0 / 0.0 : Float).toBits, (-0.0 : Float).toBits]
-#guard !(decode "256" : Except String UInt8).isOk
-#guard gives ((decode "-128" : Except String Int8).map (·.toInt)) (-128)
+#guard !(decodeText "256" : Except String UInt8).isOk
+#guard gives ((decodeText "-128" : Except String Int8).map (·.toInt)) (-128)
 
 #guard ["1979-05-27T07:32:00Z", "1979-05-27T00:32:00.999999-07:00", "1979-05-27T07:32:00.5",
   "1979-05-27", "07:32:00", "23:59:60", "00:00:00.000000001"].all fun s =>
@@ -231,6 +240,19 @@ structure Bench where
 
 /-- info: Except.error "missing key \"day\"" -/
 #guard_msgs in
-#eval (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench)
-#guard (decode "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\"}" : Except String Bench).isOk
-#guard errorOf (decode "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench) == "missing key \"day\""
+#eval (decodeText "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench)
+#guard (decodeText "{\"day\":\"2024-02-29\",\"iters\":100,\"name\":\"fast\"}" : Except String Bench).isOk
+#guard errorOf (decodeText "{\"iters\":100,\"name\":\"fast\"}" : Except String Bench) == "missing key \"day\""
+
+#guard errorOf (Value.read .canonical 1 "[[1]]".toUTF8) == "nested deeper than 1"
+#guard gives (Value.read .canonical 2 "[[1]]".toUTF8) (.array #[.array #[.integer 1]])
+#guard gives (Value.read .canonical 0 "1".toUTF8) (.integer 1)
+#guard errorOf (Value.read .any 100 (String.ofList (List.replicate 100000 '[')).toUTF8) == "nested deeper than 100"
+#guard errorOf (Value.read .any 100 ("\"" ++ String.ofList (List.replicate 1000 '[') ++ "\"").toUTF8) == "ok"
+#guard errorOf (Value.read .any 10 ⟨#[0x22, 0xFF, 0x22]⟩) == "not UTF-8"
+#guard gives (Value.read .any 10 " [ 1 , 2.50 ] ".toUTF8) (.array #[.integer 1, .decimal ⟨false, 25, -1⟩])
+#guard !(Value.read .canonical 10 " [ 1 , 2.50 ] ".toUTF8).isOk
+#guard gives (("2]".toUTF8.foldl Reader.step ("[1,".toUTF8.foldl Reader.step (Reader.start .canonical 10))).finish)
+  (.array #[.integer 1, .integer 2])
+#guard gives ((Value.readLines .any 10 " 1 \r\n{ }\n".toUTF8).map (·.map Value.render)) #["1", "{}"]
+#guard !(Value.readLines .canonical 10 " 1 \r\n{ }\n".toUTF8).isOk

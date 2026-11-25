@@ -7,10 +7,21 @@ public import ExactJSON.ShapesDerived
 open ExactJSON
 
 def usage : String :=
-  "usage: exactjson check [--as TYPE] < input.jsonl\n" ++
+  "usage: exactjson check [--depth N] [--value] [--as TYPE] < input.jsonl\n" ++
   "  exit 1 at the first line that is not canonical JSON Lines (of a value of TYPE)\n" ++
-  "       exactjson canon [--lines] < input.json\n" ++
-  "  write the canonical text of the JSON text (or of each line)\n"
+  "  with --value, unless the input is the canonical text of one value (of TYPE)\n" ++
+  "       exactjson canon [--depth N] [--lines] < input.json\n" ++
+  "  write the canonical text of the JSON text (or of each line)\n" ++
+  "  values nested deeper than N (by default 1000) are rejected\n"
+
+def readValue (sp : Spelling) (maxDepth : Nat) : IO (Except String Value) := do
+  let stdin ← IO.getStdin
+  let mut reader := Reader.start sp maxDepth
+  repeat
+    let chunk ← stdin.read 65536
+    if chunk.isEmpty then break
+    reader := chunk.foldl Reader.step reader
+  return reader.finish
 
 def readBytes : IO ByteArray := do
   let stdin ← IO.getStdin
@@ -21,34 +32,16 @@ def readBytes : IO ByteArray := do
     bytes := bytes ++ chunk
   return bytes
 
-def readStdin : IO (Except String String) := do
-  let bytes ← readBytes
-  match String.fromUTF8? bytes with
-  | some s => return .ok s
-  | none => return .error (Value.utf8Error bytes)
-
 public section
 
-def textLines (s : String) : List String :=
-  let parts := s.splitOn "\n"
-  if parts.getLast? = some "" then parts.dropLast else parts
+def checkAs (α : Type) [ToValue α] [FromValue α] (value : Bool) (maxDepth : Nat) (b : ByteArray) :
+    Except String Nat :=
+  if value then (decode (α := α) maxDepth b).map fun _ => 1
+  else do
+    let as ← decodeLines (α := α) maxDepth b
+    if (encodeLines as).toUTF8 == b then pure as.size else throw "the decoded lines are written differently"
 
-def readEach (number : Nat) (out : Array Value) : List String → Except String (Array Value)
-  | [] => .ok out
-  | line :: rest =>
-    match Value.readJson line with
-    | .error e => .error s!"line {number + 1}, {e}"
-    | .ok v => readEach (number + 1) (out.push v) rest
-
-def canon (lines : Bool) (input : String) : Except String String :=
-  if lines then (readEach 0 #[] (textLines input)).map Value.renderLines
-  else (Value.readJson input).map fun v => Value.renderLines #[v]
-
-def checkAs (α : Type) [ToValue α] [FromValue α] (s : String) : Except String Nat := do
-  let as ← decodeLines (α := α) s
-  if encodeLines as == s then pure as.size else throw "the decoded lines are written differently"
-
-def typedCheck : String → Option (String → Except String Nat)
+def typedCheck : String → Option (Bool → Nat → ByteArray → Except String Nat)
   | "String" => some (checkAs String)
   | "Bool" => some (checkAs Bool)
   | "Int" => some (checkAs Int)
@@ -78,14 +71,32 @@ def typedCheck : String → Option (String → Except String Nat)
   | "Example.Envelope" => some (checkAs Example.Envelope)
   | _ => none
 
+def depthFlag : List String → Option (Nat × List String)
+  | "--depth" :: n :: rest => n.toNat?.map fun d => (d, rest)
+  | rest => some (1000, rest)
+
+def finish (result : Except String Nat) : IO UInt32 := do
+  match result with
+  | .ok count =>
+    IO.eprintln s!"exactjson: {count} canonical {if count == 1 then "text" else "texts"}"
+    return 0
+  | .error e =>
+    IO.eprintln s!"exactjson: {e}"
+    return 1
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | "canon" :: flags =>
-    let lines ← match flags with
-      | [] => pure false
-      | ["--lines"] => pure true
-      | _ => do IO.eprint usage; return 2
-    match (← readStdin) >>= canon lines with
+    let some (maxDepth, flags) := depthFlag flags | do IO.eprint usage; return 2
+    let some lines := (match flags with
+      | [] => some false
+      | ["--lines"] => some true
+      | _ => none)
+      | do IO.eprint usage; return 2
+    let result : Except String String ←
+      if lines then pure ((Value.readLines .any maxDepth (← readBytes)).map Value.renderLines)
+      else pure ((← readValue .any maxDepth).map fun v => Value.renderLines #[v])
+    match result with
     | .ok text =>
       IO.print text
       return 0
@@ -93,21 +104,19 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln s!"exactjson: {e}"
       return 1
   | "check" :: flags =>
-    let some checkAll := (match flags with
-      | [] => some fun (b : ByteArray) => (Value.parseLinesUTF8 b).map Array.size
-      | ["--as", type] => (typedCheck type).map fun (decodeAll : String → Except String Nat) (b : ByteArray) =>
-        match String.fromUTF8? b with
-        | some s => decodeAll s
-        | none => .error (Value.utf8Error b)
-      | _ => none)
-      | do IO.eprint usage; return 2
-    match checkAll (← readBytes) with
-    | .ok count =>
-      IO.eprintln s!"exactjson: {count} canonical lines"
-      return 0
-    | .error e =>
-      IO.eprintln s!"exactjson: {e}"
-      return 1
+    let some (maxDepth, flags) := depthFlag flags | do IO.eprint usage; return 2
+    let (value, flags) := match flags with
+      | "--value" :: rest => (true, rest)
+      | rest => (false, rest)
+    match flags with
+    | [] =>
+      if value then finish ((← readValue .canonical maxDepth).map fun _ => 1)
+      else finish ((Value.readLines .canonical maxDepth (← readBytes)).map Array.size)
+    | ["--as", type] =>
+      match typedCheck type with
+      | some check => finish (check value maxDepth (← readBytes))
+      | none => do IO.eprint usage; return 2
+    | _ => do IO.eprint usage; return 2
   | _ =>
     IO.eprint usage
     return 2

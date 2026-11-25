@@ -14,26 +14,25 @@ public section
 
 A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it, a number with a point or
 an exponent as the exact decimal it spells, `Value.decimal` in normal form, `Decimal.isNormal`) that
-writing what it holds gives back: reading takes exactly those texts, and holds what any JSON reader
-reads in them. A value's text is `write` of its parts: in strings, escapes for `"`, `\`, control
-characters and line separators (`mustEscape`) and no others, an integer in decimal, a decimal
-laid out by `Decimal.text`, keys as they come. Every valid value's text is JSON that holds that
-value; no text holds a control character (below U+0020, or U+007F to U+009F) or a line or
-paragraph separator (U+2028, U+2029); reading JSON in any spelling holds what RFC 8259 reads in
-it; JSON Lines is one canonical text a line, and reading bytes takes exactly the UTF-8 encoding of
-such lines, with no byte-order mark; typed decoding reads exactly what typed encoding writes, for
-any type whose instances are lawful (`LawfulValue`: they read back what they write, as valid
-values); each of the library's instances writes the value its codec law states and reads exactly
-that, except that a dictionary (`Std.ExtTreeMap String α`) reads back what it writes; a finite
-float is written as the shortest decimal that reads back as it, the nearest of those, ties to an
-even last digit; derived instances write the shapes their examples state, and are lawful; dates
-and times are written in one RFC 3339 form each and read in that form only; and the steps the
-reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the
-text's length.
+writing what it holds gives back. A value's text is `write` of its parts: in strings, escapes for
+`"`, `\`, control characters and line separators (`mustEscape`) and no others, an integer in
+decimal, a decimal laid out by `Decimal.text`, keys as they come. Every valid value's text is JSON
+that holds that value, and no text holds a control character (below U+0020, or U+007F to U+009F)
+or a line or paragraph separator (U+2028, U+2029). Reading takes bytes in a spelling
+(`Spelling.Spells`): `.canonical` takes exactly the UTF-8 encodings of canonical texts, and `.any`
+those of JSON texts, holding what RFC 8259 reads in them; either takes only values no deeper than
+a given bound, and reads a byte at a time (`Reader`), so a text can arrive in pieces. JSON Lines
+is texts each ended by a line feed, read line by line in either spelling. Typed decoding reads the
+canonical text of a value that the type writes and reads back as itself, so for a type whose
+instances are lawful (`LawfulValue`: they read back what they write, as valid values) it reads
+exactly what typed encoding writes. Each of the library's instances writes the value its codec
+law states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads
+back what it writes; a finite float is written as the shortest decimal that reads back as it, the
+nearest of those, ties to an even last digit; derived instances write the shapes their examples
+state, and are lawful; and dates and times are written in one RFC 3339 form each and read in that
+form only.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
-definitions that no law names, and the command line tool beyond the functions it calls; nor that
-the steps are the work done: the reader counts them itself, so the law bounds its count, not its
-running time.
+definitions that no law names; and the command line tool beyond the functions it calls.
 -/
 
 namespace ExactJSON
@@ -42,25 +41,27 @@ universe u
 
 def Value.render : Value → String := sorry
 
-def Value.parse : String → Except String Value := sorry
+def Reader : Type := sorry
 
-def Value.parseCosted : String → Costed (Except String Value) := sorry
+def Reader.start : Spelling → Nat → Reader := sorry
 
-def Value.readJson : String → Except String Value := sorry
+def Reader.step : Reader → UInt8 → Reader := sorry
 
-def encode {α : Type u} [ToValue α] : α → String := sorry
+def Reader.finish : Reader → Except String Value := sorry
 
-def decode {α : Type u} [ToValue α] [FromValue α] : String → Except String α := sorry
+def Value.read : Spelling → Nat → ByteArray → Except String Value := sorry
 
 def Value.renderLines : Array Value → String := sorry
 
-def Value.parseLines : String → Except String (Array Value) := sorry
+def Value.readLines : Spelling → Nat → ByteArray → Except String (Array Value) := sorry
 
-def Value.parseLinesUTF8 : ByteArray → Except String (Array Value) := sorry
+def encode {α : Type u} [ToValue α] : α → String := sorry
+
+def decode {α : Type u} [ToValue α] [FromValue α] : Nat → ByteArray → Except String α := sorry
 
 def encodeLines {α : Type u} [ToValue α] : Array α → String := sorry
 
-def decodeLines {α : Type u} [ToValue α] [FromValue α] : String → Except String (Array α) := sorry
+def decodeLines {α : Type u} [ToValue α] [FromValue α] : Nat → ByteArray → Except String (Array α) := sorry
 
 instance Value.instBEq : BEq Value := sorry
 
@@ -184,32 +185,27 @@ instance instToValueExtTreeMapString {α : Type u} [ToValue α] : ToValue (Std.E
 
 instance instFromValueExtTreeMapString {α : Type u} [FromValue α] : FromValue (Std.ExtTreeMap String α) := sorry
 
-theorem parse_fixed (s : String) (v : Value) :
-    Value.parse s = .ok v ↔ Rfc8259.read? s = some v ∧ v.render = s := by
+theorem read_spelling (sp : Spelling) (maxDepth : Nat) (b : ByteArray) (v : Value) :
+    Value.read sp maxDepth b = .ok v ↔ sp.Spells b v ∧ v.depth ≤ maxDepth := by
+  sorry
+
+theorem read_streams (sp : Spelling) (maxDepth : Nat) (b : ByteArray) :
+    Value.read sp maxDepth b = (b.foldl Reader.step (Reader.start sp maxDepth)).finish := by
   sorry
 
 theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v := by
-  sorry
-
-theorem readJson_spec (s : String) : (Value.readJson s).toOption = Rfc8259.read? s := by
   sorry
 
 theorem render_no_control (v : Value) :
     ∀ c ∈ v.render.toList, 0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 := by
   sorry
 
-theorem parse_costed (s : String) : (Value.parseCosted s).value = Value.parse s := by
+theorem encode_eq {α : Type u} [ToValue α] (a : α) : encode a = (toValue a).render := by
   sorry
 
-theorem parse_linear : ∃ c : Nat, ∀ s : String, (Value.parseCosted s).steps ≤ c * (s.length + 1) := by
-  sorry
-
-theorem decode_text {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α)
-    (h : decode s = .ok a) : encode a = s := by
-  sorry
-
-theorem decode_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α) :
-    decode (encode a) = .ok a := by
+theorem decode_eq {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) (a : α) :
+    decode maxDepth b = .ok a ↔
+      Value.read .canonical maxDepth b = .ok (toValue a) ∧ fromValue? (toValue a) = .ok a := by
   sorry
 
 theorem render_composes (v : Value) : v.render = write v := by
@@ -305,24 +301,19 @@ theorem renderLines_eq (vs : Array Value) :
     Value.renderLines vs = String.join (vs.toList.map fun v => v.render ++ "\n") := by
   sorry
 
-theorem parseLines_fixed (s : String) (vs : Array Value) :
-    Value.parseLines s = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ Value.renderLines vs = s := by
-  sorry
-
-theorem parseLinesUTF8_bytes (b : ByteArray) (vs : Array Value) :
-    Value.parseLinesUTF8 b = .ok vs ↔ (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
+theorem readLines_framing (sp : Spelling) (maxDepth : Nat) (b : ByteArray) (vs : Array Value) :
+    Value.readLines sp maxDepth b = .ok vs ↔
+      ∃ lines : List ByteArray, b.data.toList = (lines.map fun l => l.data.toList ++ [10]).flatten ∧
+        (∀ l ∈ lines, 10 ∉ l.data.toList) ∧ lines.mapM (Value.read sp maxDepth) = .ok vs.toList := by
   sorry
 
 theorem encodeLines_eq {α : Type u} [ToValue α] (as : Array α) :
     encodeLines as = Value.renderLines (as.map toValue) := by
   sorry
 
-theorem decodeLines_text {α : Type u} [ToValue α] [FromValue α] (s : String) (as : Array α)
-    (h : decodeLines s = .ok as) : encodeLines as = s := by
-  sorry
-
-theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α) :
-    decodeLines (encodeLines as) = .ok as := by
+theorem decodeLines_eq {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) (as : Array α) :
+    decodeLines maxDepth b = .ok as ↔
+      Value.readLines .canonical maxDepth b = .ok (as.map toValue) ∧ ∀ a ∈ as, fromValue? (toValue a) = .ok a := by
   sorry
 
 theorem beq_iff (v w : Value) : (v == w) = true ↔ v = w := by
@@ -390,47 +381,52 @@ theorem codec_envelope (e : Example.Envelope) :
 theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shape ∧ LawfulValue Example.Envelope := by
   sorry
 
-@[kills parse_fixed] theorem parse_fixed_rejects_constant :
-    ¬ ∀ (s : String) (v : Value),
-      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s = .ok v ↔
-        Rfc8259.read? s = some v ∧ (fun (_ : Value) => "null") v = s := by
+@[kills read_spelling] theorem read_spelling_rejects_null :
+    ¬ ∀ (sp : Spelling) (maxDepth : Nat) (b : ByteArray) (v : Value),
+      (fun (_ : Spelling) (_ : Nat) (_ : ByteArray) => (Except.ok Value.null : Except String Value)) sp maxDepth b =
+          .ok v ↔ sp.Spells b v ∧ v.depth ≤ maxDepth := by
+  sorry
+
+@[kills read_streams] theorem read_streams_rejects_constant :
+    ¬ ∀ (sp : Spelling) (maxDepth : Nat) (b : ByteArray),
+      (fun (_ : Spelling) (_ : Nat) (_ : ByteArray) => (Except.error "" : Except String Value)) sp maxDepth b =
+        (fun (_ : Unit) => (Except.ok Value.null : Except String Value))
+          (b.foldl (fun (r : Unit) (_ : UInt8) => r) ((fun (_ : Spelling) (_ : Nat) => ()) sp maxDepth)) := by
+  sorry
+
+@[kills encode_eq] theorem encode_eq_rejects_empty :
+    ¬ ∀ {α : Type u} [ToValue α] (a : α), (fun {β : Type u} [ToValue β] (_ : β) => "") a = (toValue a).render := by
+  sorry
+
+@[kills decode_eq] theorem decode_eq_rejects_failure :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) (a : α),
+      (fun {β : Type u} [ToValue β] [FromValue β] (_ : Nat) (_ : ByteArray) => (Except.error "" : Except String β))
+          maxDepth b = .ok a ↔
+        Value.read .canonical maxDepth b = .ok (toValue a) ∧ fromValue? (toValue a) = .ok a := by
+  sorry
+
+@[kills readLines_framing] theorem readLines_framing_rejects_empty :
+    ¬ ∀ (sp : Spelling) (maxDepth : Nat) (b : ByteArray) (vs : Array Value),
+      (fun (_ : Spelling) (_ : Nat) (_ : ByteArray) => (Except.ok #[] : Except String (Array Value))) sp maxDepth b =
+          .ok vs ↔
+        ∃ lines : List ByteArray, b.data.toList = (lines.map fun l => l.data.toList ++ [10]).flatten ∧
+          (∀ l ∈ lines, 10 ∉ l.data.toList) ∧ lines.mapM (Value.read sp maxDepth) = .ok vs.toList := by
+  sorry
+
+@[kills decodeLines_eq] theorem decodeLines_eq_rejects_failure :
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) (as : Array α),
+      (fun {β : Type u} [ToValue β] [FromValue β] (_ : Nat) (_ : ByteArray) =>
+          (Except.error "" : Except String (Array β))) maxDepth b = .ok as ↔
+        Value.readLines .canonical maxDepth b = .ok (as.map toValue) ∧ ∀ a ∈ as, fromValue? (toValue a) = .ok a := by
   sorry
 
 @[kills read_render] theorem read_render_rejects_constant :
     ¬ ∀ (v : Value), v.Valid → Rfc8259.read? ((fun (_ : Value) => "x") v) = some v := by
   sorry
 
-@[kills readJson_spec] theorem readJson_spec_rejects_constant :
-    ¬ ∀ (s : String),
-      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) s).toOption = Rfc8259.read? s := by
-  sorry
-
 @[kills render_no_control] theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList,
       0x20 ≤ c.toNat ∧ ¬(0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) ∧ c.toNat ≠ 0x2028 ∧ c.toNat ≠ 0x2029 := by
-  sorry
-
-@[kills parse_costed] theorem parse_costed_rejects_mismatch :
-    ¬ ∀ (s : String), ((fun (_ : String) => (⟨.error "", 0⟩ : Costed (Except String Value))) s).value =
-      (fun (_ : String) => (Except.ok Value.null : Except String Value)) s := by
-  sorry
-
-@[kills parse_linear] theorem parse_linear_rejects_quadratic :
-    ¬ ∃ c : Nat, ∀ s : String,
-      ((fun (s : String) => (⟨.error "", s.length * s.length⟩ : Costed (Except String Value))) s).steps ≤
-        c * (s.length + 1) := by
-  sorry
-
-@[kills decode_text] theorem decode_text_rejects_constant :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (s : String) (a : α),
-      (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (fromValue? Value.null : Except String β)) s = .ok a →
-        (fun {β : Type u} [ToValue β] (_ : β) => "null") a = s := by
-  sorry
-
-@[kills decode_encode] theorem decode_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α),
-        (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "wrong" : Except String β))
-          ((fun {β : Type u} [ToValue β] (_ : β) => "") a) = .ok a := by
   sorry
 
 @[kills render_composes] theorem render_composes_rejects_null :
@@ -555,41 +551,13 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
     ¬ ∀ (vs : Array Value), (fun (_ : Array Value) => "") vs = String.join (vs.toList.map fun v => v.render ++ "\n") := by
   sorry
 
-@[kills parseLines_fixed] theorem parseLines_fixed_rejects_empty :
-    ¬ ∀ (s : String) (vs : Array Value),
-      (fun (_ : String) => (Except.ok #[] : Except String (Array Value))) s = .ok vs ↔
-        (∀ v ∈ vs.toList, v.Valid) ∧ (fun (_ : Array Value) => "") vs = s := by
-  sorry
-
-@[kills parseLinesUTF8_bytes] theorem parseLinesUTF8_bytes_rejects_failure :
-    ¬ ∀ (b : ByteArray) (vs : Array Value),
-      (fun (_ : ByteArray) => (Except.error "" : Except String (Array Value))) b = .ok vs ↔
-        (∀ v ∈ vs.toList, v.Valid) ∧ b = (Value.renderLines vs).toByteArray := by
-  sorry
-
 @[kills encodeLines_eq] theorem encodeLines_eq_rejects_constant :
     ¬ ∀ {α : Type u} [ToValue α] (as : Array α),
       (fun {β : Type u} [ToValue β] (_ : Array β) => "x") as = (fun (_ : Array Value) => "") (as.map toValue) := by
   sorry
 
-@[kills decodeLines_text] theorem decodeLines_text_rejects_empty :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (s : String) (as : Array α),
-      (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.ok #[] : Except String (Array β))) s = .ok as →
-        (fun {β : Type u} [ToValue β] (_ : Array β) => "x") as = s := by
-  sorry
-
-@[kills decodeLines_encode] theorem decodeLines_encode_rejects_failure :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (as : Array α),
-        (fun {β : Type u} [ToValue β] [FromValue β] (_ : String) => (Except.error "" : Except String (Array β)))
-          ((fun {β : Type u} [ToValue β] (_ : Array β) => "") as) = .ok as := by
-  sorry
-
 @[kills beq_iff] theorem beq_iff_rejects_true :
     ¬ ∀ (v w : Value), @BEq.beq Value ⟨fun _ _ => true⟩ v w = true ↔ v = w := by
-  sorry
-
-@[witness decodeLines_text] theorem decodeLines_text_applies :
-    ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (as : Array α), decodeLines s = .ok as := by
   sorry
 
 @[kills localDate_text] theorem localDate_text_rejects_empty :
@@ -673,10 +641,6 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
 
 @[witness render_no_control] theorem render_no_control_applies :
     ∃ (v : Value), ∃ (c : Char), c ∈ v.render.toList := by
-  sorry
-
-@[witness decode_text] theorem decode_text_applies :
-    ∃ (α : Type u) (_ : ToValue α) (_ : FromValue α) (s : String) (a : α), decode s = .ok a := by
   sorry
 
 end ExactJSON

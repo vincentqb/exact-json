@@ -8,6 +8,10 @@ namespace ExactJSON
 
 universe u
 
+structure Costed (α : Type u) where
+  value : α
+  steps : Nat
+
 namespace Parser
 
 inductive Read (α : Type) where
@@ -233,18 +237,6 @@ def failAt (input : List Char) (message : String) (rest : List Char) (steps : Na
 
 end Parser
 
-def readLines {α : Type u} (read : String → Except String α) (number : Nat) (out : Array α) :
-    List String → Except String (Array α)
-  | [] => .ok out
-  | line :: rest =>
-    if rest.isEmpty && line.isEmpty then .ok out
-    else
-      match read line with
-      | .error e => .error s!"line {number + 1}, {e}"
-      | .ok a =>
-        if rest.isEmpty then .error s!"line {number + 1}: no line feed at its end"
-        else readLines read (number + 1) (out.push a) rest
-
 namespace Value
 
 def parseCosted (s : String) : Costed (Except String Value) :=
@@ -260,24 +252,6 @@ def readJson (s : String) : Except String Value :=
   match Rfc8259.read s with
   | .ok v => .ok v
   | .error (message, rest) => .error s!"at character {s.length - rest.length}: {message}"
-
-def parseLines (s : String) : Except String (Array Value) := readLines parse 0 #[] (s.splitOn "\n")
-
-def utf8Error (bytes : ByteArray) : String := Id.run do
-  let mut start := 0
-  let mut line := 1
-  for i in [0:bytes.size + 1] do
-    if i == bytes.size || bytes[i]! == 0x0A then
-      if (String.fromUTF8? (bytes.extract start i)).isNone then
-        return s!"line {line}: not UTF-8"
-      start := i + 1
-      line := line + 1
-  return "not UTF-8"
-
-def parseLinesUTF8 (bytes : ByteArray) : Except String (Array Value) :=
-  match String.fromUTF8? bytes with
-  | some s => parseLines s
-  | none => .error (utf8Error bytes)
 
 end Value
 

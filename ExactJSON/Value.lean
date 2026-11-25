@@ -70,9 +70,27 @@ end
 
 abbrev Value.Valid (v : Value) : Prop := v.isValid = true
 
-structure Costed (α : Type u) where
-  value : α
-  steps : Nat
+mutual
+
+@[expose] def Value.depth : Value → Nat
+  | .array ⟨items⟩ => itemsDepth items + 1
+  | .table ⟨members⟩ => membersDepth members + 1
+  | _ => 0
+
+@[expose] def itemsDepth : List Value → Nat
+  | [] => 0
+  | v :: rest => max v.depth (itemsDepth rest)
+
+@[expose] def membersDepth : List (String × Value) → Nat
+  | [] => 0
+  | (_, v) :: rest => max v.depth (membersDepth rest)
+
+end
+
+inductive Spelling where
+  | canonical
+  | any
+  deriving DecidableEq, Repr
 
 class ToValue (α : Type u) where
   toValue : α → Value

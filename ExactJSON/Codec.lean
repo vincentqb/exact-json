@@ -1,6 +1,6 @@
 module
 
-public import ExactJSON.Parse
+public import ExactJSON.Read
 public import ExactJSON.Float
 public import Std.Data.ExtTreeMap
 
@@ -182,20 +182,25 @@ instance {α : Type u} [ToValue α] : NotNull (Std.ExtTreeMap String α) := ⟨f
 
 def encode {α : Type u} [ToValue α] (a : α) : String := (toValue a).render
 
-def decode {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String α :=
-  match Value.parse s with
+def typed {α : Type u} [ToValue α] [FromValue α] (v : Value) : Except String α :=
+  match fromValue? v with
   | .error e => .error e
-  | .ok v =>
-    match fromValue? v with
-    | .error e => .error e
-    | .ok a =>
-      if toValue a == v then .ok a
-      else .error s!"not the text of a value of this type: it would be written {encode a}"
+  | .ok a =>
+    if toValue a == v then .ok a
+    else .error s!"not the text of a value of this type: it would be written {encode a}"
+
+def decode {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) : Except String α :=
+  match Value.read .canonical maxDepth b with
+  | .error e => .error e
+  | .ok v => typed v
 
 def encodeLines {α : Type u} [ToValue α] (as : Array α) : String :=
   as.foldl (fun out a => (Value.renderTo out (toValue a)).push '\n') ""
 
-def decodeLines {α : Type u} [ToValue α] [FromValue α] (s : String) : Except String (Array α) :=
-  readLines decode 0 #[] (s.splitOn "\n")
+def decodeLines {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : ByteArray) :
+    Except String (Array α) :=
+  match Value.readLines .canonical maxDepth b with
+  | .error e => .error e
+  | .ok vs => List.toArray <$> vs.toList.mapM typed
 
 end ExactJSON

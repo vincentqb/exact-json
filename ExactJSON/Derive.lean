@@ -172,18 +172,6 @@ theorem opt_map {α : Type u} [ToValue α] {read : Value → Except String α} {
 theorem tag?_ofTag (t : String × Option Value) : tag? (ofTag t) = .ok t := by
   obtain ⟨n, _ | p⟩ := t <;> rfl
 
-mutual
-def depth : Value → Nat
-  | .array ⟨items⟩ => depthItems items + 1
-  | .table ⟨members⟩ => depthMembers members + 1
-  | _ => 0
-def depthItems : List Value → Nat
-  | [] => 0
-  | v :: rest => max (depth v) (depthItems rest)
-def depthMembers : List (String × Value) → Nat
-  | [] => 0
-  | (_, v) :: rest => max (depth v) (depthMembers rest)
-end
 
 def fuel {α : Type u} (step : (Value → Except String α) → Value → Except String α) :
     Nat → Value → Except String α
@@ -192,13 +180,13 @@ def fuel {α : Type u} (step : (Value → Except String α) → Value → Except
 
 def fix {α : Type u} (step : (Value → Except String α) → Value → Except String α) (v : Value) :
     Except String α :=
-  fuel step (depth v + 1) v
+  fuel step (Value.depth v + 1) v
 
 theorem fuel_ok {α : Type u} (step : (Value → Except String α) → Value → Except String α)
     (enc : α → Value)
     (hstep : ∀ (decode : Value → Except String α) (a : α),
-      (∀ b, depth (enc b) < depth (enc a) → decode (enc b) = .ok b) → step decode (enc a) = .ok a) :
-    ∀ n a, depth (enc a) < n → fuel step n (enc a) = .ok a := by
+      (∀ b, Value.depth (enc b) < Value.depth (enc a) → decode (enc b) = .ok b) → step decode (enc a) = .ok a) :
+    ∀ n a, Value.depth (enc a) < n → fuel step n (enc a) = .ok a := by
   intro n
   induction n with
   | zero => intro a h; exact absurd h (Nat.not_lt_zero _)
@@ -207,17 +195,17 @@ theorem fuel_ok {α : Type u} (step : (Value → Except String α) → Value →
 theorem fix_ok {α : Type u} (step : (Value → Except String α) → Value → Except String α)
     (enc : α → Value)
     (hstep : ∀ (decode : Value → Except String α) (a : α),
-      (∀ b, depth (enc b) < depth (enc a) → decode (enc b) = .ok b) → step decode (enc a) = .ok a)
+      (∀ b, Value.depth (enc b) < Value.depth (enc a) → decode (enc b) = .ok b) → step decode (enc a) = .ok a)
     (a : α) : fix step (enc a) = .ok a :=
   fuel_ok step enc hstep _ a (Nat.lt_succ_self _)
 
-theorem depth_le_items {v : Value} : ∀ {xs : List Value}, v ∈ xs → depth v ≤ depthItems xs
-  | _ :: _, .head _ => by simp only [depthItems]; omega
-  | _ :: _, .tail _ h => by have := depth_le_items h; simp only [depthItems]; omega
+theorem depth_le_items {v : Value} : ∀ {xs : List Value}, v ∈ xs → Value.depth v ≤ itemsDepth xs
+  | _ :: _, .head _ => by simp only [itemsDepth]; omega
+  | _ :: _, .tail _ h => by have := depth_le_items h; simp only [itemsDepth]; omega
 
-theorem depth_le_members {v : Value} : ∀ {ms : List (String × Value)} {k : String}, (k, v) ∈ ms → depth v ≤ depthMembers ms
-  | _ :: _, _, .head _ => by simp only [depthMembers]; omega
-  | (_, _) :: _, _, .tail _ h => by have := depth_le_members h; simp only [depthMembers]; omega
+theorem depth_le_members {v : Value} : ∀ {ms : List (String × Value)} {k : String}, (k, v) ∈ ms → Value.depth v ≤ membersDepth ms
+  | _ :: _, _, .head _ => by simp only [membersDepth]; omega
+  | (_, _) :: _, _, .tail _ h => by have := depth_le_members h; simp only [membersDepth]; omega
 
 theorem mem_present {v : Value} : ∀ {schema : List (String × Bool)} {es : List (Option Value)},
     Fits schema es → some v ∈ es → ∃ k, (k, v) ∈ present schema es
@@ -235,20 +223,20 @@ theorem mem_present {v : Value} : ∀ {schema : List (String × Bool)} {es : Lis
       | some w => exact ⟨k', List.mem_cons_of_mem _ hk⟩
 
 theorem depth_ofTag_record {n : String} {schema : List (String × Bool)} {es : List (Option Value)} {v : Value}
-    (hfit : Fits schema es) (hmem : some v ∈ es) : depth v < depth (ofTag (n, some (record schema es))) := by
+    (hfit : Fits schema es) (hmem : some v ∈ es) : Value.depth v < Value.depth (ofTag (n, some (record schema es))) := by
   obtain ⟨k, hk⟩ := mem_present hfit hmem
   have := depth_le_members hk
-  simp only [ofTag, record, depth, depthMembers, List.toArray]
+  simp only [ofTag, record, Value.depth, membersDepth, List.toArray]
   omega
 
 theorem depth_ofTag_array {n : String} {xs : List Value} {v : Value} (hmem : v ∈ xs) :
-    depth v < depth (ofTag (n, some (.array ⟨xs⟩))) := by
+    Value.depth v < Value.depth (ofTag (n, some (.array ⟨xs⟩))) := by
   have := depth_le_items hmem
-  simp only [ofTag, depth, depthMembers]
+  simp only [ofTag, Value.depth, membersDepth]
   omega
 
-theorem depth_ofTag_some {n : String} {v : Value} : depth v < depth (ofTag (n, some v)) := by
-  simp only [ofTag, depth, depthMembers]
+theorem depth_ofTag_some {n : String} {v : Value} : Value.depth v < Value.depth (ofTag (n, some v)) := by
+  simp only [ofTag, Value.depth, membersDepth]
   omega
 
 inductive AllValid : List (Option Value) → Prop
@@ -320,8 +308,8 @@ theorem ofTag_ne_null (t : String × Option Value) : ofTag t ≠ .null := by
   obtain ⟨n, _ | p⟩ := t <;> nofun
 
 theorem valid_of_depth {α : Type u} (enc : α → Value)
-    (h : ∀ a, (∀ b, depth (enc b) < depth (enc a) → (enc b).Valid) → (enc a).Valid) : ∀ a, (enc a).Valid := by
-  suffices ∀ n a, depth (enc a) < n → (enc a).Valid from fun a => this _ a (Nat.lt_succ_self _)
+    (h : ∀ a, (∀ b, Value.depth (enc b) < Value.depth (enc a) → (enc b).Valid) → (enc a).Valid) : ∀ a, (enc a).Valid := by
+  suffices ∀ n a, Value.depth (enc a) < n → (enc a).Valid from fun a => this _ a (Nat.lt_succ_self _)
   intro n
   induction n with
   | zero => intro a h; exact absurd h (Nat.not_lt_zero _)

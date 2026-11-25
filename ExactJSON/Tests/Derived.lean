@@ -6,6 +6,8 @@ meta import ExactJSON
 
 open ExactJSON
 
+def decodeText {α : Type} [ToValue α] [FromValue α] (s : String) : Except String α := decode 10000 s.toUTF8
+
 universe u
 
 structure Empty0 where
@@ -64,13 +66,14 @@ def wide : Wide :=
   { a01 := 1, a02 := "two", a03? := none, a04 := true, a05 := #[some 5, none], a06? := some ["x"],
     a07 := 'é', a08 := 255, a09 := -9, a10 := 0.1, a11 := (11, "eleven"), a12 := .add (.lit 1) (.neg (.lit 2)) }
 
-example (p : Pair Nat String) : decode (encode p) = .ok p := decode_encode p
-example (c : Chain (Pair Int Bool)) : decode (encode c) = .ok c := decode_encode c
-example (t : Triple) : decode (encode t) = .ok t := decode_encode t
-example (b : UBox (Array Op)) : decode (encode b) = .ok b := decode_encode b
-example (w : Wide) : decode (encode w) = .ok w := decode_encode w
-example (ws : Array Wide) : decodeLines (encodeLines ws) = .ok ws := decodeLines_encode ws
-example (e : Empty0) : decode (encode e) = .ok e := decode_encode e
+example (p : Pair Nat String) (h : (toValue p).depth ≤ 64) : decode 64 (encode p).toUTF8 = .ok p := decode_encode 64 p h
+example (c : Chain (Pair Int Bool)) (h : (toValue c).depth ≤ 64) : decode 64 (encode c).toUTF8 = .ok c := decode_encode 64 c h
+example (t : Triple) (h : (toValue t).depth ≤ 64) : decode 64 (encode t).toUTF8 = .ok t := decode_encode 64 t h
+example (b : UBox (Array Op)) (h : (toValue b).depth ≤ 64) : decode 64 (encode b).toUTF8 = .ok b := decode_encode 64 b h
+example (w : Wide) (h : (toValue w).depth ≤ 64) : decode 64 (encode w).toUTF8 = .ok w := decode_encode 64 w h
+example (ws : Array Wide) (h : ∀ w ∈ ws, (toValue w).depth ≤ 64) :
+    decodeLines 64 (encodeLines ws).toUTF8 = .ok ws := decodeLines_encode 64 ws h
+example (e : Empty0) (h : (toValue e).depth ≤ 64) : decode 64 (encode e).toUTF8 = .ok e := decode_encode 64 e h
 
 structure Tagged where
   labels : Std.ExtTreeMap String String
@@ -80,12 +83,12 @@ structure Tagged where
 def labels (keys : List String) : Std.ExtTreeMap String String :=
   keys.foldl (fun m k => m.insert k (k ++ "!")) {}
 
-example (t : Tagged) : decode (encode t) = .ok t := decode_encode t
+example (t : Tagged) (h : (toValue t).depth ≤ 64) : decode 64 (encode t).toUTF8 = .ok t := decode_encode 64 t h
 example : labels ["a", "b", "c", "d"] = labels ["c", "a", "d", "b"] := by decide
 
 #guard encode ({ labels := labels ["team", "env"], counts? := none } : Tagged) ==
   "{\"labels\":{\"env\":\"env!\",\"team\":\"team!\"}}"
-#guard !(decode "{\"labels\":{\"b\":\"x\",\"a\":\"y\"}}" : Except String Tagged).isOk
+#guard !(decodeText "{\"labels\":{\"b\":\"x\",\"a\":\"y\"}}" : Except String Tagged).isOk
 
 #guard encode ({} : Empty0) == "{}"
 #guard encode ({ fst := 1, snd? := some "s" } : Pair Nat String) == "{\"fst\":1,\"snd\":\"s\"}"
@@ -95,12 +98,12 @@ example : labels ["a", "b", "c", "d"] = labels ["c", "a", "d", "b"] := by decide
 #guard encode (Op.call "f" #[1, 2] none) == "{\"call\":[\"f\",[1,2],null]}"
 #guard encode (Op.neg (.lit 4)) == "{\"neg\":{\"lit\":4}}"
 #guard encode wide == "{\"a01\":1,\"a02\":\"two\",\"a04\":true,\"a05\":[5,null],\"a06\":[\"x\"],\"a07\":\"é\",\"a08\":255,\"a09\":-9,\"a10\":0.1,\"a11\":[11,\"eleven\"],\"a12\":{\"add\":{\"lhs\":{\"lit\":1},\"rhs\":{\"neg\":{\"lit\":2}}}}}"
-#guard ((decode (encode wide) : Except String Wide).map encode).toOption == some (encode wide)
-#guard !(decode "{\"fst\":1,\"snd\":null}" : Except String (Pair Nat String)).isOk
-#guard !(decode "{\"snd\":\"s\"}" : Except String (Pair Nat String)).isOk
-#guard !(decode "{\"fst\":1,\"zz\":0}" : Except String (Pair Nat String)).isOk
-#guard !(decode "{\"lit\":1,\"neg\":2}" : Except String Op).isOk
-#guard !(decode "{\"call\":[\"f\",[1]]}" : Except String Op).isOk
+#guard ((decodeText (encode wide) : Except String Wide).map encode).toOption == some (encode wide)
+#guard !(decodeText "{\"fst\":1,\"snd\":null}" : Except String (Pair Nat String)).isOk
+#guard !(decodeText "{\"snd\":\"s\"}" : Except String (Pair Nat String)).isOk
+#guard !(decodeText "{\"fst\":1,\"zz\":0}" : Except String (Pair Nat String)).isOk
+#guard !(decodeText "{\"lit\":1,\"neg\":2}" : Except String Op).isOk
+#guard !(decodeText "{\"call\":[\"f\",[1]]}" : Except String Op).isOk
 
 namespace Domain
 
@@ -162,16 +165,16 @@ inductive Tree where
   | maybe (label? : Option String) (rest : Tree)
   deriving ToValue, FromValue, LawfulValue
 
-example (x : Req1) : decode (encode x) = .ok x := decode_encode x
-example (x : Req2) : decode (encode x) = .ok x := decode_encode x
-example (x : ReqDefault) : decode (encode x) = .ok x := decode_encode x
-example (x : ReqNested) : decode (encode x) = .ok x := decode_encode x
-example (x : Opt1) : decode (encode x) = .ok x := decode_encode x
-example (x : OptOpt) : decode (encode x) = .ok x := decode_encode x
-example (x : ReqExt) : decode (encode x) = .ok x := decode_encode x
-example (x : ReqParam (Array Req1)) : decode (encode x) = .ok x := decode_encode x
-example (x : Shapes) : decode (encode x) = .ok x := decode_encode x
-example (x : Tree) : decode (encode x) = .ok x := decode_encode x
+example (x : Req1) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : Req2) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : ReqDefault) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : ReqNested) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : Opt1) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : OptOpt) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : ReqExt) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : ReqParam (Array Req1)) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : Shapes) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
+example (x : Tree) (h : (toValue x).depth ≤ 64) : decode 64 (encode x).toUTF8 = .ok x := decode_encode 64 x h
 
 #guard encode ({ a := 1 } : Req1) == "{\"a\":1}"
 #guard encode ({ a := 1 } : ReqDefault) == "{\"a\":1,\"b\":0}"
@@ -181,7 +184,7 @@ example (x : Tree) : decode (encode x) = .ok x := decode_encode x
   "[\"none0\",{\"single\":1},{\"positional\":[2,\"p\"]},{\"named1\":{\"a\":3}},{\"named2\":{\"a\":4,\"b\":\"q\"}},{\"namedOpt\":{}},{\"namedMixed\":{\"a\":5,\"b\":\"r\"}}]"
 #guard encode (Tree.node (.wrap .leaf) 7 (.maybe (some "m") (.only .leaf))) ==
   "{\"node\":{\"left\":{\"wrap\":\"leaf\"},\"right\":{\"maybe\":{\"label\":\"m\",\"rest\":{\"only\":{\"child\":\"leaf\"}}}},\"value\":7}}"
-#guard !(decode "{\"a\":1,\"b\":null}" : Except String Req2).isOk
-#guard !(decode "{\"b\":\"x\"}" : Except String Req2).isOk
+#guard !(decodeText "{\"a\":1,\"b\":null}" : Except String Req2).isOk
+#guard !(decodeText "{\"b\":\"x\"}" : Except String Req2).isOk
 
 end Domain
