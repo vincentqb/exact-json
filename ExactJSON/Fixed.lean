@@ -229,7 +229,7 @@ theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat
     exact step 12 (strict_string_control c _ acc s0 hc hpush)
 
 theorem render_integer_toList (n : Int) : (Value.render (.integer n)).toList = (toString n).toList := by
-  simp [Value.render, Value.renderTo]
+  simp [Value.render, Value.renderTo, intText_eq]
 
 theorem render_decimal_toList (d : Decimal) : (Value.render (.decimal d)).toList = d.text.toList := by
   simp [Value.render, Value.renderTo]

@@ -1,6 +1,7 @@
 module
 
 public import Std.Data.ExtTreeMap
+public import ExactJSON.Digits
 
 public section
 
@@ -18,11 +19,6 @@ namespace Decimal
 
 @[expose] def isNormal (d : Decimal) : Bool :=
   if d.digits = 0 then d.exponent == 0 else d.digits % 10 != 0
-
-@[expose] def strip (m : Nat) (q : Int) : Nat × Int :=
-  if h : 0 < m ∧ m % 10 = 0 then strip (m / 10) (q + 1) else (m, q)
-termination_by m
-decreasing_by omega
 
 @[expose] def normalize (negative : Bool) (m : Nat) (q : Int) : Decimal :=
   if m = 0 then ⟨negative, 0, 0⟩ else ⟨negative, (strip m q).1, (strip m q).2⟩

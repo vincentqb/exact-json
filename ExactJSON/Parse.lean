@@ -97,22 +97,22 @@ def Grammar.next (g : Grammar) (c : Char) : Option Grammar :=
 
 structure Parts where
   negative : Bool := false
-  digits : Nat := 0
+  digits : List Char := []
   fractionDigits : Nat := 0
   isFloat : Bool := false
   exponentNegative : Bool := false
-  exponent : Nat := 0
+  exponent : List Char := []
   length : Nat := 0
 
 def Parts.read (p : Parts) (g : Grammar) (c : Char) : Parts :=
   let p := { p with length := p.length + 1 }
   match g with
   | .sign => { p with negative := true }
-  | .whole => { p with digits := p.digits * 10 + (c.toNat - 48) }
+  | .whole => { p with digits := c :: p.digits }
   | .point | .exponentMark => { p with isFloat := true }
-  | .fraction => { p with digits := p.digits * 10 + (c.toNat - 48), fractionDigits := p.fractionDigits + 1 }
+  | .fraction => { p with digits := c :: p.digits, fractionDigits := p.fractionDigits + 1 }
   | .exponentSign => { p with exponentNegative := c == '-' }
-  | .exponent => { p with exponent := p.exponent * 10 + (c.toNat - 48) }
+  | .exponent => { p with exponent := c :: p.exponent }
 
 def finish (g : Grammar) (p : Parts) (rest : List Char) (steps : Nat) : Read Parts :=
   match g with
@@ -129,15 +129,17 @@ def scan (g : Grammar) (p : Parts) : List Char → Nat → Read Parts
     | none => finish g p (c :: rest) (steps + 1)
 
 def Parts.value (p : Parts) : Value :=
+  let digits := Rfc8259.digitsValue p.digits.reverse
   if p.isFloat then
-    let exponent : Int := if p.exponentNegative then -(p.exponent : Int) else p.exponent
-    .decimal (Decimal.normalize p.negative p.digits (exponent - p.fractionDigits))
-  else .integer (if p.negative then -(p.digits : Int) else p.digits)
+    let size := Rfc8259.digitsValue p.exponent.reverse
+    let exponent : Int := if p.exponentNegative then -(size : Int) else size
+    .decimal (Decimal.normalize p.negative digits (exponent - p.fractionDigits))
+  else .integer (if p.negative then -(digits : Int) else digits)
 
 def lenientScan (input : List Char) (steps : Nat) : Read Parts :=
   match input with
   | '-' :: rest => scan .sign { negative := true, length := 1 } rest steps
-  | c :: rest => scan .whole { digits := c.toNat - 48, length := 1 } rest steps
+  | c :: rest => scan .whole { digits := [c], length := 1 } rest steps
   | [] => .error "expected a value, found the end of the text" [] steps
 
 def lenientError (input : List Char) (steps : Nat) : Read Value :=

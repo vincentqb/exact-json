@@ -2,6 +2,7 @@ module
 
 public import ExactJSON.Value
 public import ExactJSON.Canonical
+public import ExactJSON.Printer
 
 @[expose] public section
 
@@ -32,7 +33,7 @@ mutual
 def renderTo (out : String) : Value → String
   | .null => out ++ "null"
   | .string s => pushString out s
-  | .integer n => out ++ toString n
+  | .integer n => out ++ intText n
   | .decimal d => out ++ d.text
   | .boolean b => out ++ if b then "true" else "false"
   | .array ⟨items⟩ => (renderItems (out.push '[') items).push ']'

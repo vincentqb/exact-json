@@ -133,7 +133,7 @@ theorem printable_renderTo {out : String} (h : Printable out.toList) :
     (v : Value) → Printable (Value.renderTo out v).toList
   | .null => printable_string_append h (by decide)
   | .string s => printable_pushString s h
-  | .integer n => printable_string_append h (printable_intToString n)
+  | .integer n => printable_string_append h (intText_eq n ▸ printable_intToString n)
   | .decimal d => printable_string_append h (printable_decimalText d)
   | .boolean b => printable_string_append h (by cases b <;> decide)
   | .array ⟨items⟩ => printable_push (printable_renderItems (printable_push h (by decide)) items) (by decide)

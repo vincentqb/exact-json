@@ -19,8 +19,6 @@ def skipWs : List Char → List Char
 def isNumberChar (c : Char) : Bool :=
   c.isDigit || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
 
-def digitsValue (ds : List Char) : Nat := Nat.ofDigitChars 10 ds 0
-
 def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
   let magnitude : Option Float :=
     if m = 0 then some 0.0

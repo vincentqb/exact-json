@@ -8,11 +8,6 @@ namespace ExactJSON
 
 namespace Decimal
 
-theorem strip_eq (m : Nat) (q : Int) :
-    strip m q = if 0 < m ∧ m % 10 = 0 then strip (m / 10) (q + 1) else (m, q) := by
-  rw [strip]
-  simp only [dite_eq_ite]
-
 theorem strip_normal (m : Nat) (q : Int) (hm : 0 < m) : (strip m q).1 % 10 ≠ 0 ∧ 0 < (strip m q).1 := by
   induction m using Nat.strongRecOn generalizing q with
   | _ m ih =>

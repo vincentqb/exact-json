@@ -50,7 +50,7 @@ mutual
 theorem render_write : (v : Value) → (render v).toList = (write v).toList
   | .null => by rw [text_null]; rfl
   | .boolean b => by cases b <;> rw [text_boolean] <;> rfl
-  | .integer n => by simp [write, render, renderTo]
+  | .integer n => by simp [write, render, renderTo, intText_eq]
   | .decimal d => by simp [write, render, renderTo]
   | .string s => by rw [text_string]; simp [write, stringText_toList]
   | .array ⟨items⟩ => by
