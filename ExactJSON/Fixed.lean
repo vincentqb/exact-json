@@ -3,6 +3,7 @@ module
 public import ExactJSON.Sound
 public import ExactJSON.NumberText
 public import ExactJSON.SpecValid
+public import ExactJSON.DecimalText
 
 public section
 
@@ -29,17 +30,6 @@ theorem RestOk.not_numberChar {rest : List Char} (h : RestOk rest) :
 theorem skipWs_cons (c : Char) (t : List Char) (h : Rfc8259.isWs c = false) :
     Rfc8259.skipWs (c :: t) = c :: t := by
   simp [Rfc8259.skipWs, h]
-
-theorem span_loop_text (p : Char → Bool) : ∀ (text rest acc : List Char), (∀ c ∈ text, p c = true) →
-    (∀ c t, rest = c :: t → p c = false) → List.span.loop p (text ++ rest) acc = (acc.reverse ++ text, rest)
-  | [], rest, acc, _, hrest => by
-    cases rest with
-    | nil => simp [List.span.loop]
-    | cons c t => simp [List.span.loop, hrest c t rfl]
-  | c :: text, rest, acc, htext, hrest => by
-    simp only [List.cons_append, List.span.loop, htext c (by simp)]
-    rw [span_loop_text p text rest (c :: acc) (fun d hd => htext d (by simp [hd])) hrest]
-    simp
 
 theorem span_text (text rest : List Char) (htext : ∀ c ∈ text, Rfc8259.isNumberChar c = true)
     (hrest : RestOk rest) : (text ++ rest).span Rfc8259.isNumberChar = (text, rest) := by
@@ -241,28 +231,8 @@ theorem strict_string_escape : ∀ (t rest : List Char) (acc : String) (s0 : Nat
 theorem render_integer_toList (n : Int) : (Value.render (.integer n)).toList = (toString n).toList := by
   simp [Value.render, Value.renderTo]
 
-theorem render_float_toList (x : Float) : (Value.render (.float x)).toList = (floatText x).toList := by
+theorem render_decimal_toList (d : Decimal) : (Value.render (.decimal d)).toList = d.text.toList := by
   simp [Value.render, Value.renderTo]
-
-theorem floatText_cases (x : Float) :
-    (∃ d : Decimal, (floatText x).toList = d.toFloatText.toList) ∨ (floatText x).toList = "NaN".toList ∨
-      (floatText x).toList = "Infinity".toList ∨ (floatText x).toList = "-Infinity".toList := by
-  unfold floatText
-  split
-  · rename_i text h
-    left
-    unfold Float.toCanonical? at h
-    cases hs : FloatText.shortest x with
-    | none => simp [hs] at h
-    | some d =>
-      simp only [hs, Option.map_some, Option.some.injEq] at h
-      exact ⟨d, by rw [h]⟩
-  · right
-    split
-    · exact .inl rfl
-    · split
-      · exact .inr (.inl rfl)
-      · exact .inr (.inr rfl)
 
 theorem exists_cons_of_head? {l : List Char} {c : Char} (h : l.head? = some c) : ∃ t, l = c :: t := by
   cases l with
@@ -280,12 +250,12 @@ theorem toString_head (n : Int) : ∃ c, (toString n).toList.head? = some c ∧ 
       .inr (Nat.isDigit_of_mem_toDigits (b := 10) (n := n.toNat) (by decide) (by decide) (by rw [h]; simp))⟩
   · exact ⟨'-', by simp [String.toList_append], .inl rfl⟩
 
-theorem toFloatText_head (d : Decimal) :
-    ∃ c, d.toFloatText.toList.head? = some c ∧ (c = '-' ∨ c.isDigit = true) := by
+theorem decimalText_head (d : Decimal) :
+    ∃ c, d.text.toList.head? = some c ∧ (c = '-' ∨ c.isDigit = true) := by
   obtain ⟨c0, t0, h0⟩ := List.exists_cons_of_ne_nil (Nat.toDigits_ne_nil (n := d.digits) (b := 10))
   have hc0 : c0.isDigit = true :=
     Nat.isDigit_of_mem_toDigits (b := 10) (n := d.digits) (by decide) (by decide) (by rw [h0]; simp)
-  unfold Decimal.toFloatText
+  unfold Decimal.text
   dsimp only
   cases hneg : d.negative
   · simp only [Bool.false_eq_true, ite_false, List.nil_append]
@@ -323,31 +293,7 @@ theorem spec_value_numberText (f : Nat) (text rest : List Char)
   simp only [List.isEmpty_cons, Bool.false_eq_true, ite_false]
   cases Rfc8259.numberValue (c :: t) <;> rfl
 
-theorem spec_value_floatText_none (f : Nat) (x : Float) (rest : List Char)
-    (h : (floatText x).toList = "NaN".toList ∨ (floatText x).toList = "Infinity".toList ∨
-      (floatText x).toList = "-Infinity".toList) :
-    (Rfc8259.value (f + 1) ((floatText x).toList ++ rest)).toOption = none ∧ Value.rereadFloat x = none := by
-  have nan : ∀ rest : List Char, (Rfc8259.value (f + 1) ("NaN".toList ++ rest)).toOption = none := by
-    intro rest
-    unfold Rfc8259.value
-    simp [List.span, List.span.loop, Rfc8259.isNumberChar, Except.toOption]
-  have inf : ∀ rest : List Char, (Rfc8259.value (f + 1) ("Infinity".toList ++ rest)).toOption = none := by
-    intro rest
-    unfold Rfc8259.value
-    simp [List.span, List.span.loop, Rfc8259.isNumberChar, Except.toOption]
-  have minf : ∀ rest : List Char, (Rfc8259.value (f + 1) ("-Infinity".toList ++ rest)).toOption = none := by
-    intro rest
-    unfold Rfc8259.value
-    simp [List.span, List.span.loop, Rfc8259.isNumberChar, Except.toOption, Rfc8259.numberValue, Rfc8259.numberSign]
-  rcases h with h | h | h
-  · exact ⟨by rw [h]; exact nan rest, by simp only [Value.rereadFloat, h]; rfl⟩
-  · exact ⟨by rw [h]; exact inf rest, by simp only [Value.rereadFloat, h]; rfl⟩
-  · exact ⟨by rw [h]; exact minf rest, by simp only [Value.rereadFloat, h]; rfl⟩
-
 theorem toOption_eq_some {ε α : Type} {x : Except ε α} {a : α} : x.toOption = some a ↔ x = .ok a := by
-  cases x <;> simp [Except.toOption]
-
-theorem toOption_eq_none {ε α : Type} {x : Except ε α} : x.toOption = none ↔ ∃ e, x = .error e := by
   cases x <;> simp [Except.toOption]
 
 theorem head_ok_of_number (c : Char) (h : c = '-' ∨ c.isDigit = true) :
@@ -368,14 +314,10 @@ theorem render_head (v : Value) : ∃ c t, (Value.render v).toList = c :: t ∧
     obtain ⟨c, hc, hk⟩ := toString_head n
     obtain ⟨t, ht⟩ := exists_cons_of_head? hc
     exact ⟨c, t, by rw [render_integer_toList, ht], head_ok_of_number c hk⟩
-  | float x =>
-    rcases floatText_cases x with ⟨d, hd⟩ | h | h | h
-    · obtain ⟨c, hc, hk⟩ := toFloatText_head d
-      obtain ⟨t, ht⟩ := exists_cons_of_head? hc
-      exact ⟨c, t, by rw [render_float_toList, hd, ht], head_ok_of_number c hk⟩
-    · exact ⟨'N', _, by rw [render_float_toList, h]; rfl, by decide⟩
-    · exact ⟨'I', _, by rw [render_float_toList, h]; rfl, by decide⟩
-    · exact ⟨'-', _, by rw [render_float_toList, h]; rfl, by decide⟩
+  | decimal d =>
+    obtain ⟨c, hc, hk⟩ := decimalText_head d
+    obtain ⟨t, ht⟩ := exists_cons_of_head? hc
+    exact ⟨c, t, by rw [render_decimal_toList, ht], head_ok_of_number c hk⟩
   | boolean b => cases b <;> exact ⟨_, _, Value.text_boolean _, by decide⟩
   | array items =>
     cases items with
@@ -494,15 +436,10 @@ theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestO
     rw [render_integer_toList, spec_value_numberText f _ rest (numberChars_toString n)
       (toString_toList_ne_nil n) hrest, numberValue_toString]
     rfl
-  | .float x, f + 1, rest, hrest, _, _ => by
-    rw [render_float_toList]
-    rcases floatText_cases x with ⟨d, hd⟩ | h
-    · rw [hd, spec_value_numberText f _ rest (numberChars_toFloatText d) (toFloatText_toList_ne_nil d) hrest]
-      simp only [Value.reread, Value.rereadFloat, hd]
-      cases Rfc8259.numberValue d.toFloatText.toList <;> rfl
-    · obtain ⟨h1, h2⟩ := spec_value_floatText_none f x rest h
-      rw [h1]
-      simp [Value.reread, h2]
+  | .decimal d, f + 1, rest, hrest, _, _ => by
+    rw [render_decimal_toList, spec_value_numberText f _ rest (numberChars_decimalText d) (decimalText_toList_ne_nil d) hrest]
+    simp only [Value.reread, Value.rereadDecimal]
+    cases Rfc8259.numberValue d.text.toList <;> rfl
   | .array ⟨[]⟩, f + 1, rest, _, _, _ => by
     rw [Value.text_array]
     simp only [Value.itemsText, Value.renderItems, String.toList_empty, List.nil_append, List.cons_append]
@@ -836,23 +773,6 @@ theorem strict_open_table (f s0 : Nat) (t : List Char) :
   intro r h
   simp at h
 
-theorem float_reread_text {x : Float} (h : Value.rereadFloat x = some (.float x)) :
-    ∃ d : Decimal, (floatText x).toList = d.toFloatText.toList := by
-  rcases floatText_cases x with hd | hn
-  · exact hd
-  · have := (spec_value_floatText_none 0 x [] hn).2
-    rw [this] at h
-    cases h
-
-theorem rereadFloat_numberValue {x : Float} (h : Value.rereadFloat x = some (.float x)) :
-    Rfc8259.numberValue (floatText x).toList = .ok (.float x) := by
-  unfold Value.rereadFloat at h
-  split at h
-  · rename_i w hw
-    cases h
-    exact hw
-  · cases h
-
 mutual
 
 theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), RestOk rest → v.Valid →
@@ -879,15 +799,13 @@ theorem strict_render : (v : Value) → ∀ (fuel s0 : Nat) (rest : List Char), 
     rw [ht, List.cons_append, strict_value_number f s0 c _ hk, ← List.cons_append, ← ht]
     exact strict_number_text s0 _ rest _ (numberChars_toString n) hrest (numberValue_toString n)
       (render_integer_toList n)
-  | .float x, f + 1, s0, rest, hrest, _, hre, _ => by
-    have hre' : Value.rereadFloat x = some (.float x) := hre
-    obtain ⟨d, hd⟩ := float_reread_text hre'
-    rw [render_float_toList, hd]
-    obtain ⟨c, hc, hk⟩ := toFloatText_head d
+  | .decimal d, f + 1, s0, rest, hrest, hvalid, _, _ => by
+    rw [render_decimal_toList]
+    obtain ⟨c, hc, hk⟩ := decimalText_head d
     obtain ⟨t, ht⟩ := exists_cons_of_head? hc
     rw [ht, List.cons_append, strict_value_number f s0 c _ hk, ← List.cons_append, ← ht]
-    exact strict_number_text s0 _ rest _ (numberChars_toFloatText d) hrest
-      (by rw [← hd]; exact rereadFloat_numberValue hre') (by rw [render_float_toList, hd])
+    exact strict_number_text s0 _ rest _ (numberChars_decimalText d) hrest (numberValue_text d hvalid)
+      (render_decimal_toList d)
   | .array ⟨[]⟩, f + 1, s0, rest, _, _, _, _ => ⟨s0 + 2, by
       rw [Value.text_array]
       rfl⟩
@@ -1110,28 +1028,25 @@ theorem parse_fixed (s : String) (v : Value) :
     have hvalid := Rfc8259.read?_valid _ _ hread
     exact parse_render_of_reread v hvalid (reread_of_read v hvalid hread)
 
-@[expose] def FloatsReadBack : Prop := ∀ x : Float, finiteFloat x = true → Value.rereadFloat x = some (.float x)
-
-section Floats
-
 mutual
 
-theorem reread_self (floats : FloatsReadBack) : (v : Value) → v.Valid → v.reread = some v
+theorem reread_self : (v : Value) → v.Valid → v.reread = some v
   | .null, _ => rfl
   | .string _, _ => rfl
   | .integer _, _ => rfl
   | .boolean _, _ => rfl
-  | .float x, h => floats x h
+  | .decimal d, h => by
+    simp only [Value.reread, Value.rereadDecimal, numberValue_text d h]
   | .array ⟨items⟩, h => by
-    simp only [Value.reread, rereadItems_self floats items h]
+    simp only [Value.reread, rereadItems_self items h]
     rfl
   | .table ⟨members⟩, h => by
     have hboth : (keysIncrease (members.map (·.1)) && membersValid members) = true := h
     simp only [Bool.and_eq_true] at hboth
-    simp only [Value.reread, rereadMembers_self floats members hboth.2]
+    simp only [Value.reread, rereadMembers_self members hboth.2]
     rfl
 
-theorem rereadItems_self (floats : FloatsReadBack) : (items : List Value) → itemsValid items = true → Value.rereadItems items = some items
+theorem rereadItems_self : (items : List Value) → itemsValid items = true → Value.rereadItems items = some items
   | [], _ => rfl
   | v :: vs, h => by
     simp only [itemsValid, Bool.and_eq_true] at h
@@ -1139,9 +1054,9 @@ theorem rereadItems_self (floats : FloatsReadBack) : (items : List Value) → it
         match v.reread, Value.rereadItems vs with
         | some a, some b => some (a :: b)
         | _, _ => none := rfl
-    rw [hcons, reread_self floats v h.1, rereadItems_self floats vs h.2]
+    rw [hcons, reread_self v h.1, rereadItems_self vs h.2]
 
-theorem rereadMembers_self (floats : FloatsReadBack) : (members : List (String × Value)) → membersValid members = true →
+theorem rereadMembers_self : (members : List (String × Value)) → membersValid members = true →
     Value.rereadMembers members = some members
   | [], _ => rfl
   | (k, v) :: ms, h => by
@@ -1150,25 +1065,23 @@ theorem rereadMembers_self (floats : FloatsReadBack) : (members : List (String �
         match v.reread, Value.rereadMembers ms with
         | some a, some b => some ((k, a) :: b)
         | _, _ => none := rfl
-    rw [hcons, reread_self floats (k, v).2 h.1, rereadMembers_self floats ms h.2]
+    rw [hcons, reread_self (k, v).2 h.1, rereadMembers_self ms h.2]
 
 end
 
-theorem read_render_of_floats (floats : FloatsReadBack) (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
-  read_of_reread v h (reread_self floats v h)
+theorem spec_read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
+  read_of_reread v h (reread_self v h)
 
-theorem render_parse_of_floats (floats : FloatsReadBack) (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
-  parse_render_of_reread v h (reread_self floats v h)
+theorem render_parse (v : Value) (h : v.Valid) : Value.parse v.render = .ok v :=
+  parse_render_of_reread v h (reread_self v h)
 
-theorem decode_encode_of_floats (floats : FloatsReadBack) {α : Type u} [ToValue α] [FromValue α]
+theorem decode_encode_of_lawful {α : Type u} [ToValue α] [FromValue α]
     (lawful : ∀ a : α, fromValue? (toValue a) = .ok a) (valid : ∀ a : α, (toValue a).Valid) (a : α) :
     decode (encode a) = .ok a := by
   unfold decode encode
-  rw [render_parse_of_floats floats _ (valid a)]
+  rw [render_parse _ (valid a)]
   simp only [lawful a]
   have : (toValue a == toValue a) = true := Value.beq_self (toValue a)
   simp [this]
-
-end Floats
 
 end ExactJSON

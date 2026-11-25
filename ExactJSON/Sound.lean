@@ -109,7 +109,7 @@ theorem lenientError_ne_ok (input : List Char) (s0 : Nat) (v : Value) (rest : Li
   all_goals simp
 
 theorem numberValue_shape (token : List Char) (v : Value) (h : Rfc8259.numberValue token = .ok v) :
-    (∃ n, v = .integer n) ∨ (∃ x, v = .float x) := by
+    (∃ n, v = .integer n) ∨ (∃ d, v = .decimal d) := by
   unfold Rfc8259.numberValue at h
   simp only at h
   repeat' (split at h <;> (try cases h))
@@ -132,12 +132,12 @@ theorem number_sound (input : List Char) (s0 : Nat) (v : Value) (rest : List Cha
       have htoken := beq_iff_eq.mp hcanonical
       refine ⟨?_, Rfc8259.numberValue_valid _ _ hv, ?_⟩
       · rw [span_append _ _ _ _ hspan, htoken]
-      · rcases numberValue_shape _ _ hv with ⟨n, rfl⟩ | ⟨x, rfl⟩
+      · rcases numberValue_shape _ _ hv with ⟨n, rfl⟩ | ⟨d, rfl⟩
         · rfl
-        · have hx : (floatText x).toList = token := by
+        · have hx : d.text.toList = token := by
             rw [← htoken]
             simp [Value.render, Value.renderTo]
-          simp [Value.reread, Value.rereadFloat, hx, hv]
+          simp [Value.reread, Value.rereadDecimal, hx, hv]
     · cases h
   · exact absurd h (lenientError_ne_ok _ _ _ _ _)
 
@@ -323,7 +323,7 @@ theorem eq_of_beq : (a b : Value) → Value.beq a b = true → a = b
   | .null, b, h => by cases b <;> simp_all [Value.beq]
   | .string x, b, h => by cases b <;> simp_all [Value.beq]
   | .integer x, b, h => by cases b <;> simp_all [Value.beq]
-  | .float x, b, h => by cases b <;> simp_all [Value.beq]
+  | .decimal x, b, h => by cases b <;> simp_all [Value.beq]
   | .boolean x, b, h => by cases b <;> simp_all [Value.beq]
   | .array ⟨xs⟩, b, h => by
     rcases b with _ | _ | _ | _ | _ | ⟨⟨ys⟩⟩ | _ <;> simp [Value.beq] at h
@@ -354,7 +354,7 @@ theorem beq_self : (a : Value) → Value.beq a a = true
   | .null => rfl
   | .string _ => by simp [Value.beq]
   | .integer _ => by simp [Value.beq]
-  | .float _ => by simp [Value.beq]
+  | .decimal _ => by simp [Value.beq]
   | .boolean _ => by simp [Value.beq]
   | .array ⟨xs⟩ => by
     simp only [Value.beq]

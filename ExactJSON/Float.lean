@@ -96,11 +96,6 @@ def shortest (x : Float) : Option Decimal :=
         let (digits, exponent) := stripZeros 20 d (big - p + 1)
         some { negative, digits, exponent }
 
-def ofDecimal? (negative : Bool) (m : Nat) (q : Int) : Option Float := Rfc8259.floatOf? negative m q
-
 end FloatText
-
-def Float.toCanonical? (x : Float) : Option String :=
-  (FloatText.shortest x).map Decimal.toFloatText
 
 end ExactJSON

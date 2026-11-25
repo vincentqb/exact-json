@@ -1,6 +1,7 @@
 module
 
 public import ExactJSON.Parse
+public import ExactJSON.Float
 public import Std.Data.ExtTreeMap
 
 @[expose] public section
@@ -17,7 +18,7 @@ def beq : Value → Value → Bool
   | .null, .null => true
   | .string a, .string b => a == b
   | .integer a, .integer b => a == b
-  | .float a, .float b => decide (a = b)
+  | .decimal a, .decimal b => a == b
   | .boolean a, .boolean b => a == b
   | .array ⟨as⟩, .array ⟨bs⟩ => beqItems as bs
   | .table ⟨as⟩, .table ⟨bs⟩ => beqMembers as bs
@@ -46,7 +47,7 @@ def typeName : Value → String
   | .null => "null"
   | .string _ => "string"
   | .integer _ => "integer"
-  | .float _ => "float"
+  | .decimal _ => "decimal"
   | .boolean _ => "boolean"
   | .array _ => "array"
   | .table _ => "table"
@@ -100,12 +101,20 @@ instance : FromValue Int64 := ⟨fun v => (Value.intInRange (-2 ^ 63) (2 ^ 63 - 
 
 instance : ToValue Float where
   toValue x :=
-    if x.isNaN then .string "NaN"
-    else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity")
-    else .float x
+    match FloatText.shortest x with
+    | some d => .decimal d
+    | none => .string (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity")
 instance : FromValue Float where
   fromValue?
-    | .float x => pure x
+    | .decimal d =>
+      match Rfc8259.floatOf? d.negative d.digits d.exponent with
+      | some x =>
+        match FloatText.shortest x with
+        | some e =>
+          if e = d then pure x
+          else .error s!"expected the shortest decimal of a float: write {e.text}, not {d.text}"
+        | none => .error s!"expected a float, found {d.text}"
+      | none => .error s!"a float beyond the range of binary64: {d.text}"
     | .string "NaN" => pure (0.0 / 0.0)
     | .string "Infinity" => pure (1.0 / 0.0)
     | .string "-Infinity" => pure (-1.0 / 0.0)
@@ -164,10 +173,8 @@ instance : NotNull Int64 := ⟨fun _ h => nomatch h⟩
 instance : NotNull Char := ⟨fun _ h => nomatch h⟩
 instance : NotNull Float where
   toValue_ne_null x h := by
-    change (if x.isNaN then _ else if x.isInf then _ else _) = _ at h
-    split at h
-    · cases h
-    · split at h <;> cases h
+    change (match FloatText.shortest x with | some d => _ | none => _) = _ at h
+    split at h <;> cases h
 instance {α : Type u} [ToValue α] : NotNull (Array α) := ⟨fun _ h => nomatch h⟩
 instance {α : Type u} [ToValue α] : NotNull (List α) := ⟨fun _ h => nomatch h⟩
 instance {α β : Type u} [ToValue α] [ToValue β] : NotNull (α × β) := ⟨fun _ h => nomatch h⟩

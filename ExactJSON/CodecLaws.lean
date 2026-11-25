@@ -260,31 +260,6 @@ theorem codec_char (c : Char) :
     simp only [fromValue?, String.toList_singleton]
     rfl
 
-theorem codec_float (x : Float) :
-    toValue x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
-      ∀ w : Value, fromValue? w = .ok x ↔
-        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
-        (w = .string "-Infinity" ∧ x = -Float.inf) := by
-  have hnan : (0.0 / 0.0 : Float) = Float.nan := FloatText.toBits_inj (by decide +kernel)
-  have hinf : (1.0 / 0.0 : Float) = Float.inf := FloatText.toBits_inj (by decide +kernel)
-  have hninf : (-1.0 / 0.0 : Float) = -Float.inf := FloatText.toBits_inj (by decide +kernel)
-  refine ⟨rfl, fun w => ?_⟩
-  simp only [fromValue?]
-  split
-  · simp [pure_eq_ok]
-  · simp [hnan, pure_eq_ok, eq_comm]
-  · simp [hinf, pure_eq_ok, eq_comm]
-  · simp [hninf, pure_eq_ok, eq_comm]
-  · rename_i h1 h2 h3 h4
-    constructor
-    · intro h
-      cases h
-    · rintro (h | ⟨h, -⟩ | ⟨h, -⟩ | ⟨h, -⟩)
-      · exact (h1 x h).elim
-      · exact (h2 h).elim
-      · exact (h3 h).elim
-      · exact (h4 h).elim
-
 theorem codec_array {α : Type u} [ToValue α] [FromValue α] (xs : Array α) :
     toValue xs = .array (xs.map toValue) ∧
       ∀ w : Value, fromValue? w = .ok xs ↔ ∃ vs : Array Value, w = .array vs ∧ vs.toList.mapM fromValue? = .ok xs.toList := by
@@ -499,19 +474,6 @@ theorem codec_char_rejects_null :
       ∀ w : Value, @fromValue? Char ⟨fun _ => .error ""⟩ w = .ok c ↔ w = (.string (String.singleton c) : Value) := by
   intro h
   cases (h 'a').1
-
-theorem codec_float_rejects_null :
-    ¬ ∀ (x : Float), @toValue Float ⟨fun _ => .null⟩ x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
-      ∀ w : Value, @fromValue? Float ⟨fun _ => .error ""⟩ w = .ok x ↔
-        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
-        (w = .string "-Infinity" ∧ x = -Float.inf) := by
-  intro h
-  have := (h 0.0).1
-  split at this
-  · cases this
-  · split at this
-    · cases this
-    · cases this
 
 theorem codec_array_rejects_null :
     ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (xs : Array α),

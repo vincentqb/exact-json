@@ -1,7 +1,6 @@
 module
 
 public import ExactJSON.Fixed
-public import ExactJSON.OfScientific
 public import ExactJSON.Printable
 import all Init.Data.String.Legacy
 
@@ -271,8 +270,8 @@ private theorem foldl_renderLines (l : List Value) (out : String) :
     apply String.ext
     simp [String.toList_append, String.toList_push, Value.renderTo_toList out v, Value.render]
 
-private theorem render_parse {v : Value} (h : v.Valid) : Value.parse v.render = .ok v :=
-  render_parse_of_floats (floatsReadBack ofScientificRounds) v h
+private theorem render_parse' {v : Value} (h : v.Valid) : Value.parse v.render = .ok v :=
+  render_parse v h
 
 private theorem decode_ok_encode {α : Type u} [ToValue α] [FromValue α] {s : String} {a : α}
     (h : decode s = .ok a) : encode a = s := by
@@ -307,7 +306,7 @@ theorem parseLines_fixed (s : String) (vs : Array Value) :
   · rintro ⟨hvalid, rfl⟩
     unfold Value.parseLines
     rw [renderLines_eq, splitOn_terminated Value.render vs.toList (fun v _ => no_newline v), readLines_ok]
-    exact ⟨rfl, vs.toList, mapM_map_ok vs.toList (fun v hv => render_parse (hvalid v hv)), by simp⟩
+    exact ⟨rfl, vs.toList, mapM_map_ok vs.toList (fun v hv => render_parse' (hvalid v hv)), by simp⟩
 
 theorem encodeLines_eq {α : Type u} [ToValue α] (as : Array α) :
     encodeLines as = Value.renderLines (as.map toValue) := by
@@ -328,7 +327,7 @@ theorem decodeLines_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValu
   unfold decodeLines
   rw [htext, splitOn_terminated encode as.toList (fun a _ => no_newline (toValue a)), readLines_ok]
   exact ⟨rfl, as.toList,
-    mapM_map_ok as.toList (fun a _ => decode_encode_of_rounds ofScientificRounds LawfulValue.fromValue_toValue
+    mapM_map_ok as.toList (fun a _ => decode_encode_of_lawful LawfulValue.fromValue_toValue
       LawfulValue.toValue_valid a), by simp⟩
 
 theorem renderLines_eq_rejects_empty :

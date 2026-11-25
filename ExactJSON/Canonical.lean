@@ -6,17 +6,11 @@ public import ExactJSON.Rfc8259
 
 namespace ExactJSON
 
-structure Decimal where
-  negative : Bool
-  digits : Nat
-  exponent : Int
-  deriving DecidableEq, Repr, Inhabited
-
 namespace Decimal
 
 def zeros (n : Nat) : List Char := List.replicate n '0'
 
-def toFloatText (d : Decimal) : String :=
+def text (d : Decimal) : String :=
   let sign : List Char := if d.negative then ['-'] else []
   if d.digits = 0 then String.ofList (sign ++ "0.0".toList)
   else
@@ -81,24 +75,24 @@ def stringText (s : String) : String := "\"" ++ String.join (s.toList.map escape
 
 mutual
 
-def write (float : Float → String) : Value → String
+def write : Value → String
   | .null => "null"
   | .boolean b => if b then "true" else "false"
   | .integer n => toString n
-  | .float x => float x
+  | .decimal d => d.text
   | .string s => stringText s
-  | .array ⟨items⟩ => "[" ++ writeItems float items ++ "]"
-  | .table ⟨members⟩ => "{" ++ writeMembers float members ++ "}"
+  | .array ⟨items⟩ => "[" ++ writeItems items ++ "]"
+  | .table ⟨members⟩ => "{" ++ writeMembers members ++ "}"
 
-def writeItems (float : Float → String) : List Value → String
+def writeItems : List Value → String
   | [] => ""
-  | [v] => write float v
-  | v :: vs => write float v ++ "," ++ writeItems float vs
+  | [v] => write v
+  | v :: vs => write v ++ "," ++ writeItems vs
 
-def writeMembers (float : Float → String) : List (String × Value) → String
+def writeMembers : List (String × Value) → String
   | [] => ""
-  | [(k, v)] => stringText k ++ ":" ++ write float v
-  | (k, v) :: ms => stringText k ++ ":" ++ write float v ++ "," ++ writeMembers float ms
+  | [(k, v)] => stringText k ++ ":" ++ write v
+  | (k, v) :: ms => stringText k ++ ":" ++ write v ++ "," ++ writeMembers ms
 
 end
 

@@ -34,7 +34,7 @@ theorem toString_toList_ne_nil (n : Int) : (toString n).toList ≠ [] := by
   · rw [String.toList_append]
     exact List.append_ne_nil_of_left_ne_nil (by decide) _
 
-theorem numberChars_toFloatText (d : Decimal) : ∀ c ∈ d.toFloatText.toList, Rfc8259.isNumberChar c = true := by
+theorem numberChars_decimalText (d : Decimal) : ∀ c ∈ d.text.toList, Rfc8259.isNumberChar c = true := by
   have digits := numberChars_toDigits d.digits
   have exponent := numberChars_toString (d.exponent + (Nat.toDigits 10 d.digits).length - 1)
   have zeros : ∀ n, ∀ c ∈ Decimal.zeros n, Rfc8259.isNumberChar c = true := fun n c h => by
@@ -46,7 +46,7 @@ theorem numberChars_toFloatText (d : Decimal) : ∀ c ∈ d.toFloatText.toList, 
   have dropped : ∀ k, ∀ c ∈ (Nat.toDigits 10 d.digits).drop k, Rfc8259.isNumberChar c = true := fun _ c h =>
     digits c (List.mem_of_mem_drop h)
   have sign : ∀ b : Bool, ∀ c ∈ (if b = true then ['-'] else []), Rfc8259.isNumberChar c = true := by decide
-  unfold Decimal.toFloatText
+  unfold Decimal.text
   dsimp only
   split
   · rw [String.toList_ofList]
@@ -65,8 +65,8 @@ theorem numberChars_toFloatText (d : Decimal) : ∀ c ∈ d.toFloatText.toList, 
       · decide
       · exact dropped _
 
-theorem toFloatText_toList_ne_nil (d : Decimal) : d.toFloatText.toList ≠ [] := by
-  unfold Decimal.toFloatText
+theorem decimalText_toList_ne_nil (d : Decimal) : d.text.toList ≠ [] := by
+  unfold Decimal.text
   dsimp only
   split
   · rw [String.toList_ofList]

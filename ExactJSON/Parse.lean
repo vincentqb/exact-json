@@ -108,7 +108,7 @@ def Parts.read (p : Parts) (g : Grammar) (c : Char) : Parts :=
   | .point | .exponentMark => { p with isFloat := true }
   | .fraction => { p with digits := p.digits * 10 + (c.toNat - 48), fractionDigits := p.fractionDigits + 1 }
   | .exponentSign => { p with exponentNegative := c == '-' }
-  | .exponent => { p with exponent := min (p.exponent * 10 + (c.toNat - 48)) (p.length + 400) }
+  | .exponent => { p with exponent := p.exponent * 10 + (c.toNat - 48) }
 
 def finish (g : Grammar) (p : Parts) (rest : List Char) (steps : Nat) : Read Parts :=
   match g with
@@ -124,11 +124,11 @@ def scan (g : Grammar) (p : Parts) : List Char → Nat → Read Parts
     | some g' => scan g' (p.read g' c) rest (steps + 1)
     | none => finish g p (c :: rest) (steps + 1)
 
-def Parts.value? (p : Parts) : Option Value :=
+def Parts.value (p : Parts) : Value :=
   if p.isFloat then
     let exponent : Int := if p.exponentNegative then -(p.exponent : Int) else p.exponent
-    (FloatText.ofDecimal? p.negative p.digits (exponent - p.fractionDigits)).map .float
-  else some (.integer (if p.negative then -(p.digits : Int) else p.digits))
+    .decimal (Decimal.normalize p.negative p.digits (exponent - p.fractionDigits))
+  else .integer (if p.negative then -(p.digits : Int) else p.digits)
 
 def lenientScan (input : List Char) (steps : Nat) : Read Parts :=
   match input with
@@ -140,9 +140,8 @@ def lenientError (input : List Char) (steps : Nat) : Read Value :=
   match lenientScan input steps with
   | .error message rest steps => .error message rest steps
   | .ok p rest steps =>
-    let suggestion : Read Value := match p.value? with
-      | some v => .error s!"not the canonical text of this {if p.isFloat then "float" else "integer"}: write {v.render}" input steps
-      | none => .error "a float beyond the range of binary64" input steps
+    let suggestion : Read Value :=
+      .error s!"not the canonical text of this {if p.isFloat then "decimal" else "integer"}: write {p.value.render}" input steps
     match rest with
     | c :: _ => if Rfc8259.isNumberChar c then .error s!"a number does not go on with {c}" rest steps else suggestion
     | [] => suggestion
@@ -155,7 +154,7 @@ def number (input : List Char) (steps : Nat) : Read Value :=
     let canonical := v.render
     if canonical.toList == token then .ok v rest steps
     else
-      .error s!"not the canonical text of this {if v matches .float _ then "float" else "integer"}: write {canonical}"
+      .error s!"not the canonical text of this {if v matches .decimal _ then "decimal" else "integer"}: write {canonical}"
         input steps
   | .error _ => lenientError input steps
 

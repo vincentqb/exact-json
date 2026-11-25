@@ -9,8 +9,8 @@ namespace ExactJSON
 
 namespace Value
 
-def rereadFloat (x : Float) : Option Value :=
-  match Rfc8259.numberValue (floatText x).toList with
+def rereadDecimal (d : Decimal) : Option Value :=
+  match Rfc8259.numberValue d.text.toList with
   | .ok w => some w
   | .error _ => none
 
@@ -20,7 +20,7 @@ def reread : Value → Option Value
   | .null => some .null
   | .string s => some (.string s)
   | .integer n => some (.integer n)
-  | .float x => rereadFloat x
+  | .decimal d => rereadDecimal d
   | .boolean b => some (.boolean b)
   | .array ⟨items⟩ => (rereadItems items).map fun ys => .array ⟨ys⟩
   | .table ⟨members⟩ => (rereadMembers members).map fun ms => .table ⟨ms⟩

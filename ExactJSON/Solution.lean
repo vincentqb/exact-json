@@ -5,12 +5,11 @@ public import ExactJSON.Printable
 public import ExactJSON.Sound
 public import ExactJSON.Cost
 public import ExactJSON.Fixed
-public import ExactJSON.OfScientific
 public import ExactJSON.Write
 public import ExactJSON.CodecLaws
 public import ExactJSON.Lawful
 public import ExactJSON.DateTimeLaws
-public import ExactJSON.ShortestLaws
+public import ExactJSON.FloatCodec
 public import ExactJSON.ShapesCodec
 public import ExactJSON.LinesLaws
 public import ExactJSON.ApiLaws
@@ -57,39 +56,20 @@ theorem render_no_control (v : Value) :
   printable_render v
 
 theorem read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
-  read_render_of_rounds ofScientificRounds v h
+  spec_read_render v h
 
 theorem decode_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] (a : α) :
     decode (encode a) = .ok a :=
-  decode_encode_of_rounds ofScientificRounds LawfulValue.fromValue_toValue LawfulValue.toValue_valid a
+  decode_encode_of_lawful LawfulValue.fromValue_toValue LawfulValue.toValue_valid a
 
-theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v :=
+theorem render_composes (v : Value) : v.render = write v :=
   Value.render_eq_write v
 
 theorem render_composes_rejects_null :
-    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write (fun x => (fun (_ : Value) => "null") (.float x)) v := by
+    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write v := by
   intro h
   have := h (.boolean true)
   simp [write] at this
-
-theorem render_float_rejects_empty :
-    ¬ ∀ (x : Float), finiteFloat x = true →
-      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.IsShortest x := by
-  intro h
-  obtain ⟨d, hd, -⟩ := h 0.0 (by decide +kernel)
-  have := toFloatText_toList_ne_nil d
-  rw [← hd] at this
-  exact this rfl
-
-theorem parse_render_invalid_rejects_null :
-    ¬ ∀ (v : Value), ¬ v.Valid →
-      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
-  intro h
-  have := h (.float Float.nan) (by
-    show ¬ (finiteFloat Float.nan = true)
-    rw [show finiteFloat Float.nan = false by decide +kernel]
-    decide)
-  simp [Except.toOption] at this
 
 theorem render_no_control_rejects_newline :
     ¬ ∀ (v : Value), ∀ c ∈ ((fun (_ : Value) => "\n") v).toList,

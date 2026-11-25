@@ -92,7 +92,7 @@ theorem printable_pushString {out : String} (s : String) (h : Printable out.toLi
   rw [String.foldl_eq_foldl_toList]
   exact printable_push (printable_foldl_pushChar _ (printable_push h (by decide))) (by decide)
 
-theorem printable_toFloatText (d : Decimal) : Printable d.toFloatText.toList := by
+theorem printable_decimalText (d : Decimal) : Printable d.text.toList := by
   have digits := printable_toDigits d.digits
   have exponent := printable_intToString (d.exponent + (Nat.toDigits 10 d.digits).length - 1)
   have zeros : ∀ n, Printable (Decimal.zeros n) := fun n c h => by
@@ -104,7 +104,7 @@ theorem printable_toFloatText (d : Decimal) : Printable d.toFloatText.toList := 
   have dropped : ∀ k, Printable ((Nat.toDigits 10 d.digits).drop k) := fun _ c h =>
     digits c (List.mem_of_mem_drop h)
   have sign : ∀ b : Bool, Printable (if b = true then ['-'] else []) := by decide
-  unfold Decimal.toFloatText
+  unfold Decimal.text
   dsimp only
   split
   · rw [String.toList_ofList]
@@ -127,21 +127,6 @@ theorem printable_toFloatText (d : Decimal) : Printable d.toFloatText.toList := 
         · exact dropped _
       · decide
 
-theorem printable_floatText (x : Float) : Printable (floatText x).toList := by
-  unfold floatText
-  split
-  · rename_i text found
-    unfold Float.toCanonical? at found
-    cases shortest : FloatText.shortest x with
-    | none => simp [shortest] at found
-    | some d =>
-      simp only [shortest, Option.map_some, Option.some.injEq] at found
-      subst found
-      exact printable_toFloatText d
-  · split
-    · decide
-    · split <;> decide
-
 mutual
 
 theorem printable_renderTo {out : String} (h : Printable out.toList) :
@@ -149,7 +134,7 @@ theorem printable_renderTo {out : String} (h : Printable out.toList) :
   | .null => printable_string_append h (by decide)
   | .string s => printable_pushString s h
   | .integer n => printable_string_append h (printable_intToString n)
-  | .float x => printable_string_append h (printable_floatText x)
+  | .decimal d => printable_string_append h (printable_decimalText d)
   | .boolean b => printable_string_append h (by cases b <;> decide)
   | .array ⟨items⟩ => printable_push (printable_renderItems (printable_push h (by decide)) items) (by decide)
   | .table ⟨members⟩ =>

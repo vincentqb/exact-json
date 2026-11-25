@@ -12,23 +12,24 @@ public section
 /-!
 # Canonical, strictly typed JSON
 
-A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it) that writing what it holds
-gives back: reading takes exactly those texts, and holds what any JSON reader reads in them. A
-value's text is `write` of its parts: in strings, escapes for `"`, `\`, control characters and
-line separators (`mustEscape`) and no others, an integer in decimal, keys as they come; a finite
-float is the shortest decimal that reads back as it, the nearest of those, ties to an even last
-digit, laid out by `Decimal.toFloatText`; and an invalid value's text is not read. Every valid
-value's text is JSON that holds that value; no text holds a control character (below U+0020, or
-U+007F to U+009F) or a line or paragraph separator (U+2028, U+2029); reading JSON in any spelling
-holds what RFC 8259 reads in it; JSON Lines is one canonical text a line, and reading bytes takes
-exactly the UTF-8 encoding of such lines, with no byte-order mark; typed decoding reads exactly
-what typed encoding writes, for any type whose instances are lawful (`LawfulValue`: they read back
-what they write, as valid values); each of the library's instances writes the value its codec law
-states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads back
-what it writes; derived instances write the shapes their examples state, and are lawful; dates and
-times are written in one RFC 3339 form each and read in that form only; and the steps the reader
-counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the text's
-length.
+A canonical text is a JSON text (RFC 8259, as `Rfc8259.read?` reads it, a number with a point or
+an exponent as the exact decimal it spells, `Value.decimal` in normal form, `Decimal.isNormal`) that
+writing what it holds gives back: reading takes exactly those texts, and holds what any JSON reader
+reads in them. A value's text is `write` of its parts: in strings, escapes for `"`, `\`, control
+characters and line separators (`mustEscape`) and no others, an integer in decimal, a decimal
+laid out by `Decimal.text`, keys as they come. Every valid value's text is JSON that holds that
+value; no text holds a control character (below U+0020, or U+007F to U+009F) or a line or
+paragraph separator (U+2028, U+2029); reading JSON in any spelling holds what RFC 8259 reads in
+it; JSON Lines is one canonical text a line, and reading bytes takes exactly the UTF-8 encoding of
+such lines, with no byte-order mark; typed decoding reads exactly what typed encoding writes, for
+any type whose instances are lawful (`LawfulValue`: they read back what they write, as valid
+values); each of the library's instances writes the value its codec law states and reads exactly
+that, except that a dictionary (`Std.ExtTreeMap String α`) reads back what it writes; a finite
+float is written as the shortest decimal that reads back as it, the nearest of those, ties to an
+even last digit; derived instances write the shapes their examples state, and are lawful; dates
+and times are written in one RFC 3339 form each and read in that form only; and the steps the
+reader counts as it reads (`Value.parseCosted`, whose value is `Value.parse`) are linear in the
+text's length.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names, and the command line tool beyond the functions it calls; nor that
 the steps are the work done: the reader counts them itself, so the law bounds its count, not its
@@ -211,14 +212,7 @@ theorem decode_encode {α : Type u} [ToValue α] [FromValue α] [LawfulValue α]
     decode (encode a) = .ok a := by
   sorry
 
-theorem render_composes (v : Value) : v.render = write (fun x => (Value.float x).render) v := by
-  sorry
-
-theorem render_float (x : Float) (hx : finiteFloat x = true) :
-    ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.IsShortest x := by
-  sorry
-
-theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none := by
+theorem render_composes (v : Value) : v.render = write v := by
   sorry
 
 theorem codec_string (s : String) :
@@ -274,10 +268,10 @@ theorem codec_char (c : Char) :
   sorry
 
 theorem codec_float (x : Float) :
-    toValue x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
-      ∀ w : Value, fromValue? w = .ok x ↔
-        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
-        (w = .string "-Infinity" ∧ x = -Float.inf) := by
+    (if x.isNaN then toValue x = .string "NaN"
+      else if x.isInf then toValue x = .string (if x > 0 then "Infinity" else "-Infinity")
+      else ∃ d : Decimal, toValue x = .decimal d ∧ d.IsShortest x) ∧
+      ∀ w : Value, fromValue? w = .ok x ↔ w = toValue x := by
   sorry
 
 theorem codec_array {α : Type u} [ToValue α] [FromValue α] (xs : Array α) :
@@ -440,17 +434,7 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
   sorry
 
 @[kills render_composes] theorem render_composes_rejects_null :
-    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write (fun x => (fun (_ : Value) => "null") (.float x)) v := by
-  sorry
-
-@[kills render_float] theorem render_float_rejects_empty :
-    ¬ ∀ (x : Float), finiteFloat x = true →
-      ∃ d : Decimal, (fun (_ : Value) => "") (.float x) = d.toFloatText ∧ d.IsShortest x := by
-  sorry
-
-@[kills parse_render_invalid] theorem parse_render_invalid_rejects_null :
-    ¬ ∀ (v : Value), ¬ v.Valid →
-      ((fun (_ : String) => (Except.ok Value.null : Except String Value)) ((fun (_ : Value) => "") v)).toOption = none := by
+    ¬ ∀ (v : Value), (fun (_ : Value) => "null") v = write v := by
   sorry
 
 @[kills codec_string] theorem codec_string_rejects_null :
@@ -519,10 +503,11 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
   sorry
 
 @[kills codec_float] theorem codec_float_rejects_null :
-    ¬ ∀ (x : Float), @toValue Float ⟨fun _ => .null⟩ x = (if x.isNaN then .string "NaN" else if x.isInf then .string (if x > 0 then "Infinity" else "-Infinity") else .float x : Value) ∧
-      ∀ w : Value, @fromValue? Float ⟨fun _ => .error ""⟩ w = .ok x ↔
-        w = .float x ∨ (w = .string "NaN" ∧ x = Float.nan) ∨ (w = .string "Infinity" ∧ x = Float.inf) ∨
-        (w = .string "-Infinity" ∧ x = -Float.inf) := by
+    ¬ ∀ (x : Float),
+      (if x.isNaN then @toValue Float ⟨fun _ => .null⟩ x = .string "NaN"
+        else if x.isInf then @toValue Float ⟨fun _ => .null⟩ x = .string (if x > 0 then "Infinity" else "-Infinity")
+        else ∃ d : Decimal, @toValue Float ⟨fun _ => .null⟩ x = .decimal d ∧ d.IsShortest x) ∧
+        ∀ w : Value, @fromValue? Float ⟨fun _ => .error ""⟩ w = .ok x ↔ w = @toValue Float ⟨fun _ => .null⟩ x := by
   sorry
 
 @[kills codec_array] theorem codec_array_rejects_null :

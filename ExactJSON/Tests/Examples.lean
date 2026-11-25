@@ -23,27 +23,26 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard ["null", "true", "false", "0", "-17", "123456789012345678901234567890", "1.0", "-0.0", "0.1",
   "1.5e-7", "1.0e16", "5.0e-324", "1.7976931348623157e308", "\"\"", "\"a\\tb\"", "[]", "{}",
   "[1,2.5,\"x\",null,[],{}]", "{\"a\":{\"b\":[null]},\"b\":1}"].all (check · == "ok")
-#guard check "1e5" == "at character 0: not the canonical text of this float: write 100000.0"
-#guard check "1.50" == "at character 0: not the canonical text of this float: write 1.5"
-#guard check "1.0e+16" == "at character 0: not the canonical text of this float: write 1.0e16"
-#guard check "0.00001" == "at character 0: not the canonical text of this float: write 1.0e-5"
-#guard check "1e16" == "at character 0: not the canonical text of this float: write 1.0e16"
-#guard check "0.1000000000000000055511151231257827" ==
-  "at character 0: not the canonical text of this float: write 0.1"
-#guard check "9007199254740993.0" == "at character 0: not the canonical text of this float: write 9007199254740992.0"
+#guard check "1e5" == "at character 0: not the canonical text of this decimal: write 100000.0"
+#guard check "1.50" == "at character 0: not the canonical text of this decimal: write 1.5"
+#guard check "1.0e+16" == "at character 0: not the canonical text of this decimal: write 1.0e16"
+#guard check "0.00001" == "at character 0: not the canonical text of this decimal: write 1.0e-5"
+#guard check "1e16" == "at character 0: not the canonical text of this decimal: write 1.0e16"
+#guard ["0.1000000000000000055511151231257827", "9007199254740993.0", "1.0e400", "-1.0e-400",
+  "1.2345678901234567890123456789e-5000"].all (check · == "ok")
 #guard check "-0" == "at character 0: not the canonical text of this integer: write 0"
 #guard check "01" == "at character 0: not the canonical text of this integer: write 1"
 #guard check "-01" == "at character 0: not the canonical text of this integer: write -1"
-#guard check "00.5" == "at character 0: not the canonical text of this float: write 0.5"
-#guard check "1e400" == "at character 0: a float beyond the range of binary64"
+#guard check "00.5" == "at character 0: not the canonical text of this decimal: write 0.5"
+#guard check "1e400" == "at character 0: not the canonical text of this decimal: write 1.0e400"
 #guard check ("1e" ++ String.ofList (List.replicate 5000 '0') ++ "1") ==
-  "at character 0: not the canonical text of this float: write 10.0"
-#guard check ("1e" ++ String.ofList (List.replicate 100000 '9')) ==
-  "at character 0: a float beyond the range of binary64"
-#guard check ("1e-" ++ String.ofList (List.replicate 100000 '9')) ==
-  "at character 0: not the canonical text of this float: write 0.0"
+  "at character 0: not the canonical text of this decimal: write 10.0"
+#guard check ("1e" ++ String.ofList (List.replicate 2000 '9')) ==
+  "at character 0: not the canonical text of this decimal: write 1.0e" ++ String.ofList (List.replicate 2000 '9')
+#guard check ("1e-" ++ String.ofList (List.replicate 2000 '9')) ==
+  "at character 0: not the canonical text of this decimal: write 1.0e-" ++ String.ofList (List.replicate 2000 '9')
 #guard check ("0.0e" ++ String.ofList (List.replicate 100000 '9')) ==
-  "at character 0: not the canonical text of this float: write 0.0"
+  "at character 0: not the canonical text of this decimal: write 0.0"
 #guard check " 1" == "at character 0: canonical text has no whitespace"
 #guard check "[1, 2]" == "at character 3: canonical text has no whitespace"
 #guard check "{\"a\": 1}" == "at character 5: canonical text has no whitespace"
@@ -80,8 +79,22 @@ def errorOf {α : Type} (e : Except String α) : String :=
 
 #guard (Value.table #[("b", .integer 1), ("a", .integer 2)]).render == "{\"b\":1,\"a\":2}"
 #guard !(Value.table #[("b", .integer 1), ("a", .integer 2)]).isValid
-#guard (Value.float (0.0 / 0.0)).render == "NaN"
-#guard !(Value.parse (Value.array #[.float (1.0 / 0.0)]).render).isOk
+#guard (Value.decimal ⟨false, 150, -2⟩).render == "1.50"
+#guard !(Value.decimal ⟨false, 150, -2⟩).isValid
+#guard !(Value.parse (Value.array #[.decimal ⟨false, 150, -2⟩]).render).isOk
+#guard (Value.decimal ⟨false, 10, 0⟩).render == (Value.decimal ⟨false, 1, 1⟩).render
+#guard gives (Value.parse "0.1000000000000000055511151231257827")
+  (.decimal ⟨false, 1000000000000000055511151231257827, -34⟩)
+#guard gives (Value.parse "-0.0") (.decimal ⟨true, 0, 0⟩)
+#guard gives (Value.parse "1.0e400") (.decimal ⟨false, 1, 400⟩)
+#guard gives (decode "0.1" : Except String Float) 0.1
+#guard errorOf (decode "0.1000000000000000055511151231257827" : Except String Float) ==
+  "expected the shortest decimal of a float: write 0.1, not 0.1000000000000000055511151231257827"
+#guard errorOf (decode "9007199254740993.0" : Except String Float) ==
+  "expected the shortest decimal of a float: write 9007199254740992.0, not 9007199254740993.0"
+#guard errorOf (decode "1.0e400" : Except String Float) == "a float beyond the range of binary64: 1.0e400"
+#guard errorOf (decode "1.0e-400" : Except String Float) ==
+  "expected the shortest decimal of a float: write 0.0, not 1.0e-400"
 
 #guard check "[[[[" == "at character 4: expected a value, found the end of the text"
 #guard check "{\"a\":[{\"b\":" == "at character 11: expected a value, found the end of the text"
@@ -106,7 +119,7 @@ def canon (s : String) : String :=
 #guard canon "{\"a\":1,\"a\":2}" == "at character 7: a key repeats"
 #guard canon "\"\\udc00\"" == "at character 1: a low surrogate not after a high one"
 #guard canon "\"\\ud800x\"" == "at character 1: a high surrogate not followed by a low one"
-#guard canon "1e400" == "at character 0: a float beyond the range of binary64"
+#guard canon "1e400" == "1.0e400"
 #guard canon "[1,]" == "at character 3: expected a value"
 
 #guard gives ((Value.parseLines "{\"a\":1}\n[2]\n").map (·.map Value.render)) #["{\"a\":1}", "[2]"]

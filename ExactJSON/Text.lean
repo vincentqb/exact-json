@@ -39,7 +39,7 @@ theorem renderTo_toList (out : String) : (v : Value) →
   | .null => by simp [renderTo, String.toList_append]
   | .string s => by simp [renderTo, pushString_toList]
   | .integer n => by simp [renderTo, String.toList_append]
-  | .float x => by simp [renderTo, String.toList_append]
+  | .decimal d => by simp [renderTo, String.toList_append]
   | .boolean b => by simp [renderTo, String.toList_append]
   | .array ⟨items⟩ => by
     simp only [renderTo, String.toList_push]

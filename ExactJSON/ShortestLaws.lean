@@ -2,7 +2,6 @@ module
 
 public import ExactJSON.ShortestCore
 public import ExactJSON.ReadBackExact
-public import ExactJSON.RenderInjective
 
 public section
 
@@ -164,9 +163,6 @@ theorem shortest_isSome (x : Float) (hx : finiteFloat x = true) : ∃ D, shortes
   · obtain ⟨D, hs, -⟩ := shortest_strong x hx neg M e hd hM
     exact ⟨D, hs⟩
 
-theorem render_float_text (x : Float) : (Value.float x).render = floatText x := by
-  simp [Value.render, Value.renderTo]
-
 theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortest x = some d := by
   have hx := finite_of_floatOf? h.1
   rcases hd : decompose x with ⟨neg, M, e⟩
@@ -216,16 +212,66 @@ theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortes
       · rw [decimal_eq (hneg.trans hn'.symm) e1.symm e2.symm]
       · omega
 
+theorem digitCount_mul_ten (c : Nat) (hc : c ≠ 0) :
+    (Nat.toDigits 10 (c * 10)).length = (Nat.toDigits 10 c).length + 1 := by
+  have h1 := FloatText.digits_lt c
+  have h2 := FloatText.digits_ge c hc
+  have hn := FloatText.digits_length_pos c
+  generalize (Nat.toDigits 10 c).length = n at h1 h2 hn
+  have hpow : 10 ^ n = 10 ^ (n - 1) * 10 := by
+    rw [← Nat.pow_succ]
+    congr 1
+    omega
+  have up : (Nat.toDigits 10 (c * 10)).length ≤ n + 1 :=
+    (FloatText.digits_length_le_iff _ _ (by omega)).mpr (by rw [Nat.pow_succ]; omega)
+  have lo : ¬ (Nat.toDigits 10 (c * 10)).length ≤ n := by
+    rw [FloatText.digits_length_le_iff _ _ (by omega)]
+    omega
+  omega
+
+theorem isShortest_isNormal {x : Float} {d : Decimal} (h : d.IsShortest x) : d.isNormal = true := by
+  by_cases hd0 : d.digits = 0
+  · simp [Decimal.isNormal, hd0, h.2.1 hd0]
+  · by_cases hm : d.digits % 10 = 0
+    · exfalso
+      have hx := finite_of_floatOf? h.1
+      have hc : d.digits / 10 ≠ 0 := by omega
+      have hcount : d.digitCount = (Nat.toDigits 10 (d.digits / 10)).length + 1 := by
+        have := digitCount_mul_ten (d.digits / 10) hc
+        rw [Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero hm)] at this
+        exact this
+      rcases hdec : decompose x with ⟨neg, M, e⟩
+      by_cases hM : M = 0
+      · subst hM
+        have hpos := FloatText.digits_length_pos (d.digits / 10)
+        rcases h.2.2 ⟨neg, 0, 0⟩ (floatOf?_zero hdec) with g | ⟨g, -⟩
+        · rw [zero_digitCount] at g
+          omega
+        · rw [zero_digitCount] at g
+          omega
+      · obtain ⟨hn, hr⟩ := floatOf?_sound hx hdec hM h.1
+        have hr' : roundsTo M e (d.digits / 10) (d.exponent + 1) = true := by
+          unfold roundsTo at hr ⊢
+          dsimp only at hr ⊢
+          have := fits_scale (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).1
+            (roundingInterval M (decide (M = 2 ^ 52) && decide (e > -1074))).2.2 e d.exponent (M % 2 == 0)
+            (d.digits / 10) 1
+          rw [Nat.pow_one, Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero hm)] at this
+          rw [show d.exponent + 1 = d.exponent + ((1 : Nat) : Int) from rfl, ← this]
+          exact hr
+        have hread := floatOf?_of_roundsTo hx hdec hM hr'
+        rw [← hn] at hread
+        rcases h.2.2 ⟨d.negative, d.digits / 10, d.exponent + 1⟩ hread with g | ⟨g, -⟩
+        · unfold Decimal.digitCount at g hcount
+          simp only at g
+          omega
+        · unfold Decimal.digitCount at g hcount
+          simp only at g
+          omega
+    · simp [Decimal.isNormal, hd0, hm]
+
 end ShortestLaws
 
 open FloatText ShortestLaws
-
-theorem render_float (x : Float) (hx : finiteFloat x = true) :
-    ∃ d : Decimal, (Value.float x).render = d.toFloatText ∧ d.IsShortest x := by
-  obtain ⟨D, hs⟩ := shortest_isSome x hx
-  exact ⟨D, by rw [render_float_text, floatText_of_shortest hs], shortest_isShortest x hx D hs⟩
-
-theorem parse_render_invalid (v : Value) (h : ¬ v.Valid) : (Value.parse v.render).toOption = none :=
-  parse_render_invalid_of v h
 
 end ExactJSON

@@ -2,16 +2,17 @@ r"""Canonical JSON in Python, standard library only: a second implementation of 
 
 Canonical text is JSON, and ``json.loads`` reads it as usual. ``dumps`` writes it, byte for byte
 as the Lean library does: no whitespace, keys in code point order, integers without a point,
-floats with the shortest digits that read back and always a point, JSON's escapes for ``"``, ``\``
-and the C0 controls plus ``\uXXXX`` for DEL, the C1 controls and U+2028/U+2029, and ``None`` as
-``null``. The test suite uses it as an independent oracle (CPython's ``repr`` gives
-the float digits).
+floats with the shortest digits that read back and always a point, ``decimal.Decimal`` exactly,
+without trailing zeros, laid out as floats are, JSON's escapes for ``"``, ``\`` and the C0
+controls plus ``\uXXXX`` for DEL, the C1 controls and U+2028/U+2029, and ``None`` as ``null``.
+The test suite uses it as an independent oracle (CPython's ``repr`` gives the float digits).
 """
 
+import decimal
 import json
 import math
 
-__all__ = ["dumps", "dumps_float"]
+__all__ = ["dumps", "dumps_float", "dumps_decimal"]
 
 
 def dumps_float(x: float) -> str:
@@ -26,6 +27,31 @@ def dumps_float(x: float) -> str:
     if "." not in mantissa:
         mantissa += ".0"
     return f"{mantissa}e{int(exponent)}"
+
+
+def dumps_decimal(d: decimal.Decimal) -> str:
+    """The canonical text of a finite decimal: its digits without trailing zeros, laid out as a float's."""
+    if not d.is_finite():
+        raise ValueError(f"{d} has no JSON text")
+    sign, digits, exponent = d.as_tuple()
+    ds = "".join(map(str, digits)).lstrip("0")
+    minus = "-" if sign else ""
+    if not ds:
+        return minus + "0.0"
+    stripped = ds.rstrip("0")
+    exponent += len(ds) - len(stripped)
+    ds, n = stripped, len(stripped)
+    sci = exponent + n - 1
+    if -4 <= sci < 16:
+        if sci >= n - 1:
+            body = ds + "0" * (sci - (n - 1)) + ".0"
+        elif sci >= 0:
+            body = ds[: sci + 1] + "." + ds[sci + 1 :]
+        else:
+            body = "0." + "0" * (-sci - 1) + ds
+    else:
+        body = ds[0] + "." + (ds[1:] or "0") + "e" + str(sci)
+    return minus + body
 
 
 _ESCAPED = {c: f"\\u{c:04x}" for c in [*range(0x7F, 0xA0), 0x2028, 0x2029]}
@@ -49,6 +75,8 @@ def _dump(v, out: list) -> None:
         out.append(int.__repr__(v))
     elif isinstance(v, float):
         out.append(dumps_float(v))
+    elif isinstance(v, decimal.Decimal):
+        out.append(dumps_decimal(v))
     elif isinstance(v, str):
         out.append(_string(v))
     elif isinstance(v, (list, tuple)):

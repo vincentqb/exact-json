@@ -21,9 +21,6 @@ def isNumberChar (c : Char) : Bool :=
 
 def digitsValue (ds : List Char) : Nat := Nat.ofDigitChars 10 ds 0
 
-def digitsValueUpTo (bound : Nat) (ds : List Char) : Nat :=
-  ds.foldl (fun n d => min (10 * n + (d.toNat - 48)) bound) 0
-
 def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
   let magnitude : Option Float :=
     if m = 0 then some 0.0
@@ -64,7 +61,7 @@ def numberValue (token : List Char) : Except String Value :=
           if e == 'e' || e == 'E' then
             let (minus, t) := exponentSign t
             let (ds, t) := t.span Char.isDigit
-            let size := digitsValueUpTo (token.length + 400) ds
+            let size := digitsValue ds
             if ds.isEmpty then .error "expected a digit in the exponent"
             else .ok (some (if minus then -(size : Int) else size), t)
           else .ok (none, e :: t)
@@ -76,10 +73,7 @@ def numberValue (token : List Char) : Except String Value :=
         let m := digitsValue (whole ++ fraction.getD [])
         match fraction, exponent with
         | none, none => .ok (.integer (if negative then -(m : Int) else m))
-        | _, _ =>
-          match floatOf? negative m (exponent.getD 0 - ((fraction.getD []).length : Int)) with
-          | some x => .ok (.float x)
-          | none => .error "a float beyond the range of binary64"
+        | _, _ => .ok (.decimal (Decimal.normalize negative m (exponent.getD 0 - ((fraction.getD []).length : Int))))
 
 def hexValue? (c : Char) : Option Nat :=
   if '0' ≤ c && c ≤ '9' then some (c.toNat - 48)

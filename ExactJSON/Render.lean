@@ -1,7 +1,7 @@
 module
 
 public import ExactJSON.Value
-public import ExactJSON.Float
+public import ExactJSON.Canonical
 
 @[expose] public section
 
@@ -25,11 +25,6 @@ def pushChar (out : String) (c : Char) : String :=
 def pushString (out s : String) : String :=
   (s.foldl pushChar (out.push '"')).push '"'
 
-def floatText (x : Float) : String :=
-  match Float.toCanonical? x with
-  | some text => text
-  | none => if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity"
-
 namespace Value
 
 mutual
@@ -38,7 +33,7 @@ def renderTo (out : String) : Value → String
   | .null => out ++ "null"
   | .string s => pushString out s
   | .integer n => out ++ toString n
-  | .float x => out ++ floatText x
+  | .decimal d => out ++ d.text
   | .boolean b => out ++ if b then "true" else "false"
   | .array ⟨items⟩ => (renderItems (out.push '[') items).push ']'
   | .table ⟨members⟩ => (renderMembers (out.push '{') members).push '}'

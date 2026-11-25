@@ -2,7 +2,7 @@ module
 
 public import ExactJSON.CodecLaws
 public import ExactJSON.DateTimeLaws
-public import ExactJSON.FloatSpecial
+public import ExactJSON.FloatCodec
 
 public section
 
@@ -29,32 +29,22 @@ instance : LawfulValue Int64 := lawful_of_codec codec_int64 fun _ => rfl
 instance : LawfulValue Char := lawful_of_codec codec_char fun _ => rfl
 
 instance : LawfulValue Float where
-  fromValue_toValue x := by
-    obtain ⟨ht, hr⟩ := codec_float x
-    apply (hr _).mpr
-    rw [ht]
-    by_cases hn : x.isNaN
-    · rw [ite_eq_left hn]
-      exact .inr (.inl ⟨rfl, FloatText.eq_nan_of_isNaN hn⟩)
-    · rw [ite_eq_right hn]
-      by_cases hi : x.isInf
-      · rw [ite_eq_left hi]
-        by_cases hp : x > 0
-        · rw [ite_eq_left hp]
-          exact .inr (.inr (.inl ⟨rfl, FloatText.eq_inf_of_isInf hi hp⟩))
-        · rw [ite_eq_right hp]
-          exact .inr (.inr (.inr ⟨rfl, FloatText.eq_neg_inf_of_isInf hi hp⟩))
-      · rw [ite_eq_right hi]
-        exact .inl rfl
+  fromValue_toValue x := ((codec_float x).2 _).mpr rfl
   toValue_valid x := by
-    rw [(codec_float x).1]
-    by_cases hn : x.isNaN
-    · rw [ite_eq_left hn]; rfl
-    · rw [ite_eq_right hn]
-      by_cases hi : x.isInf
-      · rw [ite_eq_left hi]; split <;> rfl
-      · rw [ite_eq_right hi]
-        exact FloatText.finiteFloat_of_not (by simpa using hn) (by simpa using hi)
+    have h := (codec_float x).1
+    by_cases hn : x.isNaN = true
+    · rw [ite_eq_left hn] at h
+      rw [h]
+      rfl
+    · rw [ite_eq_right hn] at h
+      by_cases hi : x.isInf = true
+      · rw [ite_eq_left hi] at h
+        rw [h]
+        rfl
+      · rw [ite_eq_right hi] at h
+        obtain ⟨d, hd, hs⟩ := h
+        rw [hd]
+        exact ShortestLaws.isShortest_isNormal hs
 
 theorem mapM_toValue {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] :
     ∀ (xs : List α), (xs.map toValue).mapM fromValue? = .ok xs

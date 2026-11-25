@@ -47,11 +47,11 @@ namespace Value
 
 mutual
 
-theorem render_write : (v : Value) → (render v).toList = (write (fun x => render (.float x)) v).toList
+theorem render_write : (v : Value) → (render v).toList = (write v).toList
   | .null => by rw [text_null]; rfl
   | .boolean b => by cases b <;> rw [text_boolean] <;> rfl
   | .integer n => by simp [write, render, renderTo]
-  | .float x => by simp [write]
+  | .decimal d => by simp [write, render, renderTo]
   | .string s => by rw [text_string]; simp [write, stringText_toList]
   | .array ⟨items⟩ => by
     rw [text_array, items_write items]
@@ -61,7 +61,7 @@ theorem render_write : (v : Value) → (render v).toList = (write (fun x => rend
     simp [write, String.toList_append]
 
 theorem items_write : (items : List Value) →
-    itemsText items = (writeItems (fun x => render (.float x)) items).toList
+    itemsText items = (writeItems items).toList
   | [] => by simp [itemsText, renderItems, writeItems]
   | [v] => by rw [itemsText_singleton, render_write v]; simp [writeItems]
   | v :: w :: rest => by
@@ -69,7 +69,7 @@ theorem items_write : (items : List Value) →
     simp [writeItems, String.toList_append]
 
 theorem members_write : (members : List (String × Value)) →
-    membersText members = (writeMembers (fun x => render (.float x)) members).toList
+    membersText members = (writeMembers members).toList
   | [] => by simp [membersText, renderMembers, writeMembers]
   | [(k, v)] => by
     rw [membersText_singleton]
@@ -80,7 +80,7 @@ theorem members_write : (members : List (String × Value)) →
 
 end
 
-theorem render_eq_write (v : Value) : render v = write (fun x => render (.float x)) v :=
+theorem render_eq_write (v : Value) : render v = write v :=
   String.toList_inj.mp (render_write v)
 
 end Value

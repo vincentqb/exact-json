@@ -7,16 +7,19 @@
    accepts a line only if it is exactly how Lean writes that value: so the two writers agree byte
    for byte.
 2. ``json.loads`` reads every such line back as the same value, with integers from tokens without
-   a point and floats from tokens with one.
+   a point and floats and decimals (``decimal.Decimal``, exactly) from tokens with one.
 3. Other spellings of the same values (``json.dumps``'s spaces and ASCII escapes) are rejected.
 4. ``exactjson canon`` reads any JSON spelling of them (``json.dumps`` with spaces, ASCII escapes
    and keys in any order) and writes each one's canonical text, byte for byte as Python's writer.
+5. ``exactjson canon`` reads other spellings of decimals (trailing zeros, a moved point, any
+   exponent) as the same exact decimal.
 
 With ``--floats N``: every power of two and of ten, their neighbours, the smallest subnormals and N
 random doubles, written with CPython's ``repr`` digits, are canonical to Lean.
 """
 
 import argparse
+import decimal
 import json
 import math
 import random
@@ -26,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from exactjson import dumps, dumps_float  # noqa: E402
+from exactjson import dumps, dumps_decimal, dumps_float  # noqa: E402
 
 EXE = Path(__file__).resolve().parent.parent / ".lake" / "build" / "bin" / "exactjson"
 
@@ -64,6 +67,11 @@ def rand_float(r):
     return r.random() * 10.0 ** r.randrange(-30, 30)
 
 
+def rand_decimal(r):
+    digits = r.choice([r.randrange(10), r.randrange(10**6), r.getrandbits(128)])
+    return decimal.Decimal((r.randrange(2), tuple(int(c) for c in str(digits)), r.randrange(-3000, 3000)))
+
+
 def rand_value(r, depth):
     k = r.randrange(9 if depth else 5)
     if k == 0:
@@ -71,7 +79,7 @@ def rand_value(r, depth):
     if k == 1:
         return r.choice([0, -1, 7, 2**53, 2**63 - 1, -(2**63), 2**64, -(10**30), r.getrandbits(64) - 2**63])
     if k == 2:
-        return rand_float(r)
+        return rand_float(r) if r.random() < 0.7 else rand_decimal(r)
     if k == 3:
         return r.random() < 0.5
     if k == 4:
@@ -100,11 +108,15 @@ def bits(x):
 
 
 def same(a, b):
-    """Equal as values, floats bit for bit and ints distinct from floats."""
+    """Equal as values, floats bit for bit, decimals exactly, and ints distinct from both."""
+    if isinstance(a, decimal.Decimal) and isinstance(b, float):
+        return bits(float(a)) == bits(b)
     if type(a) is not type(b):
         return False
     if isinstance(a, float):
         return bits(a) == bits(b)
+    if isinstance(a, decimal.Decimal):
+        return a == b and a.is_signed() == b.is_signed()
     if isinstance(a, list):
         return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
     if isinstance(a, dict):
@@ -120,9 +132,34 @@ def read_typed(line):
 
     def as_float(token):
         assert "." in token, token
-        return float(token)
+        return decimal.Decimal(token)
 
     return json.loads(line, parse_int=as_int, parse_float=as_float)
+
+
+def has_decimal(v):
+    if isinstance(v, decimal.Decimal):
+        return True
+    if isinstance(v, list):
+        return any(has_decimal(x) for x in v)
+    if isinstance(v, dict):
+        return any(has_decimal(x) for x in v.values())
+    return False
+
+
+def decimal_spelling(r, d):
+    """Another JSON spelling of the decimal ``d``: trailing zeros, a moved point, any exponent."""
+    sign, digits, exponent = d.as_tuple()
+    ds = "".join(map(str, digits)) + "0" * r.randrange(3)
+    exponent -= len(ds) - len(digits)
+    k = r.randrange(len(ds) + 1)
+    whole = ds[: len(ds) - k].lstrip("0") or "0"
+    fraction = ds[len(ds) - k :]
+    exponent += k
+    text = ("-" if sign else "") + whole + ("." + fraction if fraction else "")
+    if exponent or not fraction:
+        text += r.choice("eE") + (r.choice(["", "+"]) if exponent >= 0 else "") + str(exponent)
+    return text
 
 
 def float_sweep(n, seed):
@@ -175,9 +212,11 @@ def main():
         if not same(read_typed(line), v):
             sys.exit(f"{line} does not read back as its value")
 
+    plain = [v for v in values if not has_decimal(v)]
+
     # 3. other spellings are rejected
     rejected = 0
-    for v in values[:200]:
+    for v in plain[:200]:
         other = json.dumps(v)  # spaces after , and :, ASCII escapes, keys unsorted
         if other != dumps(v):
             ok, _ = check(other + "\n")
@@ -187,19 +226,29 @@ def main():
 
     # 4. any JSON spelling of a value is read as it, and written canonically
     spellings = []
-    for v in values:
+    for v in plain:
         separators = r.choice([(",", ":"), (", ", ": "), (" , ", " : ")])
         spellings.append(json.dumps(v, separators=separators, ensure_ascii=r.random() < 0.5,
                                     sort_keys=r.random() < 0.5))
     code, out, message = canon_lines("".join(s + "\n" for s in spellings))
     if code != 0:
         sys.exit(f"Lean does not read Python's JSON: {message}")
-    for spelling, line, got in zip(spellings, lines, out.split("\n")):
+    for spelling, line, got in zip(spellings, [dumps(v) for v in plain], out.split("\n")):
         if got != line:
             sys.exit(f"Lean reads {spelling} as {got}, not {line}")
 
+    # 5. other spellings of decimals are read as the same exact decimal
+    decimals = [rand_decimal(r) for _ in range(1000)]
+    texts = [decimal_spelling(r, d) for d in decimals]
+    code, out, message = canon_lines("".join(t + "\n" for t in texts))
+    if code != 0:
+        sys.exit(f"Lean does not read the decimals: {message}")
+    for text, d, got in zip(texts, decimals, out.split("\n")):
+        if got != dumps_decimal(d):
+            sys.exit(f"Lean reads {text} as {got}, not {dumps_decimal(d)}")
+
     print(f"crosscheck: {len(values)} values agree byte for byte; {rejected} other spellings rejected; "
-          f"{len(spellings)} JSON spellings canonicalized")
+          f"{len(spellings)} JSON spellings and {len(texts)} decimal spellings canonicalized")
 
 
 if __name__ == "__main__":

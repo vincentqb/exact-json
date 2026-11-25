@@ -71,12 +71,23 @@ def genInt : Gen Int := do
   | 2 => return ((← word).toNat : Int) - 2 ^ 63
   | _ => return (← below 1000000 : Nat)
 
+def genDecimal : Gen Decimal := do
+  match ← below 3 with
+  | 0 => return (FloatText.shortest (← genFloat false)).getD ⟨false, 15, -1⟩
+  | 1 =>
+    let m ← below 100000
+    let zeros ← below 4
+    return Decimal.normalize ((← below 2) == 0) (m * 10 ^ zeros) (((← below 801 : Nat) : Int) - 400)
+  | _ =>
+    let m := (← word).toNat * 2 ^ 64 + (← word).toNat
+    return Decimal.normalize ((← below 2) == 0) m (((← below 4001 : Nat) : Int) - 2000)
+
 partial def genValue (depth : Nat) : Gen Value := do
   let choice ← below (if depth == 0 then 5 else 9)
   match choice with
   | 0 => return .string (← genString)
   | 1 => return .integer (← genInt)
-  | 2 => return .float (← genFloat false)
+  | 2 => return .decimal (← genDecimal)
   | 3 => return .boolean ((← below 2) == 0)
   | 4 => return .null
   | 5 | 6 =>
@@ -95,7 +106,7 @@ partial def genValue (depth : Nat) : Gen Value := do
 def genInvalid (depth : Nat) : Gen Value := do
   let v ← genValue depth
   match ← below 3 with
-  | 0 => return .array #[v, .float (← pick #[0.0 / 0.0, 1.0 / 0.0, -1.0 / 0.0])]
+  | 0 => return .array #[v, .decimal (← pick #[⟨false, 150, -2⟩, ⟨false, 10, 0⟩, ⟨true, 0, 3⟩, ⟨false, 0, -1⟩])]
   | 1 => return .table #[("b", v), ("a", v)]
   | _ => return .table #[("a", v), ("a", v)]
 
@@ -121,9 +132,8 @@ def looseString (s : String) : Gen String := do
     else out := out.push c
   return out.push '"'
 
-def looseFloat (x : Float) : Gen String := do
-  let some d := FloatText.shortest x | return floatText x
-  if (← below 4) == 0 then return floatText x
+def looseDecimal (d : Decimal) : Gen String := do
+  if (← below 4) == 0 then return d.text
   let sign := if d.negative then "-" else ""
   let ds := (Nat.toDigits 10 d.digits) ++ List.replicate (← below 3) '0'
   let extra : Int := ds.length - (Nat.toDigits 10 d.digits).length
@@ -133,7 +143,7 @@ def looseFloat (x : Float) : Gen String := do
   let e : Int := d.exponent - extra + k
   let intText := if intPart.isEmpty then "0" else String.ofList intPart
   let intText := if intText.length > 1 && intText.startsWith "0" then "" else intText
-  if intText.isEmpty then return floatText x
+  if intText.isEmpty then return d.text
   let fracText := if fracPart.isEmpty then "" else "." ++ String.ofList fracPart
   let needExp := e != 0 || fracText.isEmpty
   let expText ←
@@ -155,7 +165,7 @@ partial def loose (v : Value) : Gen String := do
   let body ← match v with
     | .string s => looseString s
     | .integer n => do pure (if n == 0 && (← below 3) == 0 then "-0" else toString n)
-    | .float x => looseFloat x
+    | .decimal d => looseDecimal d
     | .boolean b => do pure (if b then "true" else "false")
     | .null => do pure "null"
     | .array items => do
@@ -195,7 +205,7 @@ def valueLaws (seed count depth : Nat) : IO Unit := do
       | .ok w => check (w == v) s!"readJson reads {other} as {w.render}, not {text}"
       | .error e => throw (IO.userError s!"readJson rejects the JSON {other}: {e}")
     let bad := (genInvalid (depth - 1)).run' (seed + 5 * i)
-    check (!bad.isValid && !(Value.parse bad.render).isOk) s!"an invalid value's text is read: {bad.render}"
+    check (!bad.isValid && (Value.parse bad.render).toOption != some bad) s!"an invalid value is read: {bad.render}"
 
 structure Sample where
   label : String
@@ -258,7 +268,7 @@ def instanceLaws (seed count : Nat) : IO Unit := do
     match (fromValue? v : Except String Sample) with
     | .ok b => check (toValue b == v) s!"fromValue? ∘ toValue changes {v.render}"
     | .error e => throw (IO.userError s!"fromValue? rejects {v.render}: {e}")
-    let bad := [setKey v "zz" .null, setKey v "count" (.float 1.0), setKey v "label" (.integer 1)] ++
+    let bad := [setKey v "zz" .null, setKey v "count" (.decimal ⟨false, 1, 0⟩), setKey v "label" (.integer 1)] ++
       (if a.note?.isNone then [setKey v "note" .null] else [])
     for w in bad do
       check (!(fromValue? w : Except String Sample).isOk) s!"fromValue? accepts {w.render}"
