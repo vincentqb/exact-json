@@ -1,12 +1,19 @@
 module
 
-public import ExactJSON.NumberValid
+public import ExactJSON.Rfc8259
 
 public section
 
 namespace ExactJSON
 
 namespace Rfc8259
+
+theorem numberValue_valid (token : List Char) (v : Value) (h : numberValue token = .ok v) :
+    v.isValid = true := by
+  unfold numberValue at h
+  simp only at h
+  repeat' (split at h <;> (try cases h))
+  all_goals rfl
 
 theorem spec_isValid_table (ms : Array (String × Value)) :
     (Value.table ms).isValid = (keysIncrease (ms.toList.map (·.1)) && membersValid ms.toList) := by
