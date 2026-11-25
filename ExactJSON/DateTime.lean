@@ -37,7 +37,6 @@ protected def DateTime.toString : DateTime → String
   | .localDate d => d.toString
   | .localTime t => t.toString
 
-
 namespace DateText
 
 def fixed (n : Nat) (cs : List Char) : Option (Nat × List Char) :=

@@ -56,7 +56,6 @@ def render (v : Value) : String := renderTo "" v
 def renderLines (vs : Array Value) : String :=
   vs.foldl (fun out v => (renderTo out v).push '\n') ""
 
-
 end Value
 
 end ExactJSON

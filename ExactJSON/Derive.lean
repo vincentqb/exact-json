@@ -10,7 +10,6 @@ namespace ExactJSON.Derive
 
 universe u
 
-
 def present : List (String × Bool) → List (Option Value) → List (String × Value)
   | (k, _) :: schema, some v :: es => (k, v) :: present schema es
   | _ :: schema, none :: es => present schema es
@@ -171,7 +170,6 @@ theorem opt_map {α : Type u} [ToValue α] {read : Value → Except String α} {
 
 theorem tag?_ofTag (t : String × Option Value) : tag? (ofTag t) = .ok t := by
   obtain ⟨n, _ | p⟩ := t <;> rfl
-
 
 def fuel {α : Type u} (step : (Value → Except String α) → Value → Except String α) :
     Nat → Value → Except String α
@@ -394,7 +392,6 @@ theorem withPayload_items {β : Type u} {name : String} {n : Nat} {xs : List Val
     withPayload name (decodeItems name n r) (some (.array ⟨xs⟩)) = .ok b := by
   unfold Reads at h
   simp only [withPayload, decodeItems, hlen, ite_true, h]; rfl
-
 
 theorem noArgs_none {α : Type u} {name : String} {c : α} : noArgs name c none = .ok c := rfl
 

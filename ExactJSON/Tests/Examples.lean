@@ -155,7 +155,6 @@ def canon (s : String) : String :=
 #guard errorOf (linesText "1\n\n2\n") == "line 2: at character 0: expected a value"
 #guard errorOf (linesText "1\r\n") == "line 1: at character 1: not the canonical text, which ends here"
 
-
 structure Run where
   name : String
   iters : Nat
@@ -242,7 +241,6 @@ inductive Cmd where
   "1979-05-27T07:32:00+00:00", "1979-05-27T07:32", "07:32:00.50", "07:32:00.5000000001",
   "2024-13-01", "2023-02-29", "24:00:00", "1979-05-27T07:32:00+24:00", "1979-5-27"].all
   fun s => (DateTime.parse? s).isNone
-
 
 structure Bench where
   name : String
