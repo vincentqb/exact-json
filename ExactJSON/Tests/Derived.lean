@@ -101,3 +101,87 @@ example : labels ["a", "b", "c", "d"] = labels ["c", "a", "d", "b"] := by decide
 #guard !(decode "{\"fst\":1,\"zz\":0}" : Except String (Pair Nat String)).isOk
 #guard !(decode "{\"lit\":1,\"neg\":2}" : Except String Op).isOk
 #guard !(decode "{\"call\":[\"f\",[1]]}" : Except String Op).isOk
+
+namespace Domain
+
+structure Req1 where
+  a : Nat
+  deriving ToValue, FromValue, LawfulValue
+
+structure Req2 where
+  a : Nat
+  b : String
+  deriving ToValue, FromValue, LawfulValue
+
+structure ReqDefault where
+  a : Nat
+  b : Nat := 0
+  deriving ToValue, FromValue, LawfulValue
+
+structure ReqNested where
+  inner : Req2
+  items : List Req1
+  pair : Req1 × Float
+  map : Std.ExtTreeMap String Req1
+  deriving ToValue, FromValue, LawfulValue
+
+structure Opt1 where
+  a? : Option Nat
+  deriving ToValue, FromValue, LawfulValue
+
+structure OptOpt where
+  a? : Option (Option Nat)
+  b : Bool
+  deriving ToValue, FromValue, LawfulValue
+
+structure ReqExt extends Req2 where
+  c : Float
+  deriving ToValue, FromValue, LawfulValue
+
+structure ReqParam (α : Type) where
+  a : α
+  b : Nat
+  deriving ToValue, FromValue, LawfulValue
+
+inductive Shapes where
+  | none0
+  | single : Nat → Shapes
+  | positional : Nat → String → Shapes
+  | named1 (a : Nat)
+  | named2 (a : Nat) (b : String)
+  | namedOpt (a? : Option Nat)
+  | namedMixed (a : Nat) (b? : Option String)
+  deriving ToValue, FromValue, LawfulValue
+
+inductive Tree where
+  | leaf
+  | wrap : Tree → Tree
+  | pairOf : Tree → Tree → Tree
+  | node (left : Tree) (value : Nat) (right : Tree)
+  | only (child : Tree)
+  | maybe (label? : Option String) (rest : Tree)
+  deriving ToValue, FromValue, LawfulValue
+
+example (x : Req1) : decode (encode x) = .ok x := decode_encode x
+example (x : Req2) : decode (encode x) = .ok x := decode_encode x
+example (x : ReqDefault) : decode (encode x) = .ok x := decode_encode x
+example (x : ReqNested) : decode (encode x) = .ok x := decode_encode x
+example (x : Opt1) : decode (encode x) = .ok x := decode_encode x
+example (x : OptOpt) : decode (encode x) = .ok x := decode_encode x
+example (x : ReqExt) : decode (encode x) = .ok x := decode_encode x
+example (x : ReqParam (Array Req1)) : decode (encode x) = .ok x := decode_encode x
+example (x : Shapes) : decode (encode x) = .ok x := decode_encode x
+example (x : Tree) : decode (encode x) = .ok x := decode_encode x
+
+#guard encode ({ a := 1 } : Req1) == "{\"a\":1}"
+#guard encode ({ a := 1 } : ReqDefault) == "{\"a\":1,\"b\":0}"
+#guard encode ({ a? := some none, b := true } : OptOpt) == "{\"a\":null,\"b\":true}"
+#guard encode [Shapes.none0, .single 1, .positional 2 "p", .named1 3, .named2 4 "q", .namedOpt none,
+    .namedMixed 5 (some "r")] ==
+  "[\"none0\",{\"single\":1},{\"positional\":[2,\"p\"]},{\"named1\":{\"a\":3}},{\"named2\":{\"a\":4,\"b\":\"q\"}},{\"namedOpt\":{}},{\"namedMixed\":{\"a\":5,\"b\":\"r\"}}]"
+#guard encode (Tree.node (.wrap .leaf) 7 (.maybe (some "m") (.only .leaf))) ==
+  "{\"node\":{\"left\":{\"wrap\":\"leaf\"},\"right\":{\"maybe\":{\"label\":\"m\",\"rest\":{\"only\":{\"child\":\"leaf\"}}}},\"value\":7}}"
+#guard !(decode "{\"a\":1,\"b\":null}" : Except String Req2).isOk
+#guard !(decode "{\"b\":\"x\"}" : Except String Req2).isOk
+
+end Domain

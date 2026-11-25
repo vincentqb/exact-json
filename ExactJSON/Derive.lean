@@ -682,9 +682,9 @@ def ctorLambda (ctor : Ctor) (order : Array Nat) : TermElabM Term := do
   let sortedYs := order.map (ys[·]!)
   `(fun $sortedYs:ident* => $(← ctorApp ctor (ys.map (⟨·.raw⟩))))
 
-def decodeAlt (ctor : Ctor) (read : Fld → Term) : TermElabM Term := do
+def decodeAltBody (ctor : Ctor) (read : Fld → Term) : TermElabM Term := do
   let tag := strLit ctor.tag
-  let alt ← match ctor.shape with
+  match ctor.shape with
     | .noArgs => do `(ExactJSON.Derive.noArgs $tag $(← ctorApp ctor #[]))
     | .single => do
       let p ← fresh `p
@@ -697,7 +697,9 @@ def decodeAlt (ctor : Ctor) (read : Fld → Term) : TermElabM Term := do
       let order := keyOrder ctor.fields
       let r ← readerTerm ctor.fields (← ctorLambda ctor order) read true (ctor.fields[·]!.key) order
       `(ExactJSON.Derive.withPayload $tag (ExactJSON.Derive.decodeFields $tag $(← schemaTerm ctor.fields) $r))
-  `(($tag, $alt))
+
+def decodeAlt (ctor : Ctor) (read : Fld → Term) : TermElabM Term := do
+  `(($(strLit ctor.tag), $(← decodeAltBody ctor read)))
 
 def typeLabel (declName : Name) : Term := strLit (privateToUserName declName.eraseMacroScopes).toString
 
@@ -778,9 +780,11 @@ def mkLawfulValueCmds (declName : Name) : TermElabM (Array Command) := do
       if fields[i]!.optional then pure access[i]! else `(ExactJSON.LawfulValue.fromValue_toValue $(access[i]!)))
       (access[·]!)
     let valid ← allValidTerm fields order (access[·]!) fun i => `(ExactJSON.LawfulValue.toValue_valid $(access[i]!))
+    let r ← readerTerm fields lam (fun _ => ⟨mkIdent ``ExactJSON.fromValue?⟩) true (fields[·]!.key) order
+    let es ← order.mapM fun i => entryTerm auxTo fields[i]! access[i]!
     return #[← `(instance $instName:ident $binders:bracketedBinder* : ExactJSON.LawfulValue $(ps.indType) where
       fromValue_toValue := fun $x => ExactJSON.Derive.decodeFields_record (name := $(typeLabel declName))
-        (schema := $(← schemaTerm fields)) (b := $b) $(← keysSorted (sortedKeys fields))
+        (schema := $(← schemaTerm fields)) (es := [$es,*]) (r := $r) (b := $b) $(← keysSorted (sortedKeys fields))
         $(← fitsTerm fields order) $reads
       toValue_valid := fun $x => ExactJSON.Derive.valid_record (schema := $(← schemaTerm fields))
         $(← keysSorted (sortedKeys fields)) $valid)]
@@ -803,12 +807,17 @@ def mkLawfulValueCmds (declName : Name) : TermElabM (Array Command) := do
     | .named =>
       let order := keyOrder ctor.fields
       `(ExactJSON.Derive.depth_ofTag_record $(← fitsTerm ctor.fields order) $(← memTerm (order.idxOf i)))
+  let decode ← fresh `decode
+  let readField (f : Fld) : Term := if f.recursive then ⟨decode⟩ else ⟨mkIdent ``ExactJSON.fromValue?⟩
+  let encField (f : Fld) (x : Ident) : TermElabM Term :=
+    if f.recursive then `($auxTo $x) else `(ExactJSON.toValue $x)
   let roundTrip (ctor : Ctor) (vars : Array Ident) : TermElabM Term := do
     let fact := fieldFact vars ctor (depthOf ctor)
     let j := (sorted.findIdx? (·.name == ctor.name)).getD 0
-    let head ← `(tactic| refine (ExactJSON.Derive.decodeTagged_ofTag (n := $(strLit ctor.tag))
-      (p := $(← ctorPayload auxTo ctor vars)) (by exact ExactJSON.Derive.nodup_of_increase $hn)
-      (by exact $(← memTerm j))).trans ?_)
+    let alts ← sorted.mapM fun c => decodeAlt c readField
+    let head ← `(tactic| refine (ExactJSON.Derive.decodeTagged_ofTag (alts := [$alts,*]) (n := $(strLit ctor.tag))
+      (p := $(← ctorPayload auxTo ctor vars)) (alt := $(← decodeAltBody ctor readField))
+      (by exact ExactJSON.Derive.nodup_of_increase $hn) (by exact $(← memTerm j))).trans ?_)
     let payload ← match ctor.shape with
       | .noArgs => `(ExactJSON.Derive.noArgs_none)
       | .single => do `(ExactJSON.Derive.withPayload_map (f := $(← ctorLambda ctor #[0])) $(← fact 0))
@@ -816,14 +825,18 @@ def mkLawfulValueCmds (declName : Name) : TermElabM (Array Command) := do
         let order := Array.range ctor.fields.size
         let lam ← ctorLambda ctor order
         let b ← `($lam $(order.map (fun i => (⟨vars[i]!.raw⟩ : Term)))*)
-        `(ExactJSON.Derive.withPayload_items (b := $b) rfl
+        let r ← readerTerm ctor.fields lam readField false (fun i => s!"[{i}]") order
+        let xs ← order.mapM fun i => encField ctor.fields[i]! vars[i]!
+        `(ExactJSON.Derive.withPayload_items (xs := [$xs,*]) (r := $r) (b := $b) rfl
           $(← readsTerm ctor.fields lam order false fact (fun i => ⟨vars[i]!.raw⟩)))
       | .named => do
         let order := keyOrder ctor.fields
         let lam ← ctorLambda ctor order
         let b ← `($lam $(order.map (fun i => (⟨vars[i]!.raw⟩ : Term)))*)
+        let r ← readerTerm ctor.fields lam readField true (ctor.fields[·]!.key) order
+        let es ← order.mapM fun i => entryTerm auxTo ctor.fields[i]! ⟨vars[i]!.raw⟩
         `(ExactJSON.Derive.withPayload_fields (name := $(strLit ctor.tag)) (schema := $(← schemaTerm ctor.fields))
-          (b := $b) $(← keysSorted (sortedKeys ctor.fields))
+          (es := [$es,*]) (r := $r) (b := $b) $(← keysSorted (sortedKeys ctor.fields))
           $(← fitsTerm ctor.fields order) $(← readsTerm ctor.fields lam order true fact (fun i => ⟨vars[i]!.raw⟩)))
     `(by $head:tactic; exact $payload)
   let validity (ctor : Ctor) (vars : Array Ident) : TermElabM Term := do
@@ -842,7 +855,6 @@ def mkLawfulValueCmds (declName : Name) : TermElabM (Array Command) := do
         $(← keysSorted (sortedKeys ctor.fields))
         $(← allValidTerm ctor.fields order (fun i => vars[i]!) v)))
   let a ← fresh `a
-  let decode ← fresh `decode
   let mut rtAlts := #[]
   let mut vAlts := #[]
   for ctor in ctors do
