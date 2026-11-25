@@ -36,9 +36,6 @@ inductive Value where
   | table (members : Array (String × Value))
   deriving Inhabited, Repr
 
-@[expose] def finiteFloat (x : Float) : Bool :=
-  (x.toBits.toNat / 2 ^ 52) % 2 ^ 11 != 2 ^ 11 - 1
-
 @[expose] def keysIncreaseFrom (previous : String) : List String → Bool
   | [] => true
   | k :: rest => decide (previous < k) && keysIncreaseFrom k rest
@@ -66,6 +63,11 @@ mutual
 end
 
 abbrev Value.Valid (v : Value) : Prop := v.isValid = true
+
+@[expose] def Value.get? (v : Value) (key : String) : Option Value :=
+  match v with
+  | .table members => (members.find? (·.1 == key)).map (·.2)
+  | _ => none
 
 mutual
 

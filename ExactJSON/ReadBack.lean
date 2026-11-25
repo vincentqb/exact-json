@@ -14,10 +14,10 @@ open FloatText
 
 theorem floatOf?_eq (neg : Bool) (m : Nat) (q : Int) (hm : m ≠ 0)
     (h1 : -324 ≤ ((Nat.toDigits 10 m).length : Int) + q) (h2 : ((Nat.toDigits 10 m).length : Int) + q ≤ 309) :
-    Rfc8259.floatOf? neg m q =
+    floatOf? neg m q =
       let y := if neg then -Float.ofScientific m (decide (q < 0)) q.natAbs else Float.ofScientific m (decide (q < 0)) q.natAbs
       if finiteFloat y then some y else none := by
-  unfold Rfc8259.floatOf?
+  unfold floatOf?
   simp only [hm, ite_false, show ¬ (((Nat.toDigits 10 m).length : Int) + q > 309) by omega,
     show ¬ (((Nat.toDigits 10 m).length : Int) + q < -324) by omega, Option.map]
 

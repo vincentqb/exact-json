@@ -382,8 +382,8 @@ private theorem fromValue_dateTime (w : Value) (d : DateTime) :
   | _ => simp [fromValue?, typeMismatch]
 
 theorem codec_dateTime (d : DateTime) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
-  ⟨rfl, fun w => fromValue_dateTime w d⟩
+    toValue d = .string d.text ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
+  ⟨congrArg Value.string (dateTime_text d), fun w => fromValue_dateTime w d⟩
 
 private theorem fromValue_localDate (w : Value) (d : LocalDate) :
     (fromValue? w : Except String LocalDate) = .ok d ↔
@@ -398,8 +398,8 @@ private theorem fromValue_localDate (w : Value) (d : LocalDate) :
   | ok dt => cases dt <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localDate (d : LocalDate) :
-    toValue d = .string d.toString ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
-  ⟨rfl, fun w => (fromValue_localDate w d).trans (fromValue_dateTime w (.localDate d))⟩
+    toValue d = .string d.text ∧ ∀ w : Value, fromValue? w = .ok d ↔ w = .string d.text :=
+  ⟨congrArg Value.string (localDate_text d), fun w => (fromValue_localDate w d).trans (fromValue_dateTime w (.localDate d))⟩
 
 private theorem fromValue_localTime (w : Value) (t : LocalTime) :
     (fromValue? w : Except String LocalTime) = .ok t ↔
@@ -414,8 +414,8 @@ private theorem fromValue_localTime (w : Value) (t : LocalTime) :
   | ok dt => cases dt <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localTime (t : LocalTime) :
-    toValue t = .string t.toString ∧ ∀ w : Value, fromValue? w = .ok t ↔ w = .string t.text :=
-  ⟨rfl, fun w => (fromValue_localTime w t).trans (fromValue_dateTime w (.localTime t))⟩
+    toValue t = .string t.text ∧ ∀ w : Value, fromValue? w = .ok t ↔ w = .string t.text :=
+  ⟨congrArg Value.string (localTime_text t), fun w => (fromValue_localTime w t).trans (fromValue_dateTime w (.localTime t))⟩
 
 private theorem fromValue_localDateTime (w : Value) (dt : LocalDateTime) :
     (fromValue? w : Except String LocalDateTime) = .ok dt ↔
@@ -430,8 +430,8 @@ private theorem fromValue_localDateTime (w : Value) (dt : LocalDateTime) :
   | ok d => cases d <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_localDateTime (dt : LocalDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
-  ⟨rfl, fun w => (fromValue_localDateTime w dt).trans (fromValue_dateTime w (.localDateTime dt))⟩
+    toValue dt = .string dt.text ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
+  ⟨congrArg Value.string (localDateTime_text dt), fun w => (fromValue_localDateTime w dt).trans (fromValue_dateTime w (.localDateTime dt))⟩
 
 private theorem fromValue_offsetDateTime (w : Value) (dt : OffsetDateTime) :
     (fromValue? w : Except String OffsetDateTime) = .ok dt ↔
@@ -446,52 +446,8 @@ private theorem fromValue_offsetDateTime (w : Value) (dt : OffsetDateTime) :
   | ok d => cases d <;> simp [bind, Except.bind, pure, Except.pure, typeMismatch]
 
 theorem codec_offsetDateTime (dt : OffsetDateTime) :
-    toValue dt = .string dt.toString ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
-  ⟨rfl, fun w => (fromValue_offsetDateTime w dt).trans (fromValue_dateTime w (.offsetDateTime dt))⟩
-
-private theorem empty_ne_localDate_text (d : LocalDate) : "" ≠ d.text := by
-  intro h
-  have := congrArg String.toList h
-  rw [DateText.localDate_text_toList] at this
-  simp at this
-
-private theorem empty_ne_localTime_text (t : LocalTime) : "" ≠ t.text := by
-  intro h
-  have := congrArg String.toList h
-  rw [DateText.localTime_text_toList] at this
-  simp at this
-
-private theorem empty_ne_append {s t : String} (h : "" ≠ s) : "" ≠ s ++ t := by
-  intro he
-  have := congrArg String.length he
-  rw [String.length_append] at this
-  have hs : s.length = 0 := by simp at this; omega
-  exact h (String.length_eq_zero_iff.mp hs).symm
-
-theorem localDate_text_rejects_empty :
-    ¬ ∀ (d : LocalDate), (fun (_ : LocalDate) => "") d = d.text := by
-  intro h
-  exact empty_ne_localDate_text _ (h default)
-
-theorem localTime_text_rejects_empty :
-    ¬ ∀ (t : LocalTime), (fun (_ : LocalTime) => "") t = t.text := by
-  intro h
-  exact empty_ne_localTime_text _ (h default)
-
-theorem localDateTime_text_rejects_empty :
-    ¬ ∀ (dt : LocalDateTime), (fun (_ : LocalDateTime) => "") dt = dt.text := by
-  intro h
-  exact empty_ne_append (empty_ne_append (empty_ne_localDate_text _)) (h default)
-
-theorem offsetDateTime_text_rejects_empty :
-    ¬ ∀ (dt : OffsetDateTime), (fun (_ : OffsetDateTime) => "") dt = dt.text := by
-  intro h
-  exact empty_ne_append (empty_ne_append (empty_ne_append (empty_ne_localDate_text _))) (h default)
-
-theorem dateTime_text_rejects_empty :
-    ¬ ∀ (d : DateTime), (fun (_ : DateTime) => "") d = d.text := by
-  intro h
-  exact empty_ne_localDate_text _ (h (.localDate default))
+    toValue dt = .string dt.text ∧ ∀ w : Value, fromValue? w = .ok dt ↔ w = .string dt.text :=
+  ⟨congrArg Value.string (offsetDateTime_text dt), fun w => (fromValue_offsetDateTime w dt).trans (fromValue_dateTime w (.offsetDateTime dt))⟩
 
 theorem dateTime_parse_rejects_none :
     ¬ ∀ (s : String) (d : DateTime), (fun (_ : String) => (none : Option DateTime)) s = some d ↔ d.text = s := by
@@ -499,31 +455,31 @@ theorem dateTime_parse_rejects_none :
   cases (h (DateTime.localDate default).text (.localDate default)).mpr rfl
 
 theorem codec_localDate_rejects_null :
-    ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string ((fun (_ : LocalDate) => "") d) ∧
+    ¬ ∀ (d : LocalDate), @toValue LocalDate ⟨fun _ => .null⟩ d = .string d.text ∧
       ∀ w : Value, @fromValue? LocalDate ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_localTime_rejects_null :
-    ¬ ∀ (t : LocalTime), @toValue LocalTime ⟨fun _ => .null⟩ t = .string ((fun (_ : LocalTime) => "") t) ∧
+    ¬ ∀ (t : LocalTime), @toValue LocalTime ⟨fun _ => .null⟩ t = .string t.text ∧
       ∀ w : Value, @fromValue? LocalTime ⟨fun _ => .error ""⟩ w = .ok t ↔ w = .string t.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_localDateTime_rejects_null :
-    ¬ ∀ (dt : LocalDateTime), @toValue LocalDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : LocalDateTime) => "") dt) ∧
+    ¬ ∀ (dt : LocalDateTime), @toValue LocalDateTime ⟨fun _ => .null⟩ dt = .string dt.text ∧
       ∀ w : Value, @fromValue? LocalDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_offsetDateTime_rejects_null :
-    ¬ ∀ (dt : OffsetDateTime), @toValue OffsetDateTime ⟨fun _ => .null⟩ dt = .string ((fun (_ : OffsetDateTime) => "") dt) ∧
+    ¬ ∀ (dt : OffsetDateTime), @toValue OffsetDateTime ⟨fun _ => .null⟩ dt = .string dt.text ∧
       ∀ w : Value, @fromValue? OffsetDateTime ⟨fun _ => .error ""⟩ w = .ok dt ↔ w = .string dt.text := by
   intro h
   nomatch (h default).1
 
 theorem codec_dateTime_rejects_null :
-    ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string ((fun (_ : DateTime) => "") d) ∧
+    ¬ ∀ (d : DateTime), @toValue DateTime ⟨fun _ => .null⟩ d = .string d.text ∧
       ∀ w : Value, @fromValue? DateTime ⟨fun _ => .error ""⟩ w = .ok d ↔ w = .string d.text := by
   intro h
   nomatch (h default).1

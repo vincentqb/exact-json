@@ -113,17 +113,10 @@ theorem lawful_of_text {α : Type u} [ToValue α] [FromValue α] {text : α → 
     (h : ∀ a, toValue a = .string (text a) ∧ ∀ w, fromValue? w = .ok a ↔ w = .string (text a)) : LawfulValue α :=
   lawful_of_codec h fun _ => rfl
 
-instance : LawfulValue LocalDate :=
-  lawful_of_text fun d => ⟨(codec_localDate d).1.trans (congrArg _ (localDate_text d)), (codec_localDate d).2⟩
-instance : LawfulValue LocalTime :=
-  lawful_of_text fun t => ⟨(codec_localTime t).1.trans (congrArg _ (localTime_text t)), (codec_localTime t).2⟩
-instance : LawfulValue LocalDateTime :=
-  lawful_of_text fun dt => ⟨(codec_localDateTime dt).1.trans (congrArg _ (localDateTime_text dt)),
-    (codec_localDateTime dt).2⟩
-instance : LawfulValue OffsetDateTime :=
-  lawful_of_text fun dt => ⟨(codec_offsetDateTime dt).1.trans (congrArg _ (offsetDateTime_text dt)),
-    (codec_offsetDateTime dt).2⟩
-instance : LawfulValue DateTime :=
-  lawful_of_text fun d => ⟨(codec_dateTime d).1.trans (congrArg _ (dateTime_text d)), (codec_dateTime d).2⟩
+instance : LawfulValue LocalDate := lawful_of_text codec_localDate
+instance : LawfulValue LocalTime := lawful_of_text codec_localTime
+instance : LawfulValue LocalDateTime := lawful_of_text codec_localDateTime
+instance : LawfulValue OffsetDateTime := lawful_of_text codec_offsetDateTime
+instance : LawfulValue DateTime := lawful_of_text codec_dateTime
 
 end ExactJSON

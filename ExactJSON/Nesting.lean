@@ -139,22 +139,6 @@ theorem depth_table (ms : Array (String × Value)) : (Value.table ms).depth = me
   cases ms
   rfl
 
-theorem itemsDepth_append (a b : List Value) : itemsDepth (a ++ b) = max (itemsDepth a) (itemsDepth b) := by
-  induction a with
-  | nil => simp [itemsDepth]
-  | cons x a ih =>
-    simp only [List.cons_append, itemsDepth, ih]
-    omega
-
-theorem membersDepth_append (a b : List (String × Value)) :
-    membersDepth (a ++ b) = max (membersDepth a) (membersDepth b) := by
-  induction a with
-  | nil => simp [membersDepth]
-  | cons x a ih =>
-    obtain ⟨_, _⟩ := x
-    simp only [List.cons_append, membersDepth, ih]
-    omega
-
 theorem membersDepth_perm {l l' : List (String × Value)} (h : l.Perm l') : membersDepth l = membersDepth l' := by
   induction h with
   | nil => rfl

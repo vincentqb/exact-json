@@ -28,6 +28,21 @@ def text (d : Decimal) : String :=
 
 end Decimal
 
+def finiteFloat (x : Float) : Bool :=
+  (x.toBits.toNat / 2 ^ 52) % 2 ^ 11 != 2 ^ 11 - 1
+
+def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
+  let magnitude : Option Float :=
+    if m = 0 then some 0.0
+    else
+      let n : Int := (Nat.toDigits 10 m).length
+      if n + q > 309 then none
+      else if n + q < -324 then some 0.0
+      else some (Float.ofScientific m (q < 0) q.natAbs)
+  match magnitude.map fun f => if negative then -f else f with
+  | some x => if finiteFloat x then some x else none
+  | none => none
+
 def floatValue (x : Float) : Rat :=
   let bits := x.toBits.toNat
   let magnitude : Rat :=
@@ -41,7 +56,7 @@ def value (d : Decimal) : Rat := (if d.negative then -1 else 1) * (d.digits : Ra
 
 def digitCount (d : Decimal) : Nat := (Nat.toDigits 10 d.digits).length
 
-def ReadsBack (d : Decimal) (x : Float) : Prop := Rfc8259.floatOf? d.negative d.digits d.exponent = some x
+def ReadsBack (d : Decimal) (x : Float) : Prop := floatOf? d.negative d.digits d.exponent = some x
 
 def IsShortest (d : Decimal) (x : Float) : Prop :=
   d.ReadsBack x ∧

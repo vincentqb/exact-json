@@ -19,18 +19,6 @@ def skipWs : List Char → List Char
 def isNumberChar (c : Char) : Bool :=
   c.isDigit || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E'
 
-def floatOf? (negative : Bool) (m : Nat) (q : Int) : Option Float :=
-  let magnitude : Option Float :=
-    if m = 0 then some 0.0
-    else
-      let n : Int := (Nat.toDigits 10 m).length
-      if n + q > 309 then none
-      else if n + q < -324 then some 0.0
-      else some (Float.ofScientific m (q < 0) q.natAbs)
-  match magnitude.map fun f => if negative then -f else f with
-  | some x => if finiteFloat x then some x else none
-  | none => none
-
 def numberSign : List Char → Bool × List Char
   | '-' :: t => (true, t)
   | t => (false, t)

@@ -13,7 +13,7 @@ open FloatText
 
 theorem floatOf?_of_roundsTo {x : Float} (hx : finiteFloat x = true) {s : Bool} {M : Nat} {e : Int}
     (hd : decompose x = (s, M, e)) (hM : M ≠ 0) {m : Nat} {q : Int}
-    (h : roundsTo M e m q = true) : Rfc8259.floatOf? s m q = some x := by
+    (h : roundsTo M e m q = true) : floatOf? s m q = some x := by
   obtain ⟨-, hr⟩ := decompose_spec x hx s M e hd
   obtain ⟨hr1, hr2⟩ := hr hM
   obtain ⟨hm0, hc1, hc2⟩ := interval_bounds M e hM hr1 hr2 _ _ _ _ h
@@ -24,18 +24,8 @@ theorem floatOf?_of_roundsTo {x : Float} (hx : finiteFloat x = true) {s : Bool} 
   · have := ofScientificRounds (-x) M e _ _ (finiteFloat_neg hx) (by rw [decompose_neg hx hd]; rfl) hM h
     simp only [ite_true, this, neg_neg_of_finite hx, hx]
 
-theorem finite_of_floatOf? {neg : Bool} {m : Nat} {q : Int} {x : Float} (h : Rfc8259.floatOf? neg m q = some x) :
-    finiteFloat x = true := by
-  unfold Rfc8259.floatOf? at h
-  simp only at h
-  split at h
-  · split at h
-    · rename_i hf; simp only [Option.some.injEq] at h; subst h; exact hf
-    · cases h
-  · cases h
-
-theorem floatOf?_zero_eq (neg : Bool) : Rfc8259.floatOf? neg 0 0 = some (if neg then -0.0 else 0.0) := by
-  unfold Rfc8259.floatOf?
+theorem floatOf?_zero_eq (neg : Bool) : floatOf? neg 0 0 = some (if neg then -0.0 else 0.0) := by
+  unfold floatOf?
   simp only [ite_true, Option.map]
   cases neg
   · simp only [Bool.false_eq_true, ite_false]
@@ -46,7 +36,7 @@ theorem floatOf?_zero_eq (neg : Bool) : Rfc8259.floatOf? neg 0 0 = some (if neg 
     rfl
 
 theorem floatOf?_zero {x : Float} {neg : Bool} {e : Int}
-    (hd : decompose x = (neg, 0, e)) : Rfc8259.floatOf? neg 0 0 = some x := by
+    (hd : decompose x = (neg, 0, e)) : floatOf? neg 0 0 = some x := by
   rw [floatOf?_zero_eq, eq_zero_of_decompose hd]
 
 theorem shortest_zero {x : Float} (hx : finiteFloat x = true) {neg : Bool} {e : Int}
@@ -73,21 +63,6 @@ theorem value_dist (d : Decimal) (x : Float) {neg : Bool} {M : Nat} {e : Int} (h
 theorem floatValue_zero {x : Float} {neg : Bool} {e : Int} (hd : decompose x = (neg, 0, e)) : floatValue x = 0 := by
   rw [floatValue_eq hd]
   cases neg <;> simp
-
-theorem digits_zero_of_value {d : Decimal} (h : d.value = 0) : d.digits = 0 := by
-  apply Classical.byContradiction
-  intro hne
-  have hpos : (0 : Rat) < (d.digits : Rat) * 10 ^ d.exponent :=
-    Rat.mul_pos (natCast_pos' (Nat.pos_of_ne_zero hne)) (ten_zpow_pos _)
-  unfold Decimal.value at h
-  split at h <;> grind
-
-theorem neg_zero_ne_zero : (-0.0 : Float) ≠ 0.0 := by
-  intro h
-  have := congrArg (fun y : Float => y.toBits.toNat) h
-  rw [show (-0.0 : Float).toBits.toNat = 2 ^ 63 by decide +kernel,
-    show (0.0 : Float).toBits.toNat = 0 by decide +kernel] at this
-  cases this
 
 theorem rat_abs_zero_sub : ((0 : Rat) - 0).abs = 0 := by rw [Rat.sub_self, Rat.abs_zero]
 
@@ -132,7 +107,7 @@ theorem shortest_isShortest (x : Float) (hx : finiteFloat x = true) (D : Decimal
     rw [hs, Option.some.injEq] at hs'
     subst hs'
     refine ⟨?_, ?_⟩
-    · show Rfc8259.floatOf? D.negative D.digits D.exponent = some x
+    · show floatOf? D.negative D.digits D.exponent = some x
       rw [hneg]
       exact floatOf?_of_roundsTo hx hd hM hfit
     · intro d' hd'
@@ -155,57 +130,8 @@ theorem shortest_isSome (x : Float) (hx : finiteFloat x = true) : ∃ D, shortes
   · obtain ⟨D, hs, -⟩ := shortest_strong x hx neg M e hd hM
     exact ⟨D, hs⟩
 
-theorem shortest_unique (x : Float) (d : Decimal) (h : d.IsShortest x) : shortest x = some d := by
-  have hx := finite_of_floatOf? h.1
-  rcases hd : decompose x with ⟨neg, M, e⟩
-  by_cases hM : M = 0
-  · subst hM
-    rw [shortest_zero hx hd]
-    have hD := isShortest_zero hd
-    have hdist : (d.value - 0).abs = 0 := by
-      rcases h.2 _ hD.1 with h' | ⟨-, h' | ⟨h', -⟩⟩
-      · rw [zero_digitCount] at h'
-        have := FloatText.digits_length_pos d.digits
-        unfold Decimal.digitCount at h'
-        omega
-      · rw [zero_value, floatValue_zero hd, rat_abs_zero_sub] at h'
-        exact absurd h' (Rat.not_lt.mpr Rat.abs_nonneg)
-      · rw [zero_value, floatValue_zero hd, rat_abs_zero_sub] at h'
-        exact h'
-    rw [Rat.abs_eq_zero_iff] at hdist
-    have hval : d.value = 0 := by grind
-    have hdig := digits_zero_of_value hval
-    have hexp := Decimal.exponent_zero hdig
-    have hread := h.1
-    unfold Decimal.ReadsBack at hread
-    rw [hdig, hexp, floatOf?_zero_eq, eq_zero_of_decompose hd, Option.some.injEq] at hread
-    have hneg : d.negative = neg := by
-      cases hn : d.negative <;> cases neg <;> rw [hn] at hread <;>
-        simp only [Bool.false_eq_true, ite_false, ite_true] at hread
-      all_goals first | rfl | exact absurd hread neg_zero_ne_zero | exact absurd hread.symm neg_zero_ne_zero
-    rw [decimal_eq (D := ⟨neg, 0, 0, by decide⟩) hneg hdig hexp]
-  · obtain ⟨D, hs, hneg, hfit, hall⟩ := shortest_strong x hx neg M e hd hM
-    rw [hs]
-    have hD := shortest_isShortest x hx D hs
-    obtain ⟨hn', hr'⟩ := floatOf?_sound hx hd hM h.1
-    have hc1 := hall d.digits d.exponent hr'
-    have hc2 := h.2 D hD.1
-    unfold Decimal.digitCount at hc2
-    rw [value_dist D x hd hneg, value_dist d x hd hn'] at hc2
-    generalize (Nat.toDigits 10 D.digits).length = nD at hc1 hc2
-    generalize (Nat.toDigits 10 d.digits).length = nd at hc1 hc2
-    generalize ((D.digits : Rat) * 10 ^ D.exponent - (M : Rat) * 2 ^ e).abs = A at hc1 hc2
-    generalize ((d.digits : Rat) * 10 ^ d.exponent - (M : Rat) * 2 ^ e).abs = B at hc1 hc2
-    rcases hc1 with g | ⟨g1, g | ⟨g2, g3⟩⟩ <;> rcases hc2 with f | ⟨f1, f | ⟨f2, f3⟩⟩
-    all_goals first | omega | (exfalso; grind) | skip
-    rcases f3 with f3 | f3
-    · rw [f3]
-    · rcases g3 with ⟨e1, e2⟩ | ⟨-, g3⟩
-      · rw [decimal_eq (hneg.trans hn'.symm) e1.symm e2.symm]
-      · omega
-
 theorem floatsReadBack (x : Float) (hx : finiteFloat x = true) (dd : Decimal) (hs : shortest x = some dd) :
-    Rfc8259.floatOf? dd.negative dd.digits dd.exponent = some x := by
+    floatOf? dd.negative dd.digits dd.exponent = some x := by
   rcases hd : decompose x with ⟨neg, M, e⟩
   by_cases hM : M = 0
   · subst hM

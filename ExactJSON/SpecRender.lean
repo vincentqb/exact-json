@@ -1,6 +1,5 @@
 module
 
-public import ExactJSON.Reread
 public import ExactJSON.Text
 public import ExactJSON.NumberText
 public import ExactJSON.SpecValid
@@ -289,36 +288,17 @@ theorem spec_table_sorted (l : List (String × Value)) (h : keysIncrease (l.map 
   unfold Rfc8259.table
   simp only [mergeSort_of_keysIncrease l h, neighboursDistinct_of_keysIncrease l h, ite_true]
 
-theorem rereadMembers_keys : ∀ (ms ws : List (String × Value)), Value.rereadMembers ms = some ws →
-    ws.map (·.1) = ms.map (·.1)
-  | [], ws, h => by
-    simp only [Value.rereadMembers, Option.some.injEq] at h
-    subst h
-    rfl
-  | (k, v) :: ms, ws, h => by
-    simp only [Value.rereadMembers] at h
-    split at h
-    · rename_i w us _ hus
-      simp only [Option.some.injEq] at h
-      subst h
-      simp [rereadMembers_keys ms us hus]
-    · cases h
-
 theorem membersText_head (k : String) (v : Value) (ms : List (String × Value)) :
     ∃ t, Value.membersText ((k, v) :: ms) = '"' :: t := by
   cases ms with
   | nil => exact ⟨_, by rw [Value.membersText_singleton, Value.memberText]⟩
   | cons m ms => exact ⟨_, by rw [Value.membersText_cons, Value.memberText, List.cons_append]⟩
 
-theorem keys_push_reread (acc : Array (String × Value)) (k : String) (v w : Value) (ms : List (String × Value)) :
-    ((acc.push (k, w)).toList ++ ms).map (·.1) = (acc.toList ++ (k, v) :: ms).map (·.1) := by
-  simp
-
 mutual
 
 theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestOk rest → v.Valid →
     (Value.render v).toList.length ≤ fuel →
-    (Rfc8259.value fuel ((Value.render v).toList ++ rest)).toOption = v.reread.map (·, rest)
+    (Rfc8259.value fuel ((Value.render v).toList ++ rest)).toOption = some (v, rest)
   | v, 0, _, _, _, hlen => absurd hlen (by have := render_length_pos v; omega)
   | .null, f + 1, rest, _, _, _ => by
     rw [Value.text_null]
@@ -329,21 +309,21 @@ theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestO
     rw [Value.text_string]
     simp only [List.cons_append, List.append_assoc]
     rw [spec_value_quote, spec_chars_escape]
-    simp [Value.reread, Except.toOption]
+    simp [Except.toOption]
   | .integer n, f + 1, rest, hrest, _, _ => by
     rw [render_integer_toList, spec_value_numberText f _ rest (numberChars_toString n)
       (toString_toList_ne_nil n) hrest, numberValue_toString]
     rfl
   | .decimal d, f + 1, rest, hrest, _, _ => by
-    rw [render_decimal_toList, spec_value_numberText f _ rest (numberChars_decimalText d) (decimalText_toList_ne_nil d) hrest]
-    simp only [Value.reread, Value.rereadDecimal]
-    cases Rfc8259.numberValue d.text.toList <;> rfl
+    rw [render_decimal_toList, spec_value_numberText f _ rest (numberChars_decimalText d) (decimalText_toList_ne_nil d) hrest,
+      numberValue_text d]
+    rfl
   | .array ⟨[]⟩, f + 1, rest, _, _, _ => by
     rw [Value.text_array]
     simp only [Value.itemsText, Value.renderItems, String.toList_empty, List.nil_append, List.cons_append]
     rw [spec_value_bracket]
-    simp [Rfc8259.skipWs, Value.reread, Value.rereadItems, Except.toOption]
-    rfl
+    simp [Rfc8259.skipWs, Except.toOption]
+    all_goals rfl
   | .array ⟨v :: vs⟩, f + 1, rest, hrest, hvalid, hlen => by
     have hvalid' : itemsValid (v :: vs) = true := hvalid
     rw [Value.text_array] at hlen ⊢
@@ -352,14 +332,13 @@ theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestO
     obtain ⟨c, t, hct, hws, hb, -, -⟩ := itemsText_head v vs
     rw [spec_open_array f _ c (t ++ ']' :: rest) (by rw [hct, List.cons_append]) hws hb,
       spec_elements (v :: vs) f rest #[] (by simp) hrest hvalid' (by omega)]
-    simp only [Value.reread, Option.map_map]
-    rfl
+    simp
   | .table ⟨[]⟩, f + 1, rest, _, _, _ => by
     rw [Value.text_table]
     simp only [Value.membersText, Value.renderMembers, String.toList_empty, List.nil_append, List.cons_append]
     rw [spec_value_brace]
-    simp [Rfc8259.skipWs, Value.reread, Value.rereadMembers, Except.toOption]
-    rfl
+    simp [Rfc8259.skipWs, Except.toOption]
+    all_goals rfl
   | .table ⟨(k, v) :: ms⟩, f + 1, rest, hrest, hvalid, hlen => by
     have hvalid' : membersValid ((k, v) :: ms) = true := by
       have : (keysIncrease (((k, v) :: ms).map (·.1)) && membersValid ((k, v) :: ms)) = true := hvalid
@@ -375,13 +354,12 @@ theorem spec_render : (v : Value) → ∀ (fuel : Nat) (rest : List Char), RestO
     obtain ⟨t, ht⟩ := membersText_head k v ms
     rw [spec_open_table f _ (t ++ '}' :: rest) (by rw [ht, List.cons_append]),
       spec_members ((k, v) :: ms) f rest #[] (by simp) hrest hvalid' (by simpa using hkeys) (by omega)]
-    simp only [Value.reread, Option.map_map]
-    rfl
+    simp
 
 theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List Char) (acc : Array Value),
     items ≠ [] → RestOk rest → itemsValid items = true → (Value.itemsText items).length + 1 ≤ fuel →
     (Rfc8259.elements fuel (Value.itemsText items ++ ']' :: rest) acc).toOption =
-      (Value.rereadItems items).map fun ws => (.array ⟨acc.toList ++ ws⟩, rest)
+      some (.array ⟨acc.toList ++ items⟩, rest)
   | [], _, _, _, hne, _, _, _ => absurd rfl hne
   | _ :: _, 0, _, _, _, _, _, hlen => absurd hlen (by omega)
   | [v], f + 1, rest, acc, _, hrest, hvalid, hlen => by
@@ -394,25 +372,15 @@ theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List C
     cases hval : Rfc8259.value f ((Value.render v).toList ++ ']' :: rest) with
     | error e =>
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      have hre : v.reread = none := by
-        cases h : v.reread with
-        | none => rfl
-        | some w => rw [h] at ih; cases ih
-      simp [Value.rereadItems, hre, Except.toOption]
+      simp [Except.toOption] at ih
     | ok p =>
       obtain ⟨w, r⟩ := p
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      cases h : v.reread with
-      | none => rw [h] at ih; cases ih
-      | some w' =>
-        rw [h] at ih
-        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at ih
-        obtain ⟨rfl, rfl⟩ := ih
-        simp only
-        rw [skipWs_cons ']' rest (by decide)]
-        simp [Value.rereadItems, h, Except.toOption, array_push_eq]
+      simp only [Except.toOption, Option.some.injEq, Prod.mk.injEq] at ih
+      obtain ⟨rfl, rfl⟩ := ih
+      simp only
+      rw [skipWs_cons ']' rest (by decide)]
+      simp [Except.toOption, array_push_eq]
   | v :: w :: ws, f + 1, rest, acc, _, hrest, hvalid, hlen => by
     have hv : v.Valid := by
       simp only [itemsValid, Bool.and_eq_true] at hvalid
@@ -429,41 +397,26 @@ theorem spec_elements : (items : List Value) → ∀ (fuel : Nat) (rest : List C
     cases hval : Rfc8259.value f ((Value.render v).toList ++ ',' :: (Value.itemsText (w :: ws) ++ ']' :: rest)) with
     | error e =>
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      have hre : v.reread = none := by
-        cases h : v.reread with
-        | none => rfl
-        | some u => rw [h] at ih; cases ih
-      simp [Value.rereadItems, hre, Except.toOption]
+      simp [Except.toOption] at ih
     | ok p =>
       obtain ⟨u, r⟩ := p
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      cases h : v.reread with
-      | none => rw [h] at ih; cases ih
-      | some u' =>
-        rw [h] at ih
-        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at ih
-        obtain ⟨rfl, rfl⟩ := ih
-        obtain ⟨c, t, hct, hws, -⟩ := itemsText_head w ws
-        simp only
-        rw [skipWs_cons ',' _ (by decide)]
-        simp only
-        rw [show Rfc8259.skipWs (Value.itemsText (w :: ws) ++ ']' :: rest) =
-            Value.itemsText (w :: ws) ++ ']' :: rest from by rw [hct, List.cons_append, skipWs_cons _ _ hws],
-          spec_elements (w :: ws) f rest (acc.push u) (by simp) hrest hvalid' (by omega)]
-        have hcons : Value.rereadItems (v :: w :: ws) =
-            match v.reread, Value.rereadItems (w :: ws) with
-            | some a, some b => some (a :: b)
-            | _, _ => none := rfl
-        rw [hcons, h]
-        cases Value.rereadItems (w :: ws) <;> simp [array_push_eq]
+      simp only [Except.toOption, Option.some.injEq, Prod.mk.injEq] at ih
+      obtain ⟨rfl, rfl⟩ := ih
+      obtain ⟨c, t, hct, hws, -⟩ := itemsText_head w ws
+      simp only
+      rw [skipWs_cons ',' _ (by decide)]
+      simp only
+      rw [show Rfc8259.skipWs (Value.itemsText (w :: ws) ++ ']' :: rest) =
+          Value.itemsText (w :: ws) ++ ']' :: rest from by rw [hct, List.cons_append, skipWs_cons _ _ hws],
+        spec_elements (w :: ws) f rest (acc.push u) (by simp) hrest hvalid' (by omega)]
+      simp
 
 theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (rest : List Char)
     (acc : Array (String × Value)), members ≠ [] → RestOk rest → membersValid members = true →
     keysIncrease ((acc.toList ++ members).map (·.1)) = true → (Value.membersText members).length + 1 ≤ fuel →
     (Rfc8259.members fuel (Value.membersText members ++ '}' :: rest) acc).toOption =
-      (Value.rereadMembers members).map fun ms => (.table ⟨acc.toList ++ ms⟩, rest)
+      some (.table ⟨acc.toList ++ members⟩, rest)
   | [], _, _, _, hne, _, _, _, _ => absurd rfl hne
   | _ :: _, 0, _, _, _, _, _, _, hlen => absurd hlen (by omega)
   | [(k, v)], f + 1, rest, acc, _, hrest, hvalid, hkeys, hlen => by
@@ -482,32 +435,18 @@ theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (
     cases hval : Rfc8259.value f ((Value.render v).toList ++ '}' :: rest) with
     | error e =>
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      have hre : v.reread = none := by
-        cases h : v.reread with
-        | none => rfl
-        | some w => rw [h] at ih; cases ih
-      simp [Value.rereadMembers, hre, Except.toOption]
+      simp [Except.toOption] at ih
     | ok p =>
       obtain ⟨w, r⟩ := p
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      cases h : v.reread with
-      | none => rw [h] at ih; cases ih
-      | some w' =>
-        rw [h] at ih
-        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at ih
-        obtain ⟨rfl, rfl⟩ := ih
-        simp only
-        rw [skipWs_cons '}' rest (by decide)]
-        simp only [String.ofList_toList]
-        have hk : keysIncrease ((acc.push (k, w)).toList.map (·.1)) = true := by
-          have := keys_push_reread acc k v w []
-          rw [List.append_nil] at this
-          rw [this]
-          exact hkeys
-        rw [spec_table_sorted _ hk]
-        simp [Value.rereadMembers, h, Except.toOption]
+      simp only [Except.toOption, Option.some.injEq, Prod.mk.injEq] at ih
+      obtain ⟨rfl, rfl⟩ := ih
+      simp only
+      rw [skipWs_cons '}' rest (by decide)]
+      simp only [String.ofList_toList]
+      have hk : keysIncrease ((acc.push (k, w)).toList.map (·.1)) = true := by simpa using hkeys
+      rw [spec_table_sorted _ hk]
+      simp [Except.toOption]
   | (k, v) :: m :: ms, f + 1, rest, acc, _, hrest, hvalid, hkeys, hlen => by
     have hv : v.Valid := by
       simp only [membersValid, Bool.and_eq_true] at hvalid
@@ -528,41 +467,24 @@ theorem spec_members : (members : List (String × Value)) → ∀ (fuel : Nat) (
     cases hval : Rfc8259.value f ((Value.render v).toList ++ ',' :: (Value.membersText (m :: ms) ++ '}' :: rest)) with
     | error e =>
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      have hre : v.reread = none := by
-        cases h : v.reread with
-        | none => rfl
-        | some w => rw [h] at ih; cases ih
-      simp [Value.rereadMembers, hre, Except.toOption]
+      simp [Except.toOption] at ih
     | ok p =>
       obtain ⟨w, r⟩ := p
       rw [hval] at ih
-      simp only [Except.toOption] at ih
-      cases h : v.reread with
-      | none => rw [h] at ih; cases ih
-      | some w' =>
-        rw [h] at ih
-        simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at ih
-        obtain ⟨rfl, rfl⟩ := ih
-        simp only
-        rw [skipWs_cons ',' _ (by decide)]
-        simp only
-        obtain ⟨t, ht⟩ := membersText_head m.1 m.2 ms
-        rw [show Rfc8259.skipWs (Value.membersText (m :: ms) ++ '}' :: rest) =
-            Value.membersText (m :: ms) ++ '}' :: rest from by
-              rw [show m = (m.1, m.2) from rfl, ht, List.cons_append, skipWs_cons _ _ (by decide)],
-          String.ofList_toList,
-          spec_members (m :: ms) f rest (acc.push (k, w)) (by simp) hrest hvalid'
-            (by rw [keys_push_reread acc k v w (m :: ms)]; exact hkeys) (by omega)]
-        have hcons : Value.rereadMembers ((k, v) :: m :: ms) =
-            match v.reread, Value.rereadMembers (m :: ms) with
-            | some a, some b => some ((k, a) :: b)
-            | _, _ => none := rfl
-        rw [hcons, h]
-        cases Value.rereadMembers (m :: ms) <;> simp [array_push_eq]
+      simp only [Except.toOption, Option.some.injEq, Prod.mk.injEq] at ih
+      obtain ⟨rfl, rfl⟩ := ih
+      simp only
+      rw [skipWs_cons ',' _ (by decide)]
+      simp only
+      obtain ⟨t, ht⟩ := membersText_head m.1 m.2 ms
+      rw [show Rfc8259.skipWs (Value.membersText (m :: ms) ++ '}' :: rest) =
+          Value.membersText (m :: ms) ++ '}' :: rest from by
+            rw [show m = (m.1, m.2) from rfl, ht, List.cons_append, skipWs_cons _ _ (by decide)],
+        String.ofList_toList,
+        spec_members (m :: ms) f rest (acc.push (k, w)) (by simp) hrest hvalid' (by simpa using hkeys) (by omega)]
+      simp
 
 end
-
 theorem length_ofList_le_utf8ByteSize (l : List Char) : l.length ≤ (String.ofList l).utf8ByteSize := by
   induction l with
   | nil => simp
@@ -576,12 +498,10 @@ theorem length_le_utf8ByteSize (s : String) : s.toList.length ≤ s.utf8ByteSize
   have := length_ofList_le_utf8ByteSize s.toList
   rwa [String.ofList_toList] at this
 
-theorem read_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) :
-    Rfc8259.read? v.render = some v := by
+theorem spec_read_render (v : Value) (hvalid : v.Valid) : Rfc8259.read? v.render = some v := by
   have hlen := length_le_utf8ByteSize v.render
   have h := spec_render v (2 * v.render.utf8ByteSize + 2) [] (.inl rfl) hvalid (by omega)
-  rw [hre, List.append_nil] at h
-  simp only [Option.map_some] at h
+  rw [List.append_nil] at h
   have h' := toOption_eq_some.mp h
   unfold Rfc8259.read? Rfc8259.read
   have hs : Rfc8259.skipWs v.render.toList = v.render.toList := by
@@ -589,49 +509,5 @@ theorem read_of_reread (v : Value) (hvalid : v.Valid) (hre : v.reread = some v) 
     rwa [List.append_nil] at this
   rw [hs, h']
   rfl
-
-mutual
-
-theorem reread_self : (v : Value) → v.Valid → v.reread = some v
-  | .null, _ => rfl
-  | .string _, _ => rfl
-  | .integer _, _ => rfl
-  | .boolean _, _ => rfl
-  | .decimal d, h => by
-    simp only [Value.reread, Value.rereadDecimal, numberValue_text d]
-  | .array ⟨items⟩, h => by
-    simp only [Value.reread, rereadItems_self items h]
-    rfl
-  | .table ⟨members⟩, h => by
-    have hboth : (keysIncrease (members.map (·.1)) && membersValid members) = true := h
-    simp only [Bool.and_eq_true] at hboth
-    simp only [Value.reread, rereadMembers_self members hboth.2]
-    rfl
-
-theorem rereadItems_self : (items : List Value) → itemsValid items = true → Value.rereadItems items = some items
-  | [], _ => rfl
-  | v :: vs, h => by
-    simp only [itemsValid, Bool.and_eq_true] at h
-    have hcons : Value.rereadItems (v :: vs) =
-        match v.reread, Value.rereadItems vs with
-        | some a, some b => some (a :: b)
-        | _, _ => none := rfl
-    rw [hcons, reread_self v h.1, rereadItems_self vs h.2]
-
-theorem rereadMembers_self : (members : List (String × Value)) → membersValid members = true →
-    Value.rereadMembers members = some members
-  | [], _ => rfl
-  | (k, v) :: ms, h => by
-    simp only [membersValid, Bool.and_eq_true] at h
-    have hcons : Value.rereadMembers ((k, v) :: ms) =
-        match v.reread, Value.rereadMembers ms with
-        | some a, some b => some ((k, a) :: b)
-        | _, _ => none := rfl
-    rw [hcons, reread_self (k, v).2 h.1, rereadMembers_self ms h.2]
-
-end
-
-theorem spec_read_render (v : Value) (h : v.Valid) : Rfc8259.read? v.render = some v :=
-  read_of_reread v h (reread_self v h)
 
 end ExactJSON

@@ -404,7 +404,7 @@ theorem decompose_zero : decompose (0.0 : Float) = (false, 0, -1074) := by
 theorem decompose_neg_zero : decompose (-0.0 : Float) = (true, 0, -1074) := by
   decide +kernel
 
-theorem floatOf?_cases {neg : Bool} {m : Nat} {q : Int} {x : Float} (h : Rfc8259.floatOf? neg m q = some x) :
+theorem floatOf?_cases {neg : Bool} {m : Nat} {q : Int} {x : Float} (h : floatOf? neg m q = some x) :
     x = (if neg then -0.0 else 0.0) ∨
       (m ≠ 0 ∧ -324 ≤ ((Nat.toDigits 10 m).length : Int) + q ∧ ((Nat.toDigits 10 m).length : Int) + q ≤ 309 ∧
         finiteFloat x = true ∧
@@ -417,18 +417,18 @@ theorem floatOf?_cases {neg : Bool} {m : Nat} {q : Int} {x : Float} (h : Rfc8259
     · cases hz
   by_cases hm0 : m = 0
   · left
-    unfold Rfc8259.floatOf? at h
+    unfold floatOf? at h
     rw [ite_eq_left hm0] at h
     simp only [Option.map_some] at h
     exact hsome _ h
   · by_cases h2 : ((Nat.toDigits 10 m).length : Int) + q > 309
-    · unfold Rfc8259.floatOf? at h
+    · unfold floatOf? at h
       rw [ite_eq_right hm0] at h
       simp only [h2, ite_true, Option.map_none] at h
       cases h
     · by_cases h1 : ((Nat.toDigits 10 m).length : Int) + q < -324
       · left
-        unfold Rfc8259.floatOf? at h
+        unfold floatOf? at h
         rw [ite_eq_right hm0] at h
         simp only [h2, h1, ite_true, ite_false, Option.map_some] at h
         exact hsome _ h
@@ -452,7 +452,7 @@ open FloatText Float.Model Float.Model.UnpackedFloat
 
 theorem floatOf?_sound {x : Float} (hx : finiteFloat x = true) {s : Bool} {M : Nat} {e : Int}
     (hd : FloatText.decompose x = (s, M, e)) (hM : M ≠ 0) {neg : Bool} {m : Nat} {q : Int}
-    (h : Rfc8259.floatOf? neg m q = some x) : neg = s ∧ FloatText.roundsTo M e m q = true := by
+    (h : floatOf? neg m q = some x) : neg = s ∧ FloatText.roundsTo M e m q = true := by
   have hzero : ∀ b : Bool, x ≠ (if b then -0.0 else 0.0) := by
     intro b hb
     rw [hb] at hd

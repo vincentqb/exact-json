@@ -14,11 +14,6 @@ universe u
 namespace Value
 
 
-def get? (v : Value) (key : String) : Option Value :=
-  match v with
-  | .table members => (members.find? (·.1 == key)).map (·.2)
-  | _ => none
-
 def typeName : Value → String
   | .null => "null"
   | .string _ => "string"
@@ -83,7 +78,7 @@ instance : ToValue Float where
 instance : FromValue Float where
   fromValue?
     | .decimal d =>
-      match Rfc8259.floatOf? d.negative d.digits d.exponent with
+      match floatOf? d.negative d.digits d.exponent with
       | some x =>
         match FloatText.shortest x with
         | some e =>

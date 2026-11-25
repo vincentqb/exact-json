@@ -194,24 +194,6 @@ theorem decimalExponent_spec (m : Nat) (e : Int) (hm : 0 < m) (h1 : -1074 ≤ (N
   · rw [show lowerExponent m e 4 k0 + ↑(4 : Nat) + 1 = k0 + 5 by omega]
     exact hi
 
-theorem candidate_fits {m : Nat} {e : Int} {lc incl : Bool} {k : Int} {d : Nat}
-    (h : candidate m e lc incl k = some d) :
-    fits (roundingInterval m lc).1 (roundingInterval m lc).2.2 (scale e k).1 (scale e k).2 incl d = true := by
-  unfold candidate at h
-  simp only at h
-  split at h
-  · rename_i h0 h1
-    split at h
-    · cases h; exact h0
-    · split at h
-      · cases h; exact h1
-      · split at h <;> (cases h; first | exact h0 | exact h1)
-  · rename_i h0 _
-    cases h; exact h0
-  · rename_i _ h1
-    cases h; exact h1
-  · cases h
-
 theorem candidate_isSome {m : Nat} {e : Int} {lc incl : Bool} {k : Int} (hm : 0 < m)
     (hwide : let (low, x, high) := roundingInterval m lc
       let (a, b) := scale e k
@@ -297,51 +279,6 @@ theorem scale_wide (M : Nat) (e E : Int) (hE : tenPowLe E M e = true) (c : Nat) 
     _ < (c * 10 ^ 16) * (a10 * a2 * (powSplit 2 e).2 * (powSplit 10 E).2) :=
       Nat.mul_lt_mul_of_pos_right hc (Nat.mul_pos (Nat.mul_pos (Nat.mul_pos p10.2 p2.1) hBd) hTd)
     _ = c * (a2 * a10) * ((powSplit 2 e).2 * (powSplit 10 E).2 * 10 ^ 16) := by ac_rfl
-
-theorem fits_scale (low high : Nat) (e k : Int) (incl : Bool) (d j : Nat) :
-    fits low high (scale e k).1 (scale e k).2 incl (d * 10 ^ j) =
-      fits low high (scale e (k + j)).1 (scale e (k + j)).2 incl d := by
-  have h10 := powSplit_add 10 k j
-  rw [powSplit_nat] at h10
-  simp only [Nat.mul_one] at h10
-  have pa := (powSplit_pos 10 (by decide) k).2
-  have pa' := (powSplit_pos 10 (by decide) (k + j)).2
-  unfold scale fits
-  simp only
-  generalize powSplit 2 (e - 2) = q2
-  obtain ⟨a2, b2⟩ := q2
-  generalize powSplit 10 k = q at h10 pa
-  generalize powSplit 10 (k + j) = q' at h10 pa'
-  obtain ⟨b10, a10⟩ := q
-  obtain ⟨b10', a10'⟩ := q'
-  simp only at h10 pa pa' ⊢
-  have key : ∀ y : Nat, (y * (a2 * a10)) * a10' = (y * (a2 * a10')) * a10 := fun y => by ac_rfl
-  have keyv : (d * 10 ^ j * (b2 * b10)) * a10' = (d * (b2 * b10')) * a10 := by
-    calc (d * 10 ^ j * (b2 * b10)) * a10' = d * b2 * (b10 * 10 ^ j * a10') := by ac_rfl
-      _ = d * b2 * (b10' * a10) := by rw [← h10]
-      _ = (d * (b2 * b10')) * a10 := by ac_rfl
-  have lt_iff : ∀ y : Nat, y * (a2 * a10) < d * 10 ^ j * (b2 * b10) ↔ y * (a2 * a10') < d * (b2 * b10') := by
-    intro y
-    rw [← Nat.mul_lt_mul_right pa', key, keyv, Nat.mul_lt_mul_right pa]
-  have gt_iff : ∀ y : Nat, d * 10 ^ j * (b2 * b10) < y * (a2 * a10) ↔ d * (b2 * b10') < y * (a2 * a10') := by
-    intro y
-    rw [← Nat.mul_lt_mul_right pa', key, keyv, Nat.mul_lt_mul_right pa]
-  have eq_iff : ∀ y : Nat, y * (a2 * a10) = d * 10 ^ j * (b2 * b10) ↔ y * (a2 * a10') = d * (b2 * b10') := by
-    intro y
-    constructor
-    · intro h
-      have := congrArg (· * a10') h
-      rw [key, keyv] at this
-      exact Nat.eq_of_mul_eq_mul_right pa this
-    · intro h
-      have := congrArg (· * a10) h
-      rw [← key, ← keyv] at this
-      exact Nat.eq_of_mul_eq_mul_right pa' this
-  have eq_iff' : ∀ y : Nat, d * 10 ^ j * (b2 * b10) = y * (a2 * a10) ↔ d * (b2 * b10') = y * (a2 * a10') := by
-    intro y
-    rw [eq_comm, eq_iff y, eq_comm]
-  rw [Bool.eq_iff_iff]
-  simp only [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, lt_iff, gt_iff, eq_iff, eq_iff']
 
 theorem stripZeros_spec : ∀ (n d : Nat) (x : Int),
     ∃ j : Nat, d = (stripZeros n d x).1 * 10 ^ j ∧ (stripZeros n d x).2 = x + j
