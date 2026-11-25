@@ -7,7 +7,7 @@ public section
 
 namespace ExactJSON
 
-universe u
+universe u v
 
 private theorem pure_eq_ok {α : Type u} (a : α) : (pure a : Except String α) = .ok a := rfl
 
@@ -125,45 +125,6 @@ private theorem fromValue_pair {α β : Type u} [FromValue α] [FromValue β] (x
     (fromValue? (Value.array #[x, y]) : Except String (α × β)) =
       (do let a' ← withContext "[0]" (fromValue? x); let b' ← withContext "[1]" (fromValue? y); return (a', b')) :=
   rfl
-
-private theorem foldlM_map_eq_ok {M γ : Type u} {δ : Type} (step : M → δ → Except String M) (f : γ → δ) (g : M → γ → M)
-    (hstep : ∀ acc c, step acc (f c) = .ok (g acc c)) :
-    ∀ (l : List γ) (init : M), List.foldlM step init (l.map f) = .ok (l.foldl g init)
-  | [], _ => rfl
-  | c :: l, init => by
-    rw [List.map_cons, List.foldlM_cons, hstep]
-    exact foldlM_map_eq_ok step f g hstep l (g init c)
-
-private theorem extTreeMap_foldl_toList {α : Type u} (m : Std.ExtTreeMap String α) :
-    m.toList.foldl (fun acc p => acc.insert p.1 p.2) ∅ = m := by
-  rw [← Std.ExtTreeMap.ofList_eq_foldl]
-  apply Std.ExtTreeMap.ext_getElem?
-  intro k
-  cases h : m[k]? with
-  | some v =>
-    exact Std.ExtTreeMap.getElem?_ofList_of_mem Std.ReflCmp.compare_self Std.ExtTreeMap.distinct_keys_toList
-      (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr h)
-  | none =>
-    apply Std.ExtTreeMap.getElem?_ofList_of_contains_eq_false
-    cases hc : (m.toList.map Prod.fst).contains k with
-    | false => rfl
-    | true =>
-      exfalso
-      obtain ⟨p, hp, hpk⟩ := List.mem_map.mp (List.contains_iff_mem.mp hc)
-      subst hpk
-      rw [Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mp hp] at h
-      cases h
-
-theorem keysIncreaseFrom_of_pairwise : ∀ (k : String) (l : List String),
-    (k :: l).Pairwise (· < ·) → keysIncreaseFrom k l = true
-  | _, [], _ => rfl
-  | k, k' :: l, h => by
-    simp only [keysIncreaseFrom, Bool.and_eq_true, decide_eq_true_eq]
-    exact ⟨List.rel_of_pairwise_cons h List.mem_cons_self, keysIncreaseFrom_of_pairwise k' l (List.Pairwise.of_cons h)⟩
-
-theorem keysIncrease_of_pairwise : ∀ l : List String, l.Pairwise (· < ·) → keysIncrease l = true
-  | [], _ => rfl
-  | k :: l, h => keysIncreaseFrom_of_pairwise k l h
 
 theorem codec_string (s : String) :
     toValue s = (.string s : Value) ∧ ∀ w : Value, fromValue? w = .ok s ↔ w = (.string s : Value) := by
@@ -390,17 +351,116 @@ theorem codec_option {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o :
         rw [h]
         rfl
 
+private theorem mapM_cons_ok {γ : Type v} {δ : Type u} (f : γ → Except String δ) (a : γ) (l : List γ) (r : List δ) :
+    (a :: l).mapM f = .ok r ↔ ∃ b bs, f a = .ok b ∧ l.mapM f = .ok bs ∧ r = b :: bs := by
+  rw [List.mapM_cons]
+  cases f a with
+  | error e => simp [bind, Except.bind]
+  | ok b =>
+    cases l.mapM f with
+    | error e => simp [bind, Except.bind]
+    | ok bs => simp [bind, Except.bind, pure, Except.pure, eq_comm]
+
+private theorem mapM_ok_congr {γ : Type v} {δ : Type u} {f g : γ → Except String δ} (h : ∀ a b, f a = .ok b ↔ g a = .ok b) :
+    ∀ (l : List γ) (r : List δ), l.mapM f = .ok r ↔ l.mapM g = .ok r
+  | [], _ => Iff.rfl
+  | a :: l, r => by
+    rw [mapM_cons_ok, mapM_cons_ok]
+    simp only [h a, mapM_ok_congr h l]
+
+private theorem members_eq_ok {α : Type u} [FromValue α] (ms : List (String × Value)) (l : List (String × α)) :
+    ms.mapM (fun (k, v) => (k, ·) <$> withContext k (fromValue? v)) = .ok l ↔
+      ms.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok l := by
+  refine mapM_ok_congr (by
+    rintro ⟨k, v⟩ r
+    cases h : (fromValue? v : Except String α) <;> simp [h, withContext, Except.mapError, Functor.map, Except.map]) ms l
+
+private theorem members_keys {α : Type u} [FromValue α] :
+    ∀ (ms : List (String × Value)) (l : List (String × α)),
+      ms.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok l → l.map (·.1) = ms.map (·.1)
+  | [], l, h => by cases h; rfl
+  | (k, v) :: ms, l, h => by
+    obtain ⟨b, bs, hb, hbs, rfl⟩ := (mapM_cons_ok _ _ _ _).mp h
+    dsimp only at hb
+    cases hv : (fromValue? v : Except String α) with
+    | error e => rw [hv] at hb; cases hb
+    | ok a =>
+      rw [hv] at hb
+      cases hb
+      simp [members_keys ms bs hbs]
+
+private theorem toList_ofList {α : Type u} (l : List (String × α)) (h : (l.map (·.1)).Pairwise (· < ·)) :
+    (Std.ExtTreeMap.ofList l compare).toList = l := by
+  have hl : l.Pairwise (fun a b => a.1 < b.1) := List.pairwise_map.mp h
+  have hd : l.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) :=
+    hl.imp fun {a b} (hab : a.1 < b.1) (heq : compare a.1 b.1 = .eq) =>
+      Std.lt_irrefl ((Std.compare_eq_iff_eq.mp heq) ▸ hab)
+  have hmem : ∀ p, p ∈ (Std.ExtTreeMap.ofList l compare).toList ↔ p ∈ l := by
+    rintro ⟨k, v⟩
+    rw [Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some]
+    constructor
+    · intro hk
+      cases hc : (l.map Prod.fst).contains k with
+      | false =>
+        rw [Std.ExtTreeMap.getElem?_ofList_of_contains_eq_false hc] at hk
+        cases hk
+      | true =>
+        obtain ⟨⟨k', v'⟩, hp, hpk⟩ := List.mem_map.mp (List.contains_iff_mem.mp hc)
+        simp only at hpk
+        subst hpk
+        rw [Std.ExtTreeMap.getElem?_ofList_of_mem Std.ReflCmp.compare_self hd hp] at hk
+        cases hk
+        exact hp
+    · intro hk
+      exact Std.ExtTreeMap.getElem?_ofList_of_mem Std.ReflCmp.compare_self hd hk
+  have hsorted : (Std.ExtTreeMap.ofList l compare).toList.Pairwise (fun a b => a.1 < b.1) :=
+    Std.ExtTreeMap.ordered_keys_toList.imp fun h => Std.compare_eq_lt.mp h
+  have hnd₁ : (Std.ExtTreeMap.ofList l compare).toList.Nodup :=
+    hsorted.imp fun {a b} (hab : a.1 < b.1) (heq : a = b) => Std.lt_irrefl (heq ▸ hab)
+  have hnd₂ : l.Nodup := hl.imp fun {a b} (hab : a.1 < b.1) (heq : a = b) => Std.lt_irrefl (heq ▸ hab)
+  exact List.Perm.eq_of_pairwise (le := fun a b => a.1 < b.1)
+    (fun _ _ _ _ hab hba => absurd (Std.lt_trans hab hba) Std.lt_irrefl) hsorted hl
+    ((List.perm_ext_iff_of_nodup hnd₁ hnd₂).mpr hmem)
+
+private theorem ofList_toList {α : Type u} (m : Std.ExtTreeMap String α) : Std.ExtTreeMap.ofList m.toList compare = m :=
+  Std.ExtTreeMap.toList_inj.mp (toList_ofList m.toList
+    (List.pairwise_map.mpr (Std.ExtTreeMap.ordered_keys_toList.imp fun h => Std.compare_eq_lt.mp h)))
+
 theorem codec_extTreeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α) :
     toValue m = .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) → fromValue? (toValue m) = .ok m) := by
-  refine ⟨rfl, fun lawful => ?_⟩
-  simp only [toValue, fromValue?]
-  rw [List.foldlM_toArray, foldlM_map_eq_ok _ _ (fun acc p => acc.insert p.1 p.2) ?_ m.toList ∅,
-    extTreeMap_foldl_toList]
-  rintro acc ⟨k, a⟩
-  show (withContext k (fromValue? (toValue a)) >>= fun r => pure (acc.insert k r)) = _
-  rw [lawful]
-  rfl
+      ∀ w : Value, fromValue? w = .ok m ↔
+        ∃ ms : Array (String × Value), w = .table ms ∧ ms.toList.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok m.toList := by
+  refine ⟨rfl, fun w => ?_⟩
+  cases w with
+  | table ms =>
+    simp only [fromValue?]
+    constructor
+    · intro h
+      split at h
+      · rename_i hinc
+        cases hl : ms.toList.mapM (fun (k, v) => (k, ·) <$> withContext k (fromValue? v : Except String α)) with
+        | error e => rw [hl] at h; cases h
+        | ok l =>
+          rw [hl] at h
+          have hm : Std.ExtTreeMap.ofList l compare = m := Except.ok.inj h
+          subst hm
+          have hl' := (members_eq_ok _ _).mp hl
+          refine ⟨ms, rfl, ?_⟩
+          rw [toList_ofList l (by rw [members_keys _ _ hl']; exact (keysIncrease_iff _).mp hinc)]
+          exact hl'
+      · cases h
+    · rintro ⟨ms', hms, h⟩
+      cases hms
+      have hinc : keysIncrease (ms.toList.map (·.1)) = true := by
+        rw [keysIncrease_iff, ← members_keys _ _ h]
+        exact List.pairwise_map.mpr (Std.ExtTreeMap.ordered_keys_toList.imp fun h => Std.compare_eq_lt.mp h)
+      rw [ite_eq_left hinc, (members_eq_ok _ _).mpr h]
+      exact congrArg Except.ok (ofList_toList m)
+  | _ =>
+    simp only [fromValue?, typeMismatch]
+    constructor
+    · intro h; cases h
+    · rintro ⟨_, h, -⟩; cases h
 
 theorem codec_string_rejects_null :
     ¬ ∀ (s : String), @toValue String ⟨fun _ => .null⟩ s = (.string s : Value) ∧
@@ -524,12 +584,11 @@ theorem codec_option_rejects_constant :
   cases this
 
 theorem codec_extTreeMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α compare),
       @toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m =
           .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
-        ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α))
-            (@toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m) = .ok m) := by
+        ∀ w : Value, @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α)) w = .ok m ↔
+          ∃ ms : Array (String × Value), w = .table ms ∧ ms.toList.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok m.toList := by
   intro h
   cases (@h PUnit ⟨fun _ => .null⟩ ⟨fun _ => .ok ⟨⟩⟩ ∅).1
 

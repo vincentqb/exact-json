@@ -114,6 +114,12 @@ def errorOf {α : Type} (e : Except String α) : String :=
 #guard errorOf (decodeText "1.0e400" : Except String Float) == "a float beyond the range of binary64: 1.0e400"
 #guard errorOf (decodeText "1.0e-400" : Except String Float) ==
   "expected the shortest decimal of a float: write 0.0, not 1.0e-400"
+#guard gives ((fromValue? (.table #[("a", .integer 1), ("b", .integer 2)]) : Except String (Std.ExtTreeMap String Nat)).map
+  (·.toList)) [("a", 1), ("b", 2)]
+#guard errorOf (fromValue? (.table #[("b", .integer 1), ("a", .integer 2)]) : Except String (Std.ExtTreeMap String Nat)) ==
+  "expected a table whose keys increase, found table {\"b\":1,\"a\":2}"
+#guard errorOf (fromValue? (.table #[("a", .integer 1), ("a", .integer 2)]) : Except String (Std.ExtTreeMap String Nat)) ==
+  "expected a table whose keys increase, found table {\"a\":1,\"a\":2}"
 
 #guard check "[[[[" == "at character 4: expected a value"
 #guard check "{\"a\":[{\"b\":" == "at character 11: expected a value"

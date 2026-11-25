@@ -100,12 +100,21 @@ theorem membersValid_toValue {α : Type u} [ToValue α] [FromValue α] [LawfulVa
   | (k, a) :: l => by
     simp only [List.map_cons, membersValid, LawfulValue.toValue_valid a, membersValid_toValue l, Bool.and_self]
 
+theorem mapM_members_toValue {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] :
+    ∀ (l : List (String × α)),
+      (l.map fun (k, a) => (k, toValue a)).mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok l
+  | [] => rfl
+  | (k, a) :: l => by
+    simp only [List.map_cons, List.mapM_cons, LawfulValue.fromValue_toValue, mapM_members_toValue l]
+    rfl
+
 instance {α : Type u} [ToValue α] [FromValue α] [LawfulValue α] : LawfulValue (Std.ExtTreeMap String α) where
-  fromValue_toValue m := (codec_extTreeMap m).2 LawfulValue.fromValue_toValue
+  fromValue_toValue m :=
+    ((codec_extTreeMap m).2 _).mpr ⟨_, (codec_extTreeMap m).1, by simpa using mapM_members_toValue m.toList⟩
   toValue_valid m := by
     rw [(codec_extTreeMap m).1, List.toArray_eq_iff.mpr rfl]
     simp only [Value.Valid, Value.isValid, Bool.and_eq_true]
-    refine ⟨keysIncrease_of_pairwise _ ?_, membersValid_toValue m.toList⟩
+    refine ⟨(keysIncrease_iff _).mpr ?_, membersValid_toValue m.toList⟩
     rw [List.map_map, List.pairwise_map]
     exact Std.ExtTreeMap.ordered_keys_toList.imp fun h => Std.compare_eq_lt.mp h
 

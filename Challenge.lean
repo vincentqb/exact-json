@@ -26,10 +26,12 @@ texts each ended by a line feed, read line by line in either spelling. Typed dec
 canonical text of a value that the type writes and reads back as itself, so for a type whose
 instances are lawful (`LawfulValue`: they read back what they write, as valid values) it reads
 exactly what typed encoding writes. Each of the library's instances writes the value its codec law
-states and reads exactly that, except that a dictionary (`Std.ExtTreeMap String α`) reads back what
-it writes; a finite float is written as the shortest decimal that reads back as it, the nearest of
-those, ties to an even last digit; derived instances write the shapes their examples state, and are
-lawful; and dates and times are written in one RFC 3339 form each and read in that form only.
+states and reads exactly what that law states: a scalar the value it writes, and a container (an
+array, a list, a pair, an option, a dictionary `Std.ExtTreeMap String α` with its keys increasing)
+the values whose parts its parts read; a finite float is written as the shortest decimal that reads
+back as it, the nearest of those, ties to an even last digit; derived instances write the shapes
+their examples state, and are lawful; and dates and times are written in one RFC 3339 form each and
+read in that form only.
 Not claimed: the readers' error messages; which `deriving` uses fail to compile; the library's
 definitions that no law names; and the command line tool beyond the functions it calls.
 -/
@@ -291,7 +293,8 @@ theorem codec_option {α : Type u} [ToValue α] [FromValue α] [NotNull α] (o :
 
 theorem codec_extTreeMap {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α) :
     toValue m = .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
-      ((∀ a : α, fromValue? (toValue a) = .ok a) → fromValue? (toValue m) = .ok m) := by
+      ∀ w : Value, fromValue? w = .ok m ↔
+        ∃ ms : Array (String × Value), w = .table ms ∧ ms.toList.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok m.toList := by
   sorry
 
 theorem renderLines_eq (vs : Array Value) :
@@ -523,12 +526,11 @@ theorem lawful_examples : LawfulValue Example.Point ∧ LawfulValue Example.Shap
   sorry
 
 @[kills codec_extTreeMap] theorem codec_extTreeMap_rejects_null :
-    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α),
+    ¬ ∀ {α : Type u} [ToValue α] [FromValue α] (m : Std.ExtTreeMap String α compare),
       @toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m =
           .table (m.toList.map fun (k, a) => (k, toValue a)).toArray ∧
-        ((∀ a : α, fromValue? (toValue a) = .ok a) →
-          @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α))
-            (@toValue (Std.ExtTreeMap String α) ((fun {β : Type u} [ToValue β] => (⟨fun _ => .null⟩ : ToValue (Std.ExtTreeMap String β))) (β := α)) m) = .ok m) := by
+        ∀ w : Value, @fromValue? (Std.ExtTreeMap String α) ((fun {β : Type u} [FromValue β] => (⟨fun _ => .error ""⟩ : FromValue (Std.ExtTreeMap String β))) (β := α)) w = .ok m ↔
+          ∃ ms : Array (String × Value), w = .table ms ∧ ms.toList.mapM (fun (k, v) => (k, ·) <$> fromValue? v) = .ok m.toList := by
   sorry
 
 @[kills renderLines_eq] theorem renderLines_eq_rejects_empty :

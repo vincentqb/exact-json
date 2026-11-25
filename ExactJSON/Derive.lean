@@ -250,27 +250,6 @@ theorem AllValid.map {α : Type u} [ToValue α] {es} (h : ∀ a : α, (toValue a
   | none => exact .none t
   | some a => exact .some (h a) t
 
-theorem keysIncreaseFrom_iff (k : String) (l : List String) :
-    keysIncreaseFrom k l = true ↔ (k :: l).Pairwise (· < ·) := by
-  induction l generalizing k with
-  | nil => simp [keysIncreaseFrom]
-  | cons x rest ih =>
-    simp only [keysIncreaseFrom, Bool.and_eq_true, decide_eq_true_eq, ih]
-    constructor
-    · rintro ⟨hx, hp⟩
-      refine List.Pairwise.cons ?_ hp
-      intro y hy
-      rcases List.mem_cons.mp hy with rfl | hy
-      · exact hx
-      · exact Std.lt_trans hx (List.rel_of_pairwise_cons hp hy)
-    · intro h
-      exact ⟨List.rel_of_pairwise_cons h (List.mem_cons_self ..), h.of_cons⟩
-
-theorem keysIncrease_iff (l : List String) : keysIncrease l = true ↔ l.Pairwise (· < ·) := by
-  cases l with
-  | nil => simp [keysIncrease]
-  | cons k rest => exact keysIncreaseFrom_iff k rest
-
 theorem present_keys_sublist : ∀ {schema : List (String × Bool)} {es : List (Option Value)},
     ((present schema es).map (·.1)).Sublist (schema.map (·.1))
   | [], _ => by simp [present]
@@ -399,9 +378,6 @@ theorem decodeTagged_ofTag {α : Type u} {alts : List (String × (Option Value �
     decodeTagged alts (ofTag (n, p)) = alt p := by
   simp only [decodeTagged, tag?_ofTag]
   exact dispatch_of_mem hnd hmem
-
-theorem nodup_of_increase {l : List String} (h : keysIncrease l = true) : l.Nodup :=
-  List.Pairwise.imp (R := (· < ·)) (fun {a b} (hab : a < b) (heq : a = b) => by subst heq; exact Std.lt_irrefl hab) ((keysIncrease_iff l).mp h)
 
 theorem withPayload_fields {β : Type u} {name : String} {schema : List (String × Bool)} {es : List (Option Value)}
     {r : Rd β} {b : β} {rest : List (Option Value)}
@@ -805,7 +781,7 @@ def mkLawfulValueCmds (declName : Name) : TermElabM (Array Command) := do
     let alts ← sorted.mapM fun c => decodeAlt c readField
     let head ← `(tactic| refine (ExactJSON.Derive.decodeTagged_ofTag (alts := [$alts,*]) (n := $(strLit ctor.tag))
       (p := $(← ctorPayload auxTo ctor vars)) (alt := $(← decodeAltBody ctor readField))
-      (by exact ExactJSON.Derive.nodup_of_increase $hn) (by exact $(← memTerm j))).trans ?_)
+      (by exact ExactJSON.nodup_of_increase $hn) (by exact $(← memTerm j))).trans ?_)
     let payload ← match ctor.shape with
       | .noArgs => `(ExactJSON.Derive.noArgs_none)
       | .single => do `(ExactJSON.Derive.withPayload_map (f := $(← ctorLambda ctor #[0])) $(← fact 0))

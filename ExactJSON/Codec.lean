@@ -13,7 +13,6 @@ universe u
 
 namespace Value
 
-
 def typeName : Value → String
   | .null => "null"
   | .string _ => "string"
@@ -23,16 +22,13 @@ def typeName : Value → String
   | .array _ => "array"
   | .table _ => "table"
 
-
 end Value
-
 
 def withContext {α : Type u} (context : String) (x : Except String α) : Except String α :=
   x.mapError fun e => s!"{context}: {e}"
 
 def typeMismatch {α : Type u} (what : String) (v : Value) : Except String α :=
   .error s!"expected {what}, found {v.typeName} {v.render}"
-
 
 instance : ToValue String := ⟨.string⟩
 instance : FromValue String := ⟨fun | .string s => pure s | v => typeMismatch "a string" v⟩
@@ -128,8 +124,10 @@ instance {α : Type u} [ToValue α] : ToValue (Std.ExtTreeMap String α) :=
   ⟨fun m => .table (m.toList.map fun (k, v) => (k, toValue v)).toArray⟩
 instance {α : Type u} [FromValue α] : FromValue (Std.ExtTreeMap String α) where
   fromValue?
-    | .table members => members.foldlM (init := {}) fun m (k, v) => do
-      return m.insert k (← withContext k (fromValue? v))
+    | .table members =>
+      if keysIncrease (members.toList.map (·.1)) then
+        (Std.ExtTreeMap.ofList · compare) <$> members.toList.mapM fun (k, v) => (k, ·) <$> withContext k (fromValue? v)
+      else typeMismatch "a table whose keys increase" (.table members)
     | v => typeMismatch "a table" v
 
 instance : NotNull String := ⟨fun _ h => nomatch h⟩
@@ -177,5 +175,29 @@ def decodeLines {α : Type u} [ToValue α] [FromValue α] (maxDepth : Nat) (b : 
   match Value.readLines .canonical maxDepth b with
   | .error e => .error e
   | .ok vs => List.toArray <$> vs.toList.mapM typed
+
+theorem keysIncreaseFrom_iff (k : String) (l : List String) :
+    keysIncreaseFrom k l = true ↔ (k :: l).Pairwise (· < ·) := by
+  induction l generalizing k with
+  | nil => simp [keysIncreaseFrom]
+  | cons x rest ih =>
+    simp only [keysIncreaseFrom, Bool.and_eq_true, decide_eq_true_eq, ih]
+    constructor
+    · rintro ⟨hx, hp⟩
+      refine List.Pairwise.cons ?_ hp
+      intro y hy
+      rcases List.mem_cons.mp hy with rfl | hy
+      · exact hx
+      · exact Std.lt_trans hx (List.rel_of_pairwise_cons hp hy)
+    · intro h
+      exact ⟨List.rel_of_pairwise_cons h (List.mem_cons_self ..), h.of_cons⟩
+
+theorem keysIncrease_iff (l : List String) : keysIncrease l = true ↔ l.Pairwise (· < ·) := by
+  cases l with
+  | nil => simp [keysIncrease]
+  | cons k rest => exact keysIncreaseFrom_iff k rest
+
+theorem nodup_of_increase {l : List String} (h : keysIncrease l = true) : l.Nodup :=
+  List.Pairwise.imp (R := (· < ·)) (fun {a b} (hab : a < b) (heq : a = b) => by subst heq; exact Std.lt_irrefl hab) ((keysIncrease_iff l).mp h)
 
 end ExactJSON
